@@ -1,0 +1,80 @@
+import {
+  BarChart3,
+  Building2,
+  CheckSquare,
+  Home,
+  LifeBuoy,
+  Settings,
+  TicketCheck,
+  Users,
+  Workflow,
+} from 'lucide-react';
+import { NavLink } from 'react-router-dom';
+import Logo from './Logo.jsx';
+
+const navItems = [
+  { label: 'Dashboard', to: '/dashboard', icon: Home },
+  { label: 'CRM', to: '/crm', icon: Workflow },
+  { label: 'Sites', to: '/sites', icon: Building2 },
+  { label: 'Tickets', to: '/tickets', icon: TicketCheck },
+  { label: 'Tasks', to: '/tasks', icon: CheckSquare },
+  { label: 'Reports', to: '/reports', icon: BarChart3 },
+  { label: 'Employees', to: '/employees', icon: Users },
+  { label: 'Settings', to: '/settings', icon: Settings },
+];
+
+export default function Sidebar({ isOpen, onClose }) {
+  return (
+    <>
+      <div
+        className={`fixed inset-0 z-30 bg-slate-950/30 backdrop-blur-sm transition-opacity lg:hidden ${
+          isOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 flex w-72 flex-col border-r border-slate-200 bg-white transition-transform duration-300 lg:static lg:translate-x-0 ${
+          isOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <div className="flex h-20 items-center border-b border-slate-100 px-6">
+          <Logo />
+        </div>
+
+        <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-5">
+          {navItems.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              onClick={onClose}
+              className={({ isActive }) =>
+                [
+                  'group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition',
+                  isActive
+                    ? 'bg-qpms-50 text-qpms-700 shadow-[inset_0_0_0_1px_rgba(36,68,164,0.08)]'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950',
+                ].join(' ')
+              }
+            >
+              <item.icon className="h-5 w-5 shrink-0" strokeWidth={2} />
+              <span>{item.label}</span>
+            </NavLink>
+          ))}
+        </nav>
+
+        <div className="m-4 rounded-2xl border border-qpms-100 bg-qpms-50 p-4">
+          <div className="flex items-start gap-3">
+            <div className="rounded-xl bg-white p-2 text-qpms-600 shadow-sm">
+              <LifeBuoy className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-950">Need help?</p>
+              <p className="mt-1 text-xs leading-5 text-slate-600">QPMS support is ready for workflow setup.</p>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </>
+  );
+}
