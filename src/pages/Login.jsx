@@ -12,24 +12,18 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { motion as Motion } from 'framer-motion';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Logo from '../components/Logo.jsx';
-import airportMaintenanceImage from '../assets/operational-4.png';
-import facilityManagementImage from '../assets/operational-5.png';
-import housekeepingImage from '../assets/operational-2.png';
-import hospitalOperationsImage from '../assets/operational-3.png';
-import siteInspectionImage from '../assets/operational-1.png';
+import brandedSlide1 from '../assets/login-slide-1.jpg';
+import brandedSlide2 from '../assets/login-slide-2.jpg';
+import brandedSlide3 from '../assets/login-slide-3.jpg';
+import brandedSlide4 from '../assets/login-slide-4.jpg';
+import brandedSlide5 from '../assets/login-slide-5.jpg';
 import { useAuth } from '../context/auth-context.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 
-const operationalImages = [
-  { label: 'Hospital operations', image: hospitalOperationsImage, className: 'col-span-5 row-span-8' },
-  { label: 'Housekeeping services', image: housekeepingImage, className: 'col-span-4 row-span-4' },
-  { label: 'Facility management', image: facilityManagementImage, className: 'col-span-3 row-span-4' },
-  { label: 'Airport maintenance', image: airportMaintenanceImage, className: 'col-span-4 row-span-4' },
-  { label: 'Site inspections', image: siteInspectionImage, className: 'col-span-3 row-span-4' },
-];
+const brandedSlides = [brandedSlide1, brandedSlide2, brandedSlide3, brandedSlide4, brandedSlide5];
 
 const socialLinks = [
   { label: 'Website', href: 'https://qpms.in/', icon: Globe2 },
@@ -50,9 +44,38 @@ export default function Login() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isWelcoming, setIsWelcoming] = useState(false);
+  const [activeSlide, setActiveSlide] = useState(0);
+  const [isCarouselResetting, setIsCarouselResetting] = useState(false);
   const navigate = useNavigate();
   const { setUser } = useAuth();
   usePageTitle('Sign in');
+
+  useEffect(() => {
+    const slideTimer = window.setInterval(() => {
+      setActiveSlide((currentSlide) => currentSlide + 1);
+    }, 5000);
+
+    return () => window.clearInterval(slideTimer);
+  }, []);
+
+  useEffect(() => {
+    if (activeSlide !== brandedSlides.length) {
+      return undefined;
+    }
+
+    const resetTimer = window.setTimeout(() => {
+      setIsCarouselResetting(true);
+      setActiveSlide(0);
+
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          setIsCarouselResetting(false);
+        });
+      });
+    }, 700);
+
+    return () => window.clearTimeout(resetTimer);
+  }, [activeSlide]);
 
   function handleSubmit(event) {
     event.preventDefault();
@@ -136,29 +159,54 @@ export default function Login() {
             </p>
           </Motion.div>
 
-          <div className="relative mt-8 grid flex-1 grid-cols-12 auto-rows-[54px] gap-3">
-            {operationalImages.map((item, index) => (
-              <Motion.article
-                key={item.label}
-                variants={fadeUp}
-                transition={{ duration: 0.45, delay: 0.12 + index * 0.06, ease: 'easeOut' }}
-                whileHover={{ y: -6, scale: 1.012 }}
-                className={`group relative min-h-0 overflow-hidden rounded-3xl border border-white/18 bg-white/10 shadow-[0_24px_80px_rgba(15,23,42,0.26)] backdrop-blur-xl ${item.className}`}
-              >
-                <img
-                  src={item.image}
-                  alt={item.label}
-                  className="h-full w-full object-cover transition duration-700 group-hover:scale-[1.045]"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/78 via-slate-950/16 to-white/8" />
-                <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-white/12 to-transparent opacity-0 transition duration-500 group-hover:opacity-100" />
-                <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-3">
-                  <div className="rounded-full border border-white/18 bg-slate-950/36 px-3 py-1.5 text-white shadow-sm backdrop-blur-md">
-                    <p className="text-xs font-semibold leading-4">{item.label}</p>
-                  </div>
+          <div className="relative mt-8 flex flex-1 items-center">
+            <Motion.div
+              variants={fadeUp}
+              transition={{ duration: 0.5, delay: 0.14, ease: 'easeOut' }}
+              className="relative w-full max-w-[430px] overflow-hidden rounded-3xl border border-white/18 bg-white/10 shadow-[0_26px_90px_rgba(15,23,42,0.28)] backdrop-blur-xl"
+            >
+              <div className="absolute -inset-10 bg-[radial-gradient(circle_at_25%_20%,rgba(255,255,255,0.18),transparent_28%),radial-gradient(circle_at_70%_80%,rgba(147,197,253,0.22),transparent_32%)]" />
+              <div className="relative aspect-[4/5] overflow-hidden rounded-3xl">
+                <div
+                  className={`flex h-full ${isCarouselResetting ? '' : 'transition-transform duration-700 ease-in-out'}`}
+                  style={{
+                    width: `${(brandedSlides.length + 1) * 100}%`,
+                    transform: `translateX(-${activeSlide * (100 / (brandedSlides.length + 1))}%)`,
+                  }}
+                >
+                  {[...brandedSlides, brandedSlides[0]].map((slide, index) => (
+                    <div
+                      key={`${slide}-${index}`}
+                      className="flex h-full shrink-0 items-center justify-center bg-slate-950/12"
+                      style={{ width: `${100 / (brandedSlides.length + 1)}%` }}
+                    >
+                      <img
+                        src={slide}
+                        alt={`QPMS operational slide ${(index % brandedSlides.length) + 1}`}
+                        className="h-full w-full object-contain"
+                      />
+                    </div>
+                  ))}
                 </div>
-              </Motion.article>
-            ))}
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/20 via-transparent to-white/4" />
+                <div className="absolute bottom-4 left-4 flex gap-2">
+                  {brandedSlides.map((slide, index) => (
+                    <button
+                      key={slide}
+                      type="button"
+                      onClick={() => {
+                        setIsCarouselResetting(false);
+                        setActiveSlide(index);
+                      }}
+                      className={`h-2.5 w-2.5 rounded-full ring-1 ring-white/35 transition ${
+                        activeSlide % brandedSlides.length === index ? 'bg-white' : 'bg-white/45 hover:bg-white/75'
+                      }`}
+                      aria-label={`Show QPMS operational slide ${index + 1}`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </Motion.div>
           </div>
 
           <div className="relative mt-6 flex flex-col items-start gap-3 border-t border-white/12 pt-5">
