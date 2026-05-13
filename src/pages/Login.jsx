@@ -145,21 +145,7 @@ export default function Login() {
             </span>
           </div>
 
-          <Motion.div
-            variants={fadeUp}
-            transition={{ duration: 0.55, delay: 0.08, ease: 'easeOut' }}
-            className="relative mt-10 max-w-xl"
-          >
-            <p className="text-sm font-semibold uppercase text-sky-100/80">QPMS operations platform</p>
-            <h1 className="mt-4 text-4xl font-semibold leading-tight tracking-normal xl:text-5xl">
-              Enterprise access for facility operations.
-            </h1>
-            <p className="mt-5 max-w-lg text-base font-normal leading-7 text-white/72">
-              QPMS brings together facility management, housekeeping services, workforce operations, and site management in one trusted platform.
-            </p>
-          </Motion.div>
-
-          <div className="relative mt-8 flex flex-1 items-center">
+          <div className="relative mt-8 flex flex-1 items-start">
             <Motion.div
               variants={fadeUp}
               transition={{ duration: 0.5, delay: 0.14, ease: 'easeOut' }}
