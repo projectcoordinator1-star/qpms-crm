@@ -37,6 +37,7 @@ import {
   leadStageFunnel,
   monthlyLeadTrend,
   newBusinessKpis,
+  operationsDetailSections,
   proposalConversionTrend,
   recentLeads,
   siteVisitTrend,
@@ -216,9 +217,111 @@ function DrilldownChart({ sectionId }) {
   );
 }
 
-function DashboardDetailPanel({ sectionId }) {
+function OperationsDrilldownChart({ sectionId }) {
+  const chartBySection = {
+    activeSites: (
+      <BarChart data={stateOperationsSummary}>
+        <CartesianGrid stroke={chartGrid} vertical={false} />
+        <XAxis dataKey="state" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 11 }} interval={0} height={62} />
+        <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+        <Tooltip contentStyle={tooltipStyle} />
+        <Bar dataKey="activeSites" fill="#2444a4" radius={[10, 10, 0, 0]} name="Active Sites" />
+      </BarChart>
+    ),
+    fieldOfficersActive: (
+      <BarChart data={stateOperationsSummary}>
+        <CartesianGrid stroke={chartGrid} vertical={false} />
+        <XAxis dataKey="state" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 11 }} interval={0} height={62} />
+        <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+        <Tooltip contentStyle={tooltipStyle} />
+        <Bar dataKey="officers" fill="#10b981" radius={[10, 10, 0, 0]} name="Field Officers" />
+      </BarChart>
+    ),
+    attendanceCaptured: (
+      <ComposedChart data={stateOperationsSummary}>
+        <CartesianGrid stroke={chartGrid} vertical={false} />
+        <XAxis dataKey="state" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 11 }} interval={0} height={62} />
+        <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+        <Tooltip contentStyle={tooltipStyle} />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Bar dataKey="attendance" fill="#10b981" radius={[10, 10, 0, 0]} name="Attendance %" />
+        <Line type="monotone" dataKey="visits" stroke="#2444a4" strokeWidth={3} name="Site Visits" />
+      </ComposedChart>
+    ),
+    siteVisitsCompleted: (
+      <LineChart data={siteVisitTrend}>
+        <CartesianGrid stroke={chartGrid} vertical={false} />
+        <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+        <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+        <Tooltip contentStyle={tooltipStyle} />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Line type="monotone" dataKey="completed" stroke="#10b981" strokeWidth={3} name="Completed Visits" />
+        <Line type="monotone" dataKey="visits" stroke="#2444a4" strokeWidth={3} name="Planned Visits" />
+      </LineChart>
+    ),
+    openTickets: (
+      <BarChart data={stateOperationsSummary}>
+        <CartesianGrid stroke={chartGrid} vertical={false} />
+        <XAxis dataKey="state" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 11 }} interval={0} height={62} />
+        <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+        <Tooltip contentStyle={tooltipStyle} />
+        <Bar dataKey="tickets" fill="#f59e0b" radius={[10, 10, 0, 0]} name="Open Tickets" />
+      </BarChart>
+    ),
+    pendingTasks: (
+      <PieChart>
+        <Pie data={taskCompletionDistribution} dataKey="value" nameKey="name" innerRadius={62} outerRadius={92} paddingAngle={3}>
+          {taskCompletionDistribution.map((entry, index) => (
+            <Cell key={entry.name} fill={taskColors[index]} />
+          ))}
+        </Pie>
+        <Tooltip contentStyle={tooltipStyle} />
+        <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+      </PieChart>
+    ),
+    overdueTasks: (
+      <BarChart data={[
+        { severity: 'High', count: 12 },
+        { severity: 'Medium', count: 14 },
+        { severity: 'Low', count: 5 },
+      ]}>
+        <CartesianGrid stroke={chartGrid} vertical={false} />
+        <XAxis dataKey="severity" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+        <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+        <Tooltip contentStyle={tooltipStyle} />
+        <Bar dataKey="count" fill="#ef4444" radius={[10, 10, 0, 0]} name="Overdue Tasks" />
+      </BarChart>
+    ),
+    avgResolutionTime: (
+      <BarChart data={[
+        { state: 'Tamil Nadu', hours: 2.75 },
+        { state: 'Kerala', hours: 3.1 },
+        { state: 'Karnataka', hours: 3.8 },
+        { state: 'Telangana', hours: 2.9 },
+        { state: 'Andhra Pradesh - 1', hours: 4.2 },
+        { state: 'Andhra Pradesh - 2', hours: 5.25 },
+      ]}>
+        <CartesianGrid stroke={chartGrid} vertical={false} />
+        <XAxis dataKey="state" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 11 }} interval={0} height={62} />
+        <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+        <Tooltip contentStyle={tooltipStyle} />
+        <Bar dataKey="hours" fill="#f59e0b" radius={[10, 10, 0, 0]} name="Avg Hours" />
+      </BarChart>
+    ),
+  };
+
+  return (
+    <ChartFrame>
+      <ResponsiveContainer width="100%" height="100%">
+        {chartBySection[sectionId]}
+      </ResponsiveContainer>
+    </ChartFrame>
+  );
+}
+
+function DashboardDetailPanel({ sectionId, sections, renderChart }) {
   const [query, setQuery] = useState('');
-  const detail = dashboardDetailSections[sectionId];
+  const detail = sections[sectionId];
 
   if (!detail) {
     return null;
@@ -256,7 +359,7 @@ function DashboardDetailPanel({ sectionId }) {
         </div>
 
         <div className="mb-5">
-          <DrilldownChart sectionId={sectionId} />
+          {renderChart(sectionId)}
         </div>
 
         {rows.length ? (
@@ -287,7 +390,11 @@ function NewBusinessPipeline({ activeDashboardSection, onSectionChange }) {
       </section>
 
       {activeDashboardSection ? (
-        <DashboardDetailPanel sectionId={activeDashboardSection} />
+        <DashboardDetailPanel
+          sectionId={activeDashboardSection}
+          sections={dashboardDetailSections}
+          renderChart={(sectionId) => <DrilldownChart sectionId={sectionId} />}
+        />
       ) : (
         <div className="space-y-6 animate-[login-fade-up_220ms_ease-out]">
           <section className="grid gap-6 xl:grid-cols-[0.78fr_1.22fr]">
@@ -375,120 +482,135 @@ function NewBusinessPipeline({ activeDashboardSection, onSectionChange }) {
   );
 }
 
-function ExistingBusinessOperations() {
+function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }) {
   return (
     <div className="space-y-6">
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {existingOperationsKpis.map((kpi) => (
-          <KpiCard key={kpi.title} {...kpi} />
+          <KpiCard
+            key={kpi.title}
+            {...kpi}
+            isActive={activeOperationsSection === kpi.id}
+            onClick={() => onSectionChange(activeOperationsSection === kpi.id ? null : kpi.id)}
+          />
         ))}
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-2">
-        <ChartCard title="State-wise Site Performance" description="Active site coverage and field officer distribution.">
-          <ChartFrame>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stateOperationsSummary}>
-                <CartesianGrid stroke={chartGrid} vertical={false} />
-                <XAxis dataKey="state" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 11 }} interval={0} height={62} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="activeSites" fill="#2444a4" radius={[10, 10, 0, 0]} name="Active Sites" />
-                <Bar dataKey="officers" fill="#85adff" radius={[10, 10, 0, 0]} name="Field Officers" />
-              </BarChart>
-            </ResponsiveContainer>
-          </ChartFrame>
-        </ChartCard>
+      {activeOperationsSection ? (
+        <DashboardDetailPanel
+          sectionId={activeOperationsSection}
+          sections={operationsDetailSections}
+          renderChart={(sectionId) => <OperationsDrilldownChart sectionId={sectionId} />}
+        />
+      ) : (
+        <div className="space-y-6 animate-[login-fade-up_220ms_ease-out]">
+          <section className="grid gap-6 xl:grid-cols-2">
+            <ChartCard title="State-wise Site Performance" description="Active site coverage and field officer distribution.">
+              <ChartFrame>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={stateOperationsSummary}>
+                    <CartesianGrid stroke={chartGrid} vertical={false} />
+                    <XAxis dataKey="state" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 11 }} interval={0} height={62} />
+                    <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="activeSites" fill="#2444a4" radius={[10, 10, 0, 0]} name="Active Sites" />
+                    <Bar dataKey="officers" fill="#85adff" radius={[10, 10, 0, 0]} name="Field Officers" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </ChartCard>
 
-        <ChartCard title="Attendance by State" description="Captured attendance percentage against today site visits.">
-          <ChartFrame>
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={stateOperationsSummary}>
-                <CartesianGrid stroke={chartGrid} vertical={false} />
-                <XAxis dataKey="state" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 11 }} interval={0} height={62} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="attendance" fill="#10b981" radius={[10, 10, 0, 0]} name="Attendance %" />
-                <Line type="monotone" dataKey="visits" stroke="#2444a4" strokeWidth={3} name="Site Visits" />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </ChartFrame>
-        </ChartCard>
-      </section>
+            <ChartCard title="Attendance by State" description="Captured attendance percentage against today site visits.">
+              <ChartFrame>
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={stateOperationsSummary}>
+                    <CartesianGrid stroke={chartGrid} vertical={false} />
+                    <XAxis dataKey="state" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 11 }} interval={0} height={62} />
+                    <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="attendance" fill="#10b981" radius={[10, 10, 0, 0]} name="Attendance %" />
+                    <Line type="monotone" dataKey="visits" stroke="#2444a4" strokeWidth={3} name="Site Visits" />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </ChartCard>
+          </section>
 
-      <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <ChartCard title="Ticket Volume by State" description="Open operational tickets requiring field or branch action.">
-          <ChartFrame>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stateOperationsSummary}>
-                <CartesianGrid stroke={chartGrid} vertical={false} />
-                <XAxis dataKey="state" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 11 }} interval={0} height={62} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Bar dataKey="tickets" fill="#f59e0b" radius={[10, 10, 0, 0]} name="Open Tickets" />
-              </BarChart>
-            </ResponsiveContainer>
-          </ChartFrame>
-        </ChartCard>
+          <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+            <ChartCard title="Ticket Volume by State" description="Open operational tickets requiring field or branch action.">
+              <ChartFrame>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={stateOperationsSummary}>
+                    <CartesianGrid stroke={chartGrid} vertical={false} />
+                    <XAxis dataKey="state" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 11 }} interval={0} height={62} />
+                    <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Bar dataKey="tickets" fill="#f59e0b" radius={[10, 10, 0, 0]} name="Open Tickets" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </ChartCard>
 
-        <ChartCard title="Task Completion Distribution" description="Completed, pending, and overdue task visibility.">
-          <ChartFrame>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={taskCompletionDistribution} dataKey="value" nameKey="name" innerRadius={62} outerRadius={92} paddingAngle={3}>
-                  {taskCompletionDistribution.map((entry, index) => (
-                    <Cell key={entry.name} fill={taskColors[index]} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={tooltipStyle} />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-              </PieChart>
-            </ResponsiveContainer>
-          </ChartFrame>
-        </ChartCard>
-      </section>
+            <ChartCard title="Task Completion Distribution" description="Completed, pending, and overdue task visibility.">
+              <ChartFrame>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={taskCompletionDistribution} dataKey="value" nameKey="name" innerRadius={62} outerRadius={92} paddingAngle={3}>
+                      {taskCompletionDistribution.map((entry, index) => (
+                        <Cell key={entry.name} fill={taskColors[index]} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </ChartCard>
+          </section>
 
-      <section className="grid gap-6 xl:grid-cols-2">
-        <ChartCard title="Site Visit Trend" description="Planned visits versus completed visits across the current week.">
-          <ChartFrame>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={siteVisitTrend}>
-                <CartesianGrid stroke={chartGrid} vertical={false} />
-                <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="visits" stroke="#2444a4" strokeWidth={3} name="Planned Visits" />
-                <Line type="monotone" dataKey="completed" stroke="#10b981" strokeWidth={3} name="Completed Visits" />
-              </LineChart>
-            </ResponsiveContainer>
-          </ChartFrame>
-        </ChartCard>
+          <section className="grid gap-6 xl:grid-cols-2">
+            <ChartCard title="Site Visit Trend" description="Planned visits versus completed visits across the current week.">
+              <ChartFrame>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={siteVisitTrend}>
+                    <CartesianGrid stroke={chartGrid} vertical={false} />
+                    <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+                    <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Line type="monotone" dataKey="visits" stroke="#2444a4" strokeWidth={3} name="Planned Visits" />
+                    <Line type="monotone" dataKey="completed" stroke="#10b981" strokeWidth={3} name="Completed Visits" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </ChartCard>
 
-        <ChartCard title="SLA Performance by State" description="Service-level health across operating regions.">
-          <ChartFrame>
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart data={stateOperationsSummary}>
-                <PolarGrid stroke={chartGrid} />
-                <PolarAngleAxis dataKey="state" tick={{ fill: chartText, fontSize: 11 }} />
-                <PolarRadiusAxis angle={90} domain={[70, 100]} tick={{ fill: chartText, fontSize: 11 }} />
-                <Radar name="SLA %" dataKey="sla" stroke="#2444a4" fill="#4f82fb" fillOpacity={0.35} />
-                <Tooltip contentStyle={tooltipStyle} />
-              </RadarChart>
-            </ResponsiveContainer>
-          </ChartFrame>
-        </ChartCard>
-      </section>
+            <ChartCard title="SLA Performance by State" description="Service-level health across operating regions.">
+              <ChartFrame>
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart data={stateOperationsSummary}>
+                    <PolarGrid stroke={chartGrid} />
+                    <PolarAngleAxis dataKey="state" tick={{ fill: chartText, fontSize: 11 }} />
+                    <PolarRadiusAxis angle={90} domain={[70, 100]} tick={{ fill: chartText, fontSize: 11 }} />
+                    <Radar name="SLA %" dataKey="sla" stroke="#2444a4" fill="#4f82fb" fillOpacity={0.35} />
+                    <Tooltip contentStyle={tooltipStyle} />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </ChartCard>
+          </section>
 
-      <ChartCard title="State-wise Operations Summary" description="Management view of sites, officers, attendance, tickets, tasks, SLA, and operating status.">
-        <DataTable columns={operationsColumns} rows={stateOperationsSummary} embedded />
-      </ChartCard>
+          <ChartCard title="State-wise Operations Summary" description="Management view of sites, officers, attendance, tickets, tasks, SLA, and operating status.">
+            <DataTable columns={operationsColumns} rows={stateOperationsSummary} embedded />
+          </ChartCard>
 
-      <ChartCard title="Field Officer Activity" description="Live-style mock activity feed for officers working across QPMS branches and assigned sites.">
-        <DataTable columns={officerColumns} rows={fieldOfficerActivity} embedded />
-      </ChartCard>
+          <ChartCard title="Field Officer Activity" description="Live-style mock activity feed for officers working across QPMS branches and assigned sites.">
+            <DataTable columns={officerColumns} rows={fieldOfficerActivity} embedded />
+          </ChartCard>
+        </div>
+      )}
     </div>
   );
 }
@@ -496,6 +618,7 @@ function ExistingBusinessOperations() {
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('new-business');
   const [activeDashboardSection, setActiveDashboardSection] = useState(null);
+  const [activeOperationsSection, setActiveOperationsSection] = useState(null);
   usePageTitle('Dashboard');
 
   return (
@@ -512,7 +635,10 @@ export default function Dashboard() {
           onSectionChange={setActiveDashboardSection}
         />
       ) : (
-        <ExistingBusinessOperations />
+        <ExistingBusinessOperations
+          activeOperationsSection={activeOperationsSection}
+          onSectionChange={setActiveOperationsSection}
+        />
       )}
     </div>
   );

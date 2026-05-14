@@ -363,14 +363,14 @@ export const dashboardDetailSections = {
 };
 
 export const existingOperationsKpis = [
-  { title: 'Active Sites', value: '512', change: 'Across 6 operating regions', icon: MapPin, tone: 'blue' },
-  { title: 'Field Officers Active', value: '148', change: 'Live field coverage', icon: UserRoundCheck, tone: 'green' },
-  { title: 'Attendance Captured Today', value: '92%', change: '42,860 punches synced', icon: Fingerprint, tone: 'green' },
-  { title: 'Site Visits Completed', value: '286', change: 'Today across regions', icon: Route, tone: 'blue' },
-  { title: 'Open Tickets', value: '74', change: '12 high priority', icon: TicketCheck, tone: 'amber' },
-  { title: 'Pending Tasks', value: '319', change: 'Operational action queue', icon: ListTodo, tone: 'violet' },
-  { title: 'Overdue Tasks', value: '31', change: 'Needs escalation', icon: FileClock, tone: 'red' },
-  { title: 'Avg Resolution Time', value: '3h 18m', change: 'Across facility tickets', icon: TimerReset, tone: 'amber' },
+  { id: 'activeSites', title: 'Active Sites', value: '512', change: 'Across 6 operating regions', icon: MapPin, tone: 'blue' },
+  { id: 'fieldOfficersActive', title: 'Field Officers Active', value: '148', change: 'Live field coverage', icon: UserRoundCheck, tone: 'green' },
+  { id: 'attendanceCaptured', title: 'Attendance Captured Today', value: '92%', change: '42,860 punches synced', icon: Fingerprint, tone: 'green' },
+  { id: 'siteVisitsCompleted', title: 'Site Visits Completed', value: '286', change: 'Today across regions', icon: Route, tone: 'blue' },
+  { id: 'openTickets', title: 'Open Tickets', value: '74', change: '12 high priority', icon: TicketCheck, tone: 'amber' },
+  { id: 'pendingTasks', title: 'Pending Tasks', value: '319', change: 'Operational action queue', icon: ListTodo, tone: 'violet' },
+  { id: 'overdueTasks', title: 'Overdue Tasks', value: '31', change: 'Needs escalation', icon: FileClock, tone: 'red' },
+  { id: 'avgResolutionTime', title: 'Avg Resolution Time', value: '3h 18m', change: 'Across facility tickets', icon: TimerReset, tone: 'amber' },
 ];
 
 export const stateOperationsSummary = [
@@ -406,3 +406,147 @@ export const fieldOfficerActivity = [
   { id: 5, name: 'Naveen Kumar', state: 'Andhra Pradesh - 1', branch: 'Vijayawada', checkIn: '08:31 AM', lastActivity: 'Site checklist submitted', assignedSite: 'Greenline Hospital', status: 'Active' },
   { id: 6, name: 'Farhan Ali', state: 'Andhra Pradesh - 2', branch: 'Visakhapatnam', checkIn: '--', lastActivity: 'No activity for 2h', assignedSite: 'Port Admin Block', status: 'Offline' },
 ];
+
+export const operationsDetailSections = {
+  activeSites: {
+    title: 'Active Sites',
+    description: 'State-wise active facility coverage with current site health and branch ownership.',
+    columns: [
+      { key: 'siteId', label: 'Site ID' },
+      { key: 'site', label: 'Site Name' },
+      { key: 'state', label: 'State / Region' },
+      { key: 'branch', label: 'Branch' },
+      { key: 'service', label: 'Service Scope' },
+      { key: 'supervisor', label: 'Supervisor' },
+      { key: 'status', label: 'Status' },
+    ],
+    rows: [
+      { id: 1, siteId: 'ST-401', site: 'Aster Medcity', state: 'Kerala', branch: 'Kochi', service: 'HK, Security', supervisor: 'Meera Thomas', status: 'Healthy' },
+      { id: 2, siteId: 'ST-402', site: 'BluePeak Tower', state: 'Karnataka', branch: 'Bengaluru', service: 'Facility Management', supervisor: 'Sandeep Rao', status: 'Warning' },
+      { id: 3, siteId: 'ST-403', site: 'Metro Retail Parks', state: 'Telangana', branch: 'Hyderabad', service: 'HK, Tickets', supervisor: 'Lakshmi Devi', status: 'Healthy' },
+      { id: 4, siteId: 'ST-404', site: 'Port Admin Block', state: 'Andhra Pradesh - 2', branch: 'Visakhapatnam', service: 'HK, Security, Tasks', supervisor: 'Farhan Ali', status: 'Critical' },
+    ],
+  },
+  fieldOfficersActive: {
+    title: 'Field Officers Active',
+    description: 'Field officer movement, latest activity, assigned site, and operational status.',
+    columns: [
+      { key: 'name', label: 'Name' },
+      { key: 'state', label: 'State' },
+      { key: 'branch', label: 'Branch' },
+      { key: 'checkIn', label: 'Check-in Time' },
+      { key: 'lastActivity', label: 'Last Activity', wrap: true },
+      { key: 'assignedSite', label: 'Assigned Site' },
+      { key: 'status', label: 'Status' },
+    ],
+    rows: fieldOfficerActivity,
+  },
+  attendanceCaptured: {
+    title: 'Attendance Captured Today',
+    description: 'Attendance capture performance by state with punch counts and exception queues.',
+    columns: [
+      { key: 'state', label: 'State / Region' },
+      { key: 'attendance', label: 'Attendance %' },
+      { key: 'captured', label: 'Captured Punches' },
+      { key: 'missing', label: 'Missing Punches' },
+      { key: 'exceptions', label: 'Exceptions' },
+      { key: 'status', label: 'Status' },
+    ],
+    rows: stateOperationsSummary.map((item) => ({
+      id: item.id,
+      state: item.state,
+      attendance: `${item.attendance}%`,
+      captured: item.activeSites * 84,
+      missing: Math.max(4, 100 - item.attendance),
+      exceptions: item.status === 'Healthy' ? 'Low' : 'Review needed',
+      status: item.status,
+    })),
+  },
+  siteVisitsCompleted: {
+    title: 'Site Visits Completed',
+    description: 'Completed site visit activity from field officers and branch operations teams.',
+    columns: [
+      { key: 'visitId', label: 'Visit ID' },
+      { key: 'site', label: 'Site' },
+      { key: 'state', label: 'State' },
+      { key: 'officer', label: 'Officer' },
+      { key: 'completedAt', label: 'Completed At' },
+      { key: 'outcome', label: 'Outcome' },
+      { key: 'status', label: 'Status' },
+    ],
+    rows: [
+      { id: 1, visitId: 'VC-3101', site: 'Aster Medcity', state: 'Kerala', officer: 'Meera Thomas', completedAt: '11:20 AM', outcome: 'Checklist uploaded', status: 'Completed' },
+      { id: 2, visitId: 'VC-3102', site: 'BluePeak Tower', state: 'Karnataka', officer: 'Sandeep Rao', completedAt: '12:05 PM', outcome: 'Ticket follow-up raised', status: 'Completed' },
+      { id: 3, visitId: 'VC-3103', site: 'Metro Retail Parks', state: 'Telangana', officer: 'Lakshmi Devi', completedAt: '02:10 PM', outcome: 'Attendance variance reviewed', status: 'Completed' },
+    ],
+  },
+  openTickets: {
+    title: 'Open Tickets',
+    description: 'Open operational tickets by state, owner, severity, and SLA status.',
+    columns: [
+      { key: 'ticketId', label: 'Ticket ID' },
+      { key: 'site', label: 'Site' },
+      { key: 'state', label: 'State' },
+      { key: 'category', label: 'Category' },
+      { key: 'owner', label: 'Owner' },
+      { key: 'sla', label: 'SLA' },
+      { key: 'status', label: 'Status' },
+    ],
+    rows: [
+      { id: 1, ticketId: 'TK-5001', site: 'Port Admin Block', state: 'Andhra Pradesh - 2', category: 'Maintenance', owner: 'Farhan Ali', sla: 'Breached', status: 'Critical' },
+      { id: 2, ticketId: 'TK-5002', site: 'BluePeak Tower', state: 'Karnataka', category: 'Housekeeping', owner: 'Sandeep Rao', sla: '5h left', status: 'Pending' },
+      { id: 3, ticketId: 'TK-5003', site: 'Metro Retail Parks', state: 'Telangana', category: 'Security', owner: 'Lakshmi Devi', sla: 'On track', status: 'Active' },
+    ],
+  },
+  pendingTasks: {
+    title: 'Pending Tasks',
+    description: 'Operational tasks waiting for action across sites, supervisors, and branches.',
+    columns: [
+      { key: 'taskId', label: 'Task ID' },
+      { key: 'task', label: 'Task', wrap: true },
+      { key: 'site', label: 'Site' },
+      { key: 'owner', label: 'Owner' },
+      { key: 'due', label: 'Due Date' },
+      { key: 'status', label: 'Status' },
+    ],
+    rows: [
+      { id: 1, taskId: 'TS-7001', task: 'Upload monthly consumable consumption report', site: 'Aster Medcity', owner: 'Meera Thomas', due: '15 May 2026', status: 'Pending' },
+      { id: 2, taskId: 'TS-7002', task: 'Verify night shift manpower variance', site: 'BluePeak Tower', owner: 'Sandeep Rao', due: '16 May 2026', status: 'Pending' },
+      { id: 3, taskId: 'TS-7003', task: 'Close audit observation checklist', site: 'Metro Retail Parks', owner: 'Lakshmi Devi', due: '17 May 2026', status: 'Active' },
+    ],
+  },
+  overdueTasks: {
+    title: 'Overdue Tasks',
+    description: 'Overdue operational tasks grouped by severity and escalation need.',
+    columns: [
+      { key: 'taskId', label: 'Task ID' },
+      { key: 'task', label: 'Task', wrap: true },
+      { key: 'site', label: 'Site' },
+      { key: 'daysOverdue', label: 'Days Overdue' },
+      { key: 'severity', label: 'Severity' },
+      { key: 'status', label: 'Status' },
+    ],
+    rows: [
+      { id: 1, taskId: 'OD-8101', task: 'Generator maintenance closure evidence missing', site: 'Port Admin Block', daysOverdue: 4, severity: 'High', status: 'Critical' },
+      { id: 2, taskId: 'OD-8102', task: 'Supervisor checklist not approved', site: 'BluePeak Tower', daysOverdue: 2, severity: 'Medium', status: 'Escalated' },
+      { id: 3, taskId: 'OD-8103', task: 'Attendance exception remarks pending', site: 'Greenline Hospital', daysOverdue: 1, severity: 'Low', status: 'Pending' },
+    ],
+  },
+  avgResolutionTime: {
+    title: 'Avg Resolution Time',
+    description: 'Ticket resolution performance by state and ticket category.',
+    columns: [
+      { key: 'state', label: 'State / Region' },
+      { key: 'avgTime', label: 'Avg Resolution Time' },
+      { key: 'ticketsClosed', label: 'Tickets Closed' },
+      { key: 'fastestCategory', label: 'Fastest Category' },
+      { key: 'slowestCategory', label: 'Slowest Category' },
+      { key: 'status', label: 'Status' },
+    ],
+    rows: [
+      { id: 1, state: 'Tamil Nadu', avgTime: '2h 45m', ticketsClosed: 42, fastestCategory: 'HK', slowestCategory: 'Maintenance', status: 'Healthy' },
+      { id: 2, state: 'Karnataka', avgTime: '3h 50m', ticketsClosed: 31, fastestCategory: 'Security', slowestCategory: 'Consumables', status: 'Warning' },
+      { id: 3, state: 'Andhra Pradesh - 2', avgTime: '5h 15m', ticketsClosed: 18, fastestCategory: 'HK', slowestCategory: 'Maintenance', status: 'Critical' },
+    ],
+  },
+};
