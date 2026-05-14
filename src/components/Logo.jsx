@@ -10,7 +10,7 @@ export default function Logo({ className = 'h-9 w-9', showText = true, textClass
       />
       {showText ? (
         <div className={`flex min-w-0 items-center ${textClassName}`}>
-          <p className="truncate text-lg font-semibold leading-none text-slate-950">QPMS</p>
+          <p className="truncate text-lg font-semibold leading-none text-slate-950 dark:text-white">QPMS</p>
         </div>
       ) : null}
     </div>
