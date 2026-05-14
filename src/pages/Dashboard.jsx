@@ -107,6 +107,115 @@ function getDetailColumns(columns) {
   });
 }
 
+function DrilldownChart({ sectionId }) {
+  const chartBySection = {
+    openLeads: (
+      <PieChart>
+        <Pie data={leadSourceDistribution} dataKey="value" nameKey="name" innerRadius={62} outerRadius={92} paddingAngle={3}>
+          {leadSourceDistribution.map((entry, index) => (
+            <Cell key={entry.name} fill={sourceColors[index]} />
+          ))}
+        </Pie>
+        <Tooltip contentStyle={tooltipStyle} />
+        <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+      </PieChart>
+    ),
+    siteVisitsPlanned: (
+      <LineChart data={siteVisitTrend}>
+        <CartesianGrid stroke={chartGrid} vertical={false} />
+        <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+        <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+        <Tooltip contentStyle={tooltipStyle} />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        <Line type="monotone" dataKey="visits" stroke="#2444a4" strokeWidth={3} name="Scheduled Visits" />
+        <Line type="monotone" dataKey="completed" stroke="#10b981" strokeWidth={3} name="Completed Visits" />
+      </LineChart>
+    ),
+    estimationsPending: (
+      <BarChart data={[
+        { type: 'Housekeeping', count: 18 },
+        { type: 'Security', count: 13 },
+        { type: 'Equipment', count: 9 },
+        { type: 'Consumables', count: 7 },
+      ]}>
+        <CartesianGrid stroke={chartGrid} vertical={false} />
+        <XAxis dataKey="type" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+        <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+        <Tooltip contentStyle={tooltipStyle} />
+        <Bar dataKey="count" fill="#7c3aed" radius={[10, 10, 0, 0]} name="Pending Items" />
+      </BarChart>
+    ),
+    commercialReviews: (
+      <PieChart>
+        <Pie data={[
+          { name: 'Costing Review', value: 5 },
+          { name: 'Margin Review', value: 4 },
+          { name: 'Manpower Review', value: 3 },
+          { name: 'Final Remarks', value: 1 },
+        ]} dataKey="value" nameKey="name" innerRadius={62} outerRadius={92} paddingAngle={3}>
+          {['#f59e0b', '#2444a4', '#85adff', '#10b981'].map((color) => (
+            <Cell key={color} fill={color} />
+          ))}
+        </Pie>
+        <Tooltip contentStyle={tooltipStyle} />
+        <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+      </PieChart>
+    ),
+    approvalPending: (
+      <BarChart data={[
+        { level: 'Finance', count: 3 },
+        { level: 'COO', count: 4 },
+        { level: 'MD', count: 2 },
+        { level: 'Branch Head', count: 1 },
+      ]} layout="vertical" margin={{ left: 20 }}>
+        <CartesianGrid stroke={chartGrid} horizontal={false} />
+        <XAxis type="number" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+        <YAxis dataKey="level" type="category" width={94} tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+        <Tooltip contentStyle={tooltipStyle} />
+        <Bar dataKey="count" fill="#ef4444" radius={[0, 10, 10, 0]} name="Pending Approvals" />
+      </BarChart>
+    ),
+    proposalsSent: (
+      <AreaChart data={proposalConversionTrend}>
+        <defs>
+          <linearGradient id="drillProposalSent" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="#4f82fb" stopOpacity={0.45} />
+            <stop offset="95%" stopColor="#4f82fb" stopOpacity={0.03} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid stroke={chartGrid} vertical={false} />
+        <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+        <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+        <Tooltip contentStyle={tooltipStyle} />
+        <Area type="monotone" dataKey="sent" stroke="#4f82fb" strokeWidth={2.5} fill="url(#drillProposalSent)" name="Follow-up Trend" />
+      </AreaChart>
+    ),
+    convertedLeads: (
+      <AreaChart data={proposalConversionTrend}>
+        <defs>
+          <linearGradient id="drillConverted" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="#10b981" stopOpacity={0.45} />
+            <stop offset="95%" stopColor="#10b981" stopOpacity={0.03} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid stroke={chartGrid} vertical={false} />
+        <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+        <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+        <Tooltip contentStyle={tooltipStyle} />
+        <Area type="monotone" dataKey="converted" stroke="#10b981" strokeWidth={2.5} fill="url(#drillConverted)" name="Converted Leads" />
+      </AreaChart>
+    ),
+  };
+
+  return (
+    <ChartFrame>
+      <ResponsiveContainer width="100%" height="100%">
+        {chartBySection[sectionId]}
+      </ResponsiveContainer>
+    </ChartFrame>
+  );
+}
+
 function DashboardDetailPanel({ sectionId }) {
   const [query, setQuery] = useState('');
   const detail = dashboardDetailSections[sectionId];
@@ -146,6 +255,10 @@ function DashboardDetailPanel({ sectionId }) {
           <span className="text-qpms-600 dark:text-qpms-300">{detail.title}</span>
         </div>
 
+        <div className="mb-5">
+          <DrilldownChart sectionId={sectionId} />
+        </div>
+
         {rows.length ? (
           <DataTable columns={getDetailColumns(detail.columns)} rows={rows} embedded />
         ) : (
@@ -168,92 +281,96 @@ function NewBusinessPipeline({ activeDashboardSection, onSectionChange }) {
             key={kpi.title}
             {...kpi}
             isActive={activeDashboardSection === kpi.id}
-            onClick={() => onSectionChange(kpi.id)}
+            onClick={() => onSectionChange(activeDashboardSection === kpi.id ? null : kpi.id)}
           />
         ))}
       </section>
 
-      <DashboardDetailPanel sectionId={activeDashboardSection} />
+      {activeDashboardSection ? (
+        <DashboardDetailPanel sectionId={activeDashboardSection} />
+      ) : (
+        <div className="space-y-6 animate-[login-fade-up_220ms_ease-out]">
+          <section className="grid gap-6 xl:grid-cols-[0.78fr_1.22fr]">
+            <ChartCard title="Lead Source Distribution" description="Where new business demand is entering the pipeline.">
+              <ChartFrame>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={leadSourceDistribution} dataKey="value" nameKey="name" innerRadius={62} outerRadius={92} paddingAngle={3}>
+                      {leadSourceDistribution.map((entry, index) => (
+                        <Cell key={entry.name} fill={sourceColors[index]} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </ChartCard>
 
-      <section className="grid gap-6 xl:grid-cols-[0.78fr_1.22fr]">
-        <ChartCard title="Lead Source Distribution" description="Where new business demand is entering the pipeline.">
-          <ChartFrame>
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={leadSourceDistribution} dataKey="value" nameKey="name" innerRadius={62} outerRadius={92} paddingAngle={3}>
-                  {leadSourceDistribution.map((entry, index) => (
-                    <Cell key={entry.name} fill={sourceColors[index]} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={tooltipStyle} />
-                <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-              </PieChart>
-            </ResponsiveContainer>
-          </ChartFrame>
-        </ChartCard>
+            <ChartCard title="Lead Stage Funnel" description="Salesforce-style movement from new lead to converted account.">
+              <ChartFrame>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={leadStageFunnel} layout="vertical" margin={{ left: 18 }}>
+                    <CartesianGrid stroke={chartGrid} horizontal={false} />
+                    <XAxis type="number" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+                    <YAxis dataKey="stage" type="category" width={112} tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+                    <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(36,68,164,0.06)' }} />
+                    <Bar dataKey="count" radius={[0, 10, 10, 0]} fill="#2444a4" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </ChartCard>
+          </section>
 
-        <ChartCard title="Lead Stage Funnel" description="Salesforce-style movement from new lead to converted account.">
-          <ChartFrame>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={leadStageFunnel} layout="vertical" margin={{ left: 18 }}>
-                <CartesianGrid stroke={chartGrid} horizontal={false} />
-                <XAxis type="number" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
-                <YAxis dataKey="stage" type="category" width={112} tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
-                <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'rgba(36,68,164,0.06)' }} />
-                <Bar dataKey="count" radius={[0, 10, 10, 0]} fill="#2444a4" />
-              </BarChart>
-            </ResponsiveContainer>
-          </ChartFrame>
-        </ChartCard>
-      </section>
+          <section className="grid gap-6 xl:grid-cols-2">
+            <ChartCard title="Monthly Lead Trend" description="Lead inflow and site visit readiness across the current year.">
+              <ChartFrame>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={monthlyLeadTrend}>
+                    <CartesianGrid stroke={chartGrid} vertical={false} />
+                    <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+                    <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Line type="monotone" dataKey="leads" stroke="#2444a4" strokeWidth={3} dot={{ r: 3 }} name="Leads" />
+                    <Line type="monotone" dataKey="visits" stroke="#10b981" strokeWidth={3} dot={{ r: 3 }} name="Site Visits" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </ChartCard>
 
-      <section className="grid gap-6 xl:grid-cols-2">
-        <ChartCard title="Monthly Lead Trend" description="Lead inflow and site visit readiness across the current year.">
-          <ChartFrame>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={monthlyLeadTrend}>
-                <CartesianGrid stroke={chartGrid} vertical={false} />
-                <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="leads" stroke="#2444a4" strokeWidth={3} dot={{ r: 3 }} name="Leads" />
-                <Line type="monotone" dataKey="visits" stroke="#10b981" strokeWidth={3} dot={{ r: 3 }} name="Site Visits" />
-              </LineChart>
-            </ResponsiveContainer>
-          </ChartFrame>
-        </ChartCard>
+            <ChartCard title="Proposal Conversion Trend" description="Proposal volume compared with converted business wins.">
+              <ChartFrame>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={proposalConversionTrend}>
+                    <defs>
+                      <linearGradient id="proposalSent" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#4f82fb" stopOpacity={0.45} />
+                        <stop offset="95%" stopColor="#4f82fb" stopOpacity={0.03} />
+                      </linearGradient>
+                      <linearGradient id="proposalConverted" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.42} />
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0.03} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid stroke={chartGrid} vertical={false} />
+                    <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+                    <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Area type="monotone" dataKey="sent" stroke="#4f82fb" strokeWidth={2.5} fill="url(#proposalSent)" name="Proposals Sent" />
+                    <Area type="monotone" dataKey="converted" stroke="#10b981" strokeWidth={2.5} fill="url(#proposalConverted)" name="Converted" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </ChartFrame>
+            </ChartCard>
+          </section>
 
-        <ChartCard title="Proposal Conversion Trend" description="Proposal volume compared with converted business wins.">
-          <ChartFrame>
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={proposalConversionTrend}>
-                <defs>
-                  <linearGradient id="proposalSent" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#4f82fb" stopOpacity={0.45} />
-                    <stop offset="95%" stopColor="#4f82fb" stopOpacity={0.03} />
-                  </linearGradient>
-                  <linearGradient id="proposalConverted" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.42} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0.03} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid stroke={chartGrid} vertical={false} />
-                <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
-                <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Area type="monotone" dataKey="sent" stroke="#4f82fb" strokeWidth={2.5} fill="url(#proposalSent)" name="Proposals Sent" />
-                <Area type="monotone" dataKey="converted" stroke="#10b981" strokeWidth={2.5} fill="url(#proposalConverted)" name="Converted" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </ChartFrame>
-        </ChartCard>
-      </section>
-
-      <ChartCard title="Recent Leads" description="Latest opportunities requiring follow-up, estimation, commercial review, or approval action.">
-        <DataTable columns={recentLeadColumns} rows={recentLeads} embedded />
-      </ChartCard>
+          <ChartCard title="Recent Leads" description="Latest opportunities requiring follow-up, estimation, commercial review, or approval action.">
+            <DataTable columns={recentLeadColumns} rows={recentLeads} embedded />
+          </ChartCard>
+        </div>
+      )}
     </div>
   );
 }
@@ -378,7 +495,7 @@ function ExistingBusinessOperations() {
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('new-business');
-  const [activeDashboardSection, setActiveDashboardSection] = useState('openLeads');
+  const [activeDashboardSection, setActiveDashboardSection] = useState(null);
   usePageTitle('Dashboard');
 
   return (
