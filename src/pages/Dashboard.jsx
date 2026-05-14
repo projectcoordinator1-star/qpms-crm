@@ -436,7 +436,7 @@ function NewBusinessPipeline({ activeDashboardSection, onSectionChange }) {
               </ChartFrame>
             </ChartCard>
 
-            <ChartCard title="Lead Stage Funnel" description="Salesforce-style movement from new lead to converted account.">
+            <ChartCard title="Lead Stage Funnel" description="Business lifecycle movement from new lead to converted account.">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={leadStageFunnel} layout="vertical" margin={{ left: 18 }}>

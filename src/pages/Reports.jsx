@@ -30,7 +30,7 @@ export default function Reports() {
       <section className="enterprise-card p-6">
         <div className="flex items-center gap-2">
           <GitBranch className="h-5 w-5 text-qpms-600" />
-          <h2 className="text-[17px] font-semibold leading-6 text-slate-950">Salesforce-style stage tracker</h2>
+          <h2 className="text-[17px] font-semibold leading-6 text-slate-950">Operational Approval Pipeline</h2>
         </div>
         <div className="mt-6">
           <StageTracker stages={workflowStages} currentStage="Finance Validation" />
