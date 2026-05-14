@@ -12,22 +12,15 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { motion as Motion } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Logo from '../components/Logo.jsx';
-import brandedSlide1 from '../assets/login-slide-1.jpg';
-import brandedSlide2 from '../assets/login-slide-2.jpg';
-import brandedSlide3 from '../assets/login-slide-3.jpg';
-import brandedSlide4 from '../assets/login-slide-4.jpg';
-import brandedSlide5 from '../assets/login-slide-5.jpg';
 import { useAuth } from '../context/auth-context.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 
-const brandedSlides = [brandedSlide1, brandedSlide2, brandedSlide3, brandedSlide4, brandedSlide5];
-
 const socialLinks = [
-  { label: 'Website', href: 'https://qpms.in/', icon: Globe2 },
   { label: 'LinkedIn', href: 'https://www.linkedin.com/company/qpms-india/', icon: Linkedin },
+  { label: 'Website', href: 'https://qpms.in/', icon: Globe2 },
   { label: 'Instagram', href: 'https://www.instagram.com/qpms.in/', icon: Instagram },
   { label: 'Email', href: 'mailto:info@qpms.in', icon: Mail },
 ];
@@ -44,38 +37,9 @@ export default function Login() {
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isWelcoming, setIsWelcoming] = useState(false);
-  const [activeSlide, setActiveSlide] = useState(0);
-  const [isCarouselResetting, setIsCarouselResetting] = useState(false);
   const navigate = useNavigate();
   const { setUser } = useAuth();
   usePageTitle('Sign in');
-
-  useEffect(() => {
-    const slideTimer = window.setInterval(() => {
-      setActiveSlide((currentSlide) => currentSlide + 1);
-    }, 5000);
-
-    return () => window.clearInterval(slideTimer);
-  }, []);
-
-  useEffect(() => {
-    if (activeSlide !== brandedSlides.length) {
-      return undefined;
-    }
-
-    const resetTimer = window.setTimeout(() => {
-      setIsCarouselResetting(true);
-      setActiveSlide(0);
-
-      window.requestAnimationFrame(() => {
-        window.requestAnimationFrame(() => {
-          setIsCarouselResetting(false);
-        });
-      });
-    }, 700);
-
-    return () => window.clearTimeout(resetTimer);
-  }, [activeSlide]);
 
   function handleSubmit(event) {
     event.preventDefault();
@@ -112,127 +76,37 @@ export default function Login() {
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-950">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(85,132,255,0.42),transparent_28%),radial-gradient(circle_at_56%_52%,rgba(46,95,231,0.24),transparent_34%),linear-gradient(115deg,#14235f_0%,#2444a4_34%,#edf4ff_64%,#ffffff_100%)]" />
-      <div className="absolute -left-28 top-28 h-72 w-72 rounded-full bg-sky-300/30 blur-3xl" />
-      <div className="absolute right-12 top-16 h-80 w-80 rounded-full bg-white/70 blur-3xl" />
-      <div className="absolute bottom-0 left-1/3 h-64 w-64 rounded-full bg-qpms-300/20 blur-3xl" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_18%,rgba(85,132,255,0.48),transparent_28%),radial-gradient(circle_at_28%_72%,rgba(46,95,231,0.30),transparent_32%),radial-gradient(circle_at_78%_76%,rgba(255,255,255,0.72),transparent_34%),linear-gradient(135deg,#14235f_0%,#2444a4_38%,#edf4ff_78%,#ffffff_100%)]" />
+      <Motion.div
+        animate={{ opacity: [0.28, 0.46, 0.28], scale: [1, 1.06, 1] }}
+        transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute left-1/2 top-10 h-80 w-80 -translate-x-1/2 rounded-full bg-sky-300/26 blur-3xl"
+      />
+      <Motion.div
+        animate={{ opacity: [0.16, 0.32, 0.16], y: [0, -12, 0] }}
+        transition={{ duration: 9, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute bottom-10 left-10 h-72 w-72 rounded-full bg-qpms-300/24 blur-3xl"
+      />
+      <div className="absolute right-16 top-20 h-96 w-96 rounded-full bg-white/64 blur-3xl" />
 
-      <div className="relative grid min-h-screen gap-8 px-5 py-6 lg:grid-cols-[1.08fr_0.92fr] lg:px-8 lg:py-8 xl:px-12">
-        <Motion.section
+      <section className="relative flex min-h-screen items-center justify-center px-5 py-8">
+        <Motion.div
           initial="hidden"
           animate="visible"
           variants={fadeUp}
           transition={{ duration: 0.55, ease: 'easeOut' }}
-          className="relative hidden min-h-[calc(100vh-4rem)] overflow-hidden rounded-[2rem] border border-white/15 bg-white/10 p-8 text-white shadow-[0_34px_110px_rgba(15,23,42,0.30)] backdrop-blur-2xl lg:flex lg:flex-col"
+          className="w-full max-w-[460px]"
         >
-          <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.16),rgba(255,255,255,0.03)_38%,rgba(255,255,255,0.12))]" />
-          <Motion.div
-            animate={{ opacity: [0.22, 0.38, 0.22], scale: [1, 1.05, 1] }}
-            transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}
-            className="absolute -right-20 top-24 h-64 w-64 rounded-full bg-sky-300/24 blur-3xl"
-          />
-          <Motion.div
-            animate={{ opacity: [0.12, 0.24, 0.12], y: [0, -10, 0] }}
-            transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
-            className="absolute bottom-8 left-8 h-48 w-48 rounded-full bg-white/14 blur-2xl"
-          />
-          <div className="absolute left-1/2 top-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-qpms-300/10 blur-3xl" />
-
-          <div className="relative flex items-center justify-between">
-            <Logo className="h-12 w-12" textClassName="[&_p]:text-2xl [&_p]:text-white" />
-            <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-white/80 backdrop-blur">
-              v1.0
-            </span>
-          </div>
-
-          <div className="relative mt-8 flex flex-1 items-start">
-            <Motion.div
-              variants={fadeUp}
-              transition={{ duration: 0.5, delay: 0.14, ease: 'easeOut' }}
-              className="relative w-full max-w-[430px] overflow-hidden rounded-3xl border border-white/18 bg-white/10 shadow-[0_26px_90px_rgba(15,23,42,0.28)] backdrop-blur-xl"
-            >
-              <div className="absolute -inset-10 bg-[radial-gradient(circle_at_25%_20%,rgba(255,255,255,0.18),transparent_28%),radial-gradient(circle_at_70%_80%,rgba(147,197,253,0.22),transparent_32%)]" />
-              <div className="relative aspect-[4/5] overflow-hidden rounded-3xl">
-                <div
-                  className={`flex h-full ${isCarouselResetting ? '' : 'transition-transform duration-700 ease-in-out'}`}
-                  style={{
-                    width: `${(brandedSlides.length + 1) * 100}%`,
-                    transform: `translateX(-${activeSlide * (100 / (brandedSlides.length + 1))}%)`,
-                  }}
-                >
-                  {[...brandedSlides, brandedSlides[0]].map((slide, index) => (
-                    <div
-                      key={`${slide}-${index}`}
-                      className="flex h-full shrink-0 items-center justify-center bg-slate-950/12"
-                      style={{ width: `${100 / (brandedSlides.length + 1)}%` }}
-                    >
-                      <img
-                        src={slide}
-                        alt={`QPMS operational slide ${(index % brandedSlides.length) + 1}`}
-                        className="h-full w-full object-contain"
-                      />
-                    </div>
-                  ))}
-                </div>
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/20 via-transparent to-white/4" />
-                <div className="absolute bottom-4 left-4 flex gap-2">
-                  {brandedSlides.map((slide, index) => (
-                    <button
-                      key={slide}
-                      type="button"
-                      onClick={() => {
-                        setIsCarouselResetting(false);
-                        setActiveSlide(index);
-                      }}
-                      className={`h-2.5 w-2.5 rounded-full ring-1 ring-white/35 transition ${
-                        activeSlide % brandedSlides.length === index ? 'bg-white' : 'bg-white/45 hover:bg-white/75'
-                      }`}
-                      aria-label={`Show QPMS operational slide ${index + 1}`}
-                    />
-                  ))}
-                </div>
-              </div>
-            </Motion.div>
-          </div>
-
-          <div className="relative mt-6 flex flex-col items-start gap-3 border-t border-white/12 pt-5">
-            <p className="text-xs font-medium leading-5 text-white/58">Connect with QPMS</p>
-            <div className="flex items-center gap-2">
-              {socialLinks.map((item) => (
-                <a
-                  key={item.label}
-                  href={item.href}
-                  target={item.href.startsWith('mailto:') ? undefined : '_blank'}
-                  rel={item.href.startsWith('mailto:') ? undefined : 'noreferrer'}
-                  aria-label={item.label}
-                  className="grid h-9 w-9 place-items-center rounded-full border border-white/14 bg-white/10 text-white/72 backdrop-blur-xl transition duration-200 hover:-translate-y-0.5 hover:border-white/26 hover:bg-white/18 hover:text-white hover:shadow-[0_0_28px_rgba(147,197,253,0.28)]"
-                >
-                  <item.icon className="h-4 w-4" />
-                </a>
-              ))}
+          <div className="mb-7 flex justify-center">
+            <div className="rounded-2xl border border-white/28 bg-white/18 p-3 shadow-[0_20px_55px_rgba(15,23,42,0.18)] backdrop-blur-2xl">
+              <Logo className="h-12 w-12" textClassName="[&_p]:text-2xl [&_p]:text-white" />
             </div>
           </div>
-        </Motion.section>
-
-        <section className="flex min-h-[calc(100vh-3rem)] items-center justify-center py-6 lg:min-h-[calc(100vh-4rem)]">
-          <Motion.div
-            initial="hidden"
-            animate="visible"
-            variants={fadeUp}
-            transition={{ duration: 0.55, delay: 0.12, ease: 'easeOut' }}
-            className="w-full max-w-[460px]"
-          >
-            <div className="mb-8 flex items-center justify-between lg:hidden">
-              <Logo className="h-11 w-11" />
-              <span className="rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-xs font-semibold text-slate-500">
-                v1.0
-              </span>
-            </div>
 
             <Motion.div
               whileHover={{ y: -2 }}
               transition={{ duration: 0.2 }}
-              className="rounded-[2rem] border border-white/72 bg-white/76 p-6 shadow-[0_34px_110px_rgba(15,23,42,0.18)] backdrop-blur-2xl sm:p-8"
+            className="rounded-[2rem] border border-white/72 bg-white/78 p-6 shadow-[0_34px_110px_rgba(15,23,42,0.20)] backdrop-blur-2xl sm:p-8"
             >
               <div className="flex items-center gap-2 rounded-full bg-qpms-50 px-3 py-1.5 text-xs font-semibold text-qpms-700 ring-1 ring-qpms-100 w-fit">
                 <Sparkles className="h-3.5 w-3.5" />
@@ -328,9 +202,26 @@ export default function Login() {
                 Secure access protected for QPMS operations
               </div>
             </Motion.div>
+
+          <div className="mt-7 text-center">
+            <p className="text-xs font-semibold uppercase text-white/70">Connect with QPMS</p>
+            <div className="mt-3 flex justify-center gap-2">
+              {socialLinks.map((item) => (
+                <a
+                  key={item.label}
+                  href={item.href}
+                  target={item.href.startsWith('mailto:') ? undefined : '_blank'}
+                  rel={item.href.startsWith('mailto:') ? undefined : 'noreferrer'}
+                  aria-label={item.label}
+                  className="grid h-10 w-10 place-items-center rounded-full border border-white/18 bg-white/16 text-white/78 shadow-sm backdrop-blur-xl transition duration-200 hover:-translate-y-0.5 hover:border-white/30 hover:bg-white/24 hover:text-white hover:shadow-[0_0_28px_rgba(147,197,253,0.30)]"
+                >
+                  <item.icon className="h-4.5 w-4.5" />
+                </a>
+              ))}
+            </div>
+          </div>
           </Motion.div>
-        </section>
-      </div>
+      </section>
 
       {isWelcoming ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/35 px-5 backdrop-blur-sm">
