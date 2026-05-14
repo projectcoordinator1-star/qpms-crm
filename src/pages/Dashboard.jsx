@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Search } from 'lucide-react';
 import {
   Area,
   AreaChart,
@@ -31,6 +32,7 @@ import StatusBadge from '../components/StatusBadge.jsx';
 import {
   existingOperationsKpis,
   fieldOfficerActivity,
+  dashboardDetailSections,
   leadSourceDistribution,
   leadStageFunnel,
   monthlyLeadTrend,
@@ -95,14 +97,83 @@ function ChartFrame({ children, height = 'h-72' }) {
   return <div className={`${height} rounded-2xl bg-slate-50 p-3 dark:bg-slate-950/55`}>{children}</div>;
 }
 
-function NewBusinessPipeline() {
+function getDetailColumns(columns) {
+  return columns.map((column) => {
+    if (['status', 'reviewStatus'].includes(column.key)) {
+      return { ...column, render: (row) => <StatusBadge status={row[column.key]} /> };
+    }
+
+    return column;
+  });
+}
+
+function DashboardDetailPanel({ sectionId }) {
+  const [query, setQuery] = useState('');
+  const detail = dashboardDetailSections[sectionId];
+
+  if (!detail) {
+    return null;
+  }
+
+  const normalizedQuery = query.trim().toLowerCase();
+  const rows = normalizedQuery
+    ? detail.rows.filter((row) =>
+        Object.values(row).some((value) => String(value).toLowerCase().includes(normalizedQuery)),
+      )
+    : detail.rows;
+
+  return (
+    <div key={sectionId} className="animate-[login-fade-up_220ms_ease-out]">
+      <ChartCard
+        title={detail.title}
+        description={detail.description}
+        action={
+          <div className="relative w-full min-w-0 sm:w-72">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={`Search ${detail.title.toLowerCase()}...`}
+              className="focus-ring h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+            />
+          </div>
+        }
+      >
+        <div className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">
+          <span>Dashboard</span>
+          <span>/</span>
+          <span className="text-qpms-600 dark:text-qpms-300">{detail.title}</span>
+        </div>
+
+        {rows.length ? (
+          <DataTable columns={getDetailColumns(detail.columns)} rows={rows} embedded />
+        ) : (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-10 text-center dark:border-slate-700 dark:bg-slate-950/55">
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">No matching records found</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Try a different company, status, owner, or stage.</p>
+          </div>
+        )}
+      </ChartCard>
+    </div>
+  );
+}
+
+function NewBusinessPipeline({ activeDashboardSection, onSectionChange }) {
   return (
     <div className="space-y-6">
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {newBusinessKpis.map((kpi) => (
-          <KpiCard key={kpi.title} {...kpi} />
+          <KpiCard
+            key={kpi.title}
+            {...kpi}
+            isActive={activeDashboardSection === kpi.id}
+            onClick={() => onSectionChange(kpi.id)}
+          />
         ))}
       </section>
+
+      <DashboardDetailPanel sectionId={activeDashboardSection} />
 
       <section className="grid gap-6 xl:grid-cols-[0.78fr_1.22fr]">
         <ChartCard title="Lead Source Distribution" description="Where new business demand is entering the pipeline.">
@@ -307,6 +378,7 @@ function ExistingBusinessOperations() {
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('new-business');
+  const [activeDashboardSection, setActiveDashboardSection] = useState('openLeads');
   usePageTitle('Dashboard');
 
   return (
@@ -317,7 +389,14 @@ export default function Dashboard() {
         actions={<DashboardTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />}
       />
 
-      {activeTab === 'new-business' ? <NewBusinessPipeline /> : <ExistingBusinessOperations />}
+      {activeTab === 'new-business' ? (
+        <NewBusinessPipeline
+          activeDashboardSection={activeDashboardSection}
+          onSectionChange={setActiveDashboardSection}
+        />
+      ) : (
+        <ExistingBusinessOperations />
+      )}
     </div>
   );
 }

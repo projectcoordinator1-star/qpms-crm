@@ -178,13 +178,13 @@ export const recentWorkflowActivity = [
 ];
 
 export const newBusinessKpis = [
-  { title: 'Open Leads', value: '68', change: '14 new this week', icon: Building2, tone: 'blue' },
-  { title: 'Site Visits Planned', value: '22', change: '7 scheduled today', icon: CalendarDays, tone: 'amber' },
-  { title: 'Estimations Pending', value: '18', change: 'HK and security scope', icon: ClipboardList, tone: 'violet' },
-  { title: 'Commercial Reviews', value: '13', change: '5 awaiting remarks', icon: FileCheck2, tone: 'amber' },
-  { title: 'Approval Pending', value: '10', change: 'Hierarchy review queue', icon: UserCheck, tone: 'red' },
-  { title: 'Proposals Sent', value: '26', change: '8 in client follow-up', icon: Send, tone: 'blue' },
-  { title: 'Converted Leads', value: '11', change: 'This month', icon: TrendingUp, tone: 'green' },
+  { id: 'openLeads', title: 'Open Leads', value: '68', change: '14 new this week', icon: Building2, tone: 'blue' },
+  { id: 'siteVisitsPlanned', title: 'Site Visits Planned', value: '22', change: '7 scheduled today', icon: CalendarDays, tone: 'amber' },
+  { id: 'estimationsPending', title: 'Estimations Pending', value: '18', change: 'HK and security scope', icon: ClipboardList, tone: 'violet' },
+  { id: 'commercialReviews', title: 'Commercial Reviews', value: '13', change: '5 awaiting remarks', icon: FileCheck2, tone: 'amber' },
+  { id: 'approvalPending', title: 'Approval Pending', value: '10', change: 'Hierarchy review queue', icon: UserCheck, tone: 'red' },
+  { id: 'proposalsSent', title: 'Proposals Sent', value: '26', change: '8 in client follow-up', icon: Send, tone: 'blue' },
+  { id: 'convertedLeads', title: 'Converted Leads', value: '11', change: 'This month', icon: TrendingUp, tone: 'green' },
 ];
 
 export const leadSourceDistribution = [
@@ -236,6 +236,131 @@ export const recentLeads = [
   { id: 4, company: 'BluePeak Business Tower', source: 'Campaign', assignedTo: 'Rahul Shah', stage: 'Proposal', nextFollowUp: '20 May 2026', status: 'Active' },
   { id: 5, company: 'Greenline Hospital Group', source: 'Direct Visit', assignedTo: 'Ananya Rao', stage: 'Estimation', nextFollowUp: '21 May 2026', status: 'Pending' },
 ];
+
+export const dashboardDetailSections = {
+  openLeads: {
+    title: 'Open Leads',
+    description: 'Leads currently open across business development and assignment queues.',
+    columns: [
+      { key: 'leadId', label: 'Lead ID' },
+      { key: 'company', label: 'Company Name' },
+      { key: 'contact', label: 'Contact Person' },
+      { key: 'source', label: 'Source' },
+      { key: 'executive', label: 'Assigned Executive' },
+      { key: 'stage', label: 'Lead Stage' },
+      { key: 'followUp', label: 'Next Follow-up' },
+      { key: 'status', label: 'Status' },
+    ],
+    rows: [
+      { id: 1, leadId: 'LD-1001', company: 'Aster Medcity', contact: 'Rohit Nair', source: 'Referral', executive: 'Ananya Rao', stage: 'Contacted', followUp: '15 May 2026', status: 'Active' },
+      { id: 2, leadId: 'LD-1002', company: 'Emirates Facility Zone', contact: 'Meera Shah', source: 'Website', executive: 'Karthik Menon', stage: 'Site Visit', followUp: '16 May 2026', status: 'Active' },
+      { id: 3, leadId: 'LD-1003', company: 'Metro Retail Parks', contact: 'Imran Khan', source: 'LinkedIn', executive: 'Nisha Iyer', stage: 'New', followUp: '17 May 2026', status: 'Pending' },
+      { id: 4, leadId: 'LD-1004', company: 'BluePeak Business Tower', contact: 'Sanjay Paul', source: 'Campaign', executive: 'Rahul Shah', stage: 'Estimation', followUp: '18 May 2026', status: 'Active' },
+    ],
+  },
+  siteVisitsPlanned: {
+    title: 'Site Visits Planned',
+    description: 'Upcoming operational discovery visits assigned to business and field officers.',
+    columns: [
+      { key: 'visitId', label: 'Visit ID' },
+      { key: 'client', label: 'Client' },
+      { key: 'state', label: 'State' },
+      { key: 'address', label: 'Site Address', wrap: true },
+      { key: 'officer', label: 'Assigned Officer' },
+      { key: 'date', label: 'Scheduled Date' },
+      { key: 'status', label: 'Status' },
+    ],
+    rows: [
+      { id: 1, visitId: 'SV-2101', client: 'Aster Medcity', state: 'Kerala', address: 'Cheranallur, Kochi', officer: 'Meera Thomas', date: '15 May 2026', status: 'Active' },
+      { id: 2, visitId: 'SV-2102', client: 'BluePeak Tower', state: 'Karnataka', address: 'Outer Ring Road, Bengaluru', officer: 'Sandeep Rao', date: '16 May 2026', status: 'In Transit' },
+      { id: 3, visitId: 'SV-2103', client: 'Greenline Hospital', state: 'Andhra Pradesh - 1', address: 'MG Road, Vijayawada', officer: 'Naveen Kumar', date: '17 May 2026', status: 'Pending' },
+    ],
+  },
+  estimationsPending: {
+    title: 'Estimations Pending',
+    description: 'Site requirement and manpower estimates awaiting review before MOM or commercial movement.',
+    columns: [
+      { key: 'client', label: 'Client' },
+      { key: 'floors', label: 'Floors' },
+      { key: 'hk', label: 'HK Requirement' },
+      { key: 'security', label: 'Security Requirement' },
+      { key: 'equipment', label: 'Equipment Scope', wrap: true },
+      { key: 'submittedBy', label: 'Submitted By' },
+      { key: 'reviewStatus', label: 'Review Status' },
+    ],
+    rows: [
+      { id: 1, client: 'Aster Medcity', floors: '12', hk: '86 staff', security: '42 guards', equipment: 'Scrubbers, vacuum units, trolleys', submittedBy: 'Ananya Rao', reviewStatus: 'Pending' },
+      { id: 2, client: 'Metro Retail Parks', floors: '8', hk: '54 staff', security: '26 guards', equipment: 'Ride-on scrubber, escalator kits', submittedBy: 'Nisha Iyer', reviewStatus: 'Pending' },
+      { id: 3, client: 'Port Admin Block', floors: '5', hk: '32 staff', security: '18 guards', equipment: 'Wet/dry vacuums and consumable bins', submittedBy: 'Rahul Shah', reviewStatus: 'Escalated' },
+    ],
+  },
+  commercialReviews: {
+    title: 'Commercial Reviews',
+    description: 'Commercial review queue for manpower, costing, margin, and client-ready proposal readiness.',
+    columns: [
+      { key: 'client', label: 'Client' },
+      { key: 'lead', label: 'Commercial Lead' },
+      { key: 'value', label: 'Estimated Value' },
+      { key: 'remarks', label: 'Pending Remarks', wrap: true },
+      { key: 'stage', label: 'Review Stage' },
+      { key: 'sla', label: 'SLA Timer' },
+    ],
+    rows: [
+      { id: 1, client: 'Emirates Facility Zone', lead: 'Commercial Team A', value: '₹42.5L', remarks: 'Separate night security from HK costing.', stage: 'Costing Review', sla: '6h left' },
+      { id: 2, client: 'Metro Retail Parks', lead: 'Commercial Team B', value: '₹31.2L', remarks: 'Consumable assumption confirmation pending.', stage: 'Margin Review', sla: '1d left' },
+      { id: 3, client: 'Greenline Hospital', lead: 'Commercial Team A', value: '₹58.8L', remarks: 'Biomedical interface scope needs sign-off.', stage: 'Manpower Review', sla: '3h left' },
+    ],
+  },
+  approvalPending: {
+    title: 'Approval Pending',
+    description: 'Hierarchy approvals waiting with leadership, finance, or branch ownership.',
+    columns: [
+      { key: 'client', label: 'Client' },
+      { key: 'level', label: 'Approval Level' },
+      { key: 'pendingWith', label: 'Pending With' },
+      { key: 'days', label: 'Days Pending' },
+      { key: 'priority', label: 'Priority' },
+      { key: 'status', label: 'Status' },
+    ],
+    rows: [
+      { id: 1, client: 'Aster Medcity', level: 'COO Approval', pendingWith: 'COO', days: '2', priority: 'High', status: 'Pending' },
+      { id: 2, client: 'Metro Retail Parks', level: 'Finance Validation', pendingWith: 'Finance', days: '4', priority: 'High', status: 'Escalated' },
+      { id: 3, client: 'Greenline Hospital', level: 'MD Approval', pendingWith: 'MD', days: '1', priority: 'Medium', status: 'Pending' },
+    ],
+  },
+  proposalsSent: {
+    title: 'Proposals Sent',
+    description: 'Client proposals already sent and waiting for business follow-up or negotiation closure.',
+    columns: [
+      { key: 'client', label: 'Client' },
+      { key: 'value', label: 'Proposal Value' },
+      { key: 'sentDate', label: 'Sent Date' },
+      { key: 'followUp', label: 'Follow-up Date' },
+      { key: 'status', label: 'Status' },
+    ],
+    rows: [
+      { id: 1, client: 'BluePeak Business Tower', value: '₹36.4L', sentDate: '10 May 2026', followUp: '16 May 2026', status: 'Active' },
+      { id: 2, client: 'Lulu Facility Block', value: '₹24.8L', sentDate: '11 May 2026', followUp: '17 May 2026', status: 'Pending' },
+      { id: 3, client: 'Port Admin Block', value: '₹19.6L', sentDate: '12 May 2026', followUp: '18 May 2026', status: 'Active' },
+    ],
+  },
+  convertedLeads: {
+    title: 'Converted Leads',
+    description: 'Recently converted business ready for operational handover and site mobilization.',
+    columns: [
+      { key: 'client', label: 'Client' },
+      { key: 'convertedDate', label: 'Converted Date' },
+      { key: 'region', label: 'Region' },
+      { key: 'revenue', label: 'Estimated Revenue' },
+      { key: 'team', label: 'Assigned Operations Team' },
+    ],
+    rows: [
+      { id: 1, client: 'TechPark Facility Hub', convertedDate: '04 May 2026', region: 'Tamil Nadu', revenue: '₹72.0L', team: 'Chennai Ops Team' },
+      { id: 2, client: 'Coastal Care Hospital', convertedDate: '07 May 2026', region: 'Kerala', revenue: '₹64.5L', team: 'Kochi Ops Team' },
+      { id: 3, client: 'HITEC Admin Campus', convertedDate: '12 May 2026', region: 'Telangana', revenue: '₹48.2L', team: 'Hyderabad Ops Team' },
+    ],
+  },
+};
 
 export const existingOperationsKpis = [
   { title: 'Active Sites', value: '512', change: 'Across 6 operating regions', icon: MapPin, tone: 'blue' },
