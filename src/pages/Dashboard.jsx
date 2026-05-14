@@ -1,23 +1,19 @@
-import { ArrowUpRight, Building2, CheckCircle2, Clock3, IndianRupee, TicketCheck } from 'lucide-react';
+import { ArrowUpRight, Clock3 } from 'lucide-react';
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import KpiCard from '../components/KpiCard.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
+import StageTracker from '../components/StageTracker.jsx';
+import {
+  dashboardKpis,
+  pipelineData,
+  proposalData,
+  recentWorkflowActivity,
+  workflowStages,
+} from '../data/qpmsWorkflowData.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
-import { formatCurrency, formatNumber } from '../utils/formatters.js';
 
-const kpis = [
-  { title: 'Active Accounts', value: formatNumber(248), change: '+12.4% this month', icon: Building2, tone: 'blue' },
-  { title: 'Open Tickets', value: formatNumber(72), change: '+8 urgent reviews', icon: TicketCheck, tone: 'amber' },
-  { title: 'Task Completion', value: '84%', change: '+6.1% this week', icon: CheckCircle2, tone: 'green' },
-  { title: 'Pipeline Value', value: formatCurrency(4250000), change: '+18.2% forecast', icon: IndianRupee, tone: 'violet' },
-];
-
-const activities = [
-  ['Site audit completed', 'North Zone Retail Hub', 'Completed'],
-  ['Ticket escalated', 'Generator maintenance SLA', 'Escalated'],
-  ['New opportunity added', 'Facility expansion proposal', 'Active'],
-  ['Employee task assigned', 'Quarterly compliance checklist', 'Pending'],
-];
+const proposalColors = ['#2444a4', '#4f82fb', '#85adff', '#10b981'];
 
 export default function Dashboard() {
   usePageTitle('Dashboard');
@@ -25,17 +21,17 @@ export default function Dashboard() {
   return (
     <div className="space-y-7">
       <PageHeader
-        title="Dashboard"
-        description="A unified command center for QPMS customer operations, field teams, ticket health, and commercial performance."
+        title="Operations Dashboard"
+        description="Salesforce-style command center for QPMS lead flow, site visits, commercial review, approvals, and proposals."
         actions={
           <button className="focus-ring inline-flex items-center gap-2 rounded-xl bg-qpms-600 px-4 py-2.5 text-sm font-semibold leading-5 text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700">
-            Review pipeline <ArrowUpRight className="h-4 w-4" />
+            Review workflow <ArrowUpRight className="h-4 w-4" />
           </button>
         }
       />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {kpis.map((kpi) => (
+        {dashboardKpis.map((kpi) => (
           <KpiCard key={kpi.title} {...kpi} />
         ))}
       </section>
@@ -44,39 +40,58 @@ export default function Dashboard() {
         <div className="enterprise-card p-6">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <h2 className="text-[17px] font-semibold leading-6 text-slate-950">Revenue and SLA trend</h2>
-              <p className="mt-1 text-sm font-normal leading-6 text-slate-500">Monthly operating performance</p>
+              <h2 className="text-[17px] font-semibold leading-6 text-slate-950">Lead to proposal pipeline</h2>
+              <p className="mt-1 text-sm font-normal leading-6 text-slate-500">Operational workflow volume by stage</p>
             </div>
-            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold leading-4 text-emerald-700">Healthy</span>
+            <span className="rounded-full bg-qpms-50 px-3 py-1 text-xs font-semibold leading-4 text-qpms-700">Live mock data</span>
           </div>
-          <div className="mt-8 flex h-72 items-end gap-3 rounded-2xl bg-gradient-to-b from-slate-50 to-white p-4">
-            {[42, 58, 52, 68, 74, 64, 82, 78, 88, 84, 91, 96].map((height, index) => (
-              <div key={index} className="flex h-full flex-1 flex-col items-center justify-end gap-3">
-                <div
-                  className="w-full rounded-t-xl bg-gradient-to-t from-qpms-600 to-qpms-300 shadow-sm"
-                  style={{ height: `${height}%` }}
+          <div className="mt-8 h-72 rounded-2xl bg-gradient-to-b from-slate-50 to-white p-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={pipelineData}>
+                <CartesianGrid stroke="#e2e8f0" vertical={false} />
+                <XAxis dataKey="stage" tickLine={false} axisLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                <YAxis tickLine={false} axisLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} />
+                <Tooltip
+                  cursor={{ fill: 'rgba(36,68,164,0.06)' }}
+                  contentStyle={{ borderRadius: 14, borderColor: '#e2e8f0', boxShadow: '0 18px 45px rgba(15,23,42,0.10)' }}
                 />
-                <span className="text-xs font-medium leading-4 text-slate-400">{index + 1}</span>
-              </div>
-            ))}
+                <Bar dataKey="count" radius={[10, 10, 0, 0]} fill="#2444a4" />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
 
         <div className="enterprise-card p-6">
-          <h2 className="text-[17px] font-semibold leading-6 text-slate-950">Quick stats</h2>
-          <div className="mt-5 space-y-3">
-            {[
-              ['Avg response', '1h 24m'],
-              ['Site uptime', '99.2%'],
-              ['Pending approvals', '18'],
-              ['Team utilization', '76%'],
-            ].map(([label, value]) => (
-              <div key={label} className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3.5">
-                <span className="text-sm font-medium leading-5 text-slate-600">{label}</span>
-                <span className="text-sm font-semibold leading-5 text-slate-950">{value}</span>
+          <h2 className="text-[17px] font-semibold leading-6 text-slate-950">Proposal status</h2>
+          <p className="mt-1 text-sm font-normal leading-6 text-slate-500">Current quotation movement</p>
+          <div className="mt-6 h-52">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={proposalData} dataKey="value" nameKey="name" innerRadius={58} outerRadius={82} paddingAngle={3}>
+                  {proposalData.map((entry, index) => (
+                    <Cell key={entry.name} fill={proposalColors[index]} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={{ borderRadius: 14, borderColor: '#e2e8f0' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            {proposalData.map((item, index) => (
+              <div key={item.name} className="flex items-center gap-2 text-xs font-semibold text-slate-600">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: proposalColors[index] }} />
+                {item.name}
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="enterprise-card p-6">
+        <h2 className="text-[17px] font-semibold leading-6 text-slate-950">Approval workflow tracker</h2>
+        <p className="mt-1 text-sm font-normal leading-6 text-slate-500">Reference stage path for lead conversion and proposal approvals.</p>
+        <div className="mt-6">
+          <StageTracker stages={workflowStages} currentStage="Approval Pending" />
         </div>
       </section>
 
@@ -86,7 +101,7 @@ export default function Dashboard() {
           <h2 className="text-[17px] font-semibold leading-6 text-slate-950">Recent activity</h2>
         </div>
         <div className="mt-5 divide-y divide-slate-100">
-          {activities.map(([title, detail, status]) => (
+          {recentWorkflowActivity.map(([title, detail, status]) => (
             <div key={title} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-sm font-semibold leading-5 text-slate-950">{title}</p>

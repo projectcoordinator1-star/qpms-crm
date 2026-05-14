@@ -20,7 +20,12 @@ export default function DataTable({ columns, rows }) {
             {rows.map((row) => (
               <tr key={row.id} className="transition hover:bg-slate-50/80">
                 {columns.map((column) => (
-                  <td key={column.key} className="whitespace-nowrap px-5 py-4 text-sm font-medium leading-6 text-slate-700">
+                  <td
+                    key={column.key}
+                    className={`px-5 py-4 text-sm font-medium leading-6 text-slate-700 ${
+                      column.wrap ? 'min-w-72 whitespace-normal' : 'whitespace-nowrap'
+                    }`}
+                  >
                     {column.render ? column.render(row) : row[column.key]}
                   </td>
                 ))}

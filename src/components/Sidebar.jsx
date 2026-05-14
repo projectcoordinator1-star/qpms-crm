@@ -1,11 +1,11 @@
 import {
   BarChart3,
-  Building2,
   CheckSquare,
+  ClipboardCheck,
+  FileText,
   Home,
   LifeBuoy,
   Settings,
-  TicketCheck,
   Users,
   Workflow,
 } from 'lucide-react';
@@ -14,12 +14,12 @@ import Logo from './Logo.jsx';
 
 const navItems = [
   { label: 'Dashboard', to: '/dashboard', icon: Home },
-  { label: 'CRM', to: '/crm', icon: Workflow },
-  { label: 'Sites', to: '/sites', icon: Building2 },
-  { label: 'Tickets', to: '/tickets', icon: TicketCheck },
-  { label: 'Tasks', to: '/tasks', icon: CheckSquare },
-  { label: 'Reports', to: '/reports', icon: BarChart3 },
-  { label: 'Employees', to: '/employees', icon: Users },
+  { label: 'Lead Management', to: '/crm', icon: Workflow },
+  { label: 'Site Visit & Estimation', to: '/sites', icon: ClipboardCheck },
+  { label: 'MOM Draft', to: '/tickets', icon: FileText },
+  { label: 'Commercial Review', to: '/tasks', icon: CheckSquare },
+  { label: 'Approval Workflow', to: '/reports', icon: BarChart3 },
+  { label: 'Employee IAM', to: '/employees', icon: Users },
   { label: 'Settings', to: '/settings', icon: Settings },
 ];
 
@@ -70,7 +70,7 @@ export default function Sidebar({ isOpen, onClose }) {
             </div>
             <div>
               <p className="text-sm font-bold text-slate-950">Need help?</p>
-              <p className="mt-1 text-xs leading-5 text-slate-600">QPMS support is ready for workflow setup.</p>
+          <p className="mt-1 text-xs leading-5 text-slate-600">Role-based sidebar visibility can be added here next.</p>
             </div>
           </div>
         </div>

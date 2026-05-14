@@ -33,7 +33,7 @@ export default function Navbar({ onMenuClick }) {
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="search"
-            placeholder="Search accounts, tickets, employees..."
+            placeholder="Search leads, sites, approvals, employees..."
             className="focus-ring h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm font-medium text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white"
           />
         </div>
