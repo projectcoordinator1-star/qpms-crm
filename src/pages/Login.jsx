@@ -49,7 +49,7 @@ export default function Login() {
     const normalizedUsername = username.trim().toLowerCase();
 
     if (!['admin', 'admin@qpms.com'].includes(normalizedUsername) || password !== 'admin') {
-      setError('Use admin and admin for the sample login.');
+      setError('Incorrect username or password.');
       setIsSubmitting(false);
       return;
     }
@@ -98,9 +98,7 @@ export default function Login() {
           className="w-full max-w-[460px]"
         >
           <div className="mb-7 flex justify-center">
-            <div className="rounded-2xl border border-white/28 bg-white/18 p-3 shadow-[0_20px_55px_rgba(15,23,42,0.18)] backdrop-blur-2xl">
-              <Logo className="h-12 w-12" textClassName="[&_p]:text-2xl [&_p]:text-white" />
-            </div>
+            <Logo className="h-12 w-12" textClassName="[&_p]:text-2xl [&_p]:text-white" />
           </div>
 
             <Motion.div
@@ -108,16 +106,13 @@ export default function Login() {
               transition={{ duration: 0.2 }}
             className="rounded-[2rem] border border-white/72 bg-white/78 p-6 shadow-[0_34px_110px_rgba(15,23,42,0.20)] backdrop-blur-2xl sm:p-8"
             >
-              <div className="flex items-center gap-2 rounded-full bg-qpms-50 px-3 py-1.5 text-xs font-semibold text-qpms-700 ring-1 ring-qpms-100 w-fit">
+              <div className="mx-auto flex w-fit items-center gap-2 rounded-full bg-qpms-50 px-3 py-1.5 text-xs font-semibold text-qpms-700 ring-1 ring-qpms-100">
                 <Sparkles className="h-3.5 w-3.5" />
                 QPMS CRM v1.0
               </div>
 
-              <div className="mt-7">
-                <h2 className="text-[32px] font-semibold leading-tight tracking-normal text-slate-950">Welcome back</h2>
-                <p className="mt-3 text-[15px] font-normal leading-7 text-slate-600">
-                  Secure operational access for QPMS workforce platform
-                </p>
+              <div className="mt-7 text-center">
+                <h2 className="text-[32px] font-semibold leading-tight tracking-normal text-slate-950">Welcome to QPMS</h2>
               </div>
 
               <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
