@@ -183,8 +183,8 @@ export const newBusinessKpis = [
   { id: 'estimationsPending', title: 'Estimations Pending', value: '18', change: 'HK and security scope', icon: ClipboardList, tone: 'violet' },
   { id: 'commercialReviews', title: 'Commercial Reviews', value: '13', change: '5 awaiting remarks', icon: FileCheck2, tone: 'amber' },
   { id: 'approvalPending', title: 'Approval Pending', value: '10', change: 'Hierarchy review queue', icon: UserCheck, tone: 'red' },
-  { id: 'proposalsSent', title: 'Proposals Sent', value: '26', change: '8 in client follow-up', icon: Send, tone: 'blue' },
-  { id: 'convertedLeads', title: 'Converted Leads', value: '11', change: 'This month', icon: TrendingUp, tone: 'green' },
+  { id: 'proposalsSent', title: 'Proposals Sent', value: '26', change: 'Total proposal value: ₹80,80,000', icon: Send, tone: 'blue' },
+  { id: 'convertedLeads', title: 'Converted Leads', value: '11', change: 'Projected revenue: ₹1,84,70,000', icon: TrendingUp, tone: 'green' },
 ];
 
 export const leadSourceDistribution = [
@@ -331,6 +331,8 @@ export const dashboardDetailSections = {
   proposalsSent: {
     title: 'Proposals Sent',
     description: 'Client proposals already sent and waiting for business follow-up or negotiation closure.',
+    summaryLabel: 'Total Proposal Value',
+    amountKey: 'proposalValueAmount',
     columns: [
       { key: 'client', label: 'Client' },
       { key: 'value', label: 'Proposal Value' },
@@ -339,25 +341,27 @@ export const dashboardDetailSections = {
       { key: 'status', label: 'Status' },
     ],
     rows: [
-      { id: 1, client: 'BluePeak Business Tower', value: '₹36.4L', sentDate: '10 May 2026', followUp: '16 May 2026', status: 'Active' },
-      { id: 2, client: 'Lulu Facility Block', value: '₹24.8L', sentDate: '11 May 2026', followUp: '17 May 2026', status: 'Pending' },
-      { id: 3, client: 'Port Admin Block', value: '₹19.6L', sentDate: '12 May 2026', followUp: '18 May 2026', status: 'Active' },
+      { id: 1, client: 'BluePeak Business Tower', value: '₹36,40,000', proposalValueAmount: 3640000, sentDate: '10 May 2026', followUp: '16 May 2026', status: 'Active' },
+      { id: 2, client: 'Lulu Facility Block', value: '₹24,80,000', proposalValueAmount: 2480000, sentDate: '11 May 2026', followUp: '17 May 2026', status: 'Pending' },
+      { id: 3, client: 'Port Admin Block', value: '₹19,60,000', proposalValueAmount: 1960000, sentDate: '12 May 2026', followUp: '18 May 2026', status: 'Active' },
     ],
   },
   convertedLeads: {
     title: 'Converted Leads',
     description: 'Recently converted business ready for operational handover and site mobilization.',
+    summaryLabel: 'Projected Revenue',
+    amountKey: 'projectedRevenueAmount',
     columns: [
       { key: 'client', label: 'Client' },
       { key: 'convertedDate', label: 'Converted Date' },
       { key: 'region', label: 'Region' },
-      { key: 'revenue', label: 'Estimated Revenue' },
+      { key: 'projectedRevenue', label: 'Projected Revenue' },
       { key: 'team', label: 'Assigned Operations Team' },
     ],
     rows: [
-      { id: 1, client: 'TechPark Facility Hub', convertedDate: '04 May 2026', region: 'Tamil Nadu', revenue: '₹72.0L', team: 'Chennai Ops Team' },
-      { id: 2, client: 'Coastal Care Hospital', convertedDate: '07 May 2026', region: 'Kerala', revenue: '₹64.5L', team: 'Kochi Ops Team' },
-      { id: 3, client: 'HITEC Admin Campus', convertedDate: '12 May 2026', region: 'Telangana', revenue: '₹48.2L', team: 'Hyderabad Ops Team' },
+      { id: 1, client: 'TechPark Facility Hub', convertedDate: '04 May 2026', region: 'Tamil Nadu', projectedRevenue: '₹72,00,000', projectedRevenueAmount: 7200000, team: 'Chennai Ops Team' },
+      { id: 2, client: 'Coastal Care Hospital', convertedDate: '07 May 2026', region: 'Kerala', projectedRevenue: '₹64,50,000', projectedRevenueAmount: 6450000, team: 'Kochi Ops Team' },
+      { id: 3, client: 'HITEC Admin Campus', convertedDate: '12 May 2026', region: 'Telangana', projectedRevenue: '₹48,20,000', projectedRevenueAmount: 4820000, team: 'Hyderabad Ops Team' },
     ],
   },
 };

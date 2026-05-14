@@ -63,6 +63,14 @@ const tooltipStyle = {
   fontSize: 12,
 };
 
+function formatInr(amount) {
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
 const recentLeadColumns = [
   { key: 'company', label: 'Client / Company' },
   { key: 'source', label: 'Source' },
@@ -333,6 +341,9 @@ function DashboardDetailPanel({ sectionId, sections, renderChart }) {
         Object.values(row).some((value) => String(value).toLowerCase().includes(normalizedQuery)),
       )
     : detail.rows;
+  const summaryTotal = detail.amountKey
+    ? detail.rows.reduce((total, row) => total + Number(row[detail.amountKey] || 0), 0)
+    : null;
 
   return (
     <div key={sectionId} className="animate-[login-fade-up_220ms_ease-out]">
@@ -357,6 +368,17 @@ function DashboardDetailPanel({ sectionId, sections, renderChart }) {
           <span>/</span>
           <span className="text-qpms-600 dark:text-qpms-300">{detail.title}</span>
         </div>
+
+        {detail.summaryLabel ? (
+          <div className="mb-5 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-qpms-100 bg-qpms-50 p-4 dark:border-qpms-500/20 dark:bg-qpms-500/10">
+              <p className="text-xs font-semibold uppercase text-qpms-700 dark:text-qpms-200">{detail.summaryLabel}</p>
+              <p className="mt-2 text-2xl font-semibold leading-none text-slate-950 dark:text-white">
+                {formatInr(summaryTotal)}
+              </p>
+            </div>
+          </div>
+        ) : null}
 
         <div className="mb-5">
           {renderChart(sectionId)}
