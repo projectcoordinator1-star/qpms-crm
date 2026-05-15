@@ -1,4 +1,4 @@
-export default function DataTable({ columns, rows, embedded = false }) {
+export default function DataTable({ columns, rows, embedded = false, onRowClick }) {
   return (
     <div
       className={[
@@ -25,7 +25,21 @@ export default function DataTable({ columns, rows, embedded = false }) {
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-900">
             {rows.map((row) => (
-              <tr key={row.id} className="transition hover:bg-slate-50/80 dark:hover:bg-slate-800/70">
+              <tr
+                key={row.id}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                onKeyDown={(event) => {
+                  if (onRowClick && (event.key === 'Enter' || event.key === ' ')) {
+                    event.preventDefault();
+                    onRowClick(row);
+                  }
+                }}
+                role={onRowClick ? 'button' : undefined}
+                tabIndex={onRowClick ? 0 : undefined}
+                className={`transition hover:bg-slate-50/80 dark:hover:bg-slate-800/70 ${
+                  onRowClick ? 'cursor-pointer focus-visible:bg-slate-50 focus-visible:outline-none dark:focus-visible:bg-slate-800/70' : ''
+                }`}
+              >
                 {columns.map((column) => (
                   <td
                     key={column.key}
