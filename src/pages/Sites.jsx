@@ -9,15 +9,18 @@ import { usePageTitle } from '../hooks/usePageTitle.js';
 
 const siteVisitColumns = [
   { key: 'company', label: 'Client / Company' },
+  { key: 'scheduledVisitDate', label: 'Scheduled Visit Date', render: (row) => formatDate(row.scheduledVisitDate) },
+  { key: 'scheduledVisitTime', label: 'Scheduled Visit Time', render: (row) => formatTime(row.scheduledVisitTime) },
+  { key: 'executive', label: 'Assigned BD Executive' },
+  { key: 'momStatus', label: 'Site MOM Status', render: (row) => <StatusBadge status={row.momStatus || 'Pending'} /> },
   { key: 'state', label: 'State' },
   { key: 'city', label: 'City' },
   { key: 'location', label: 'Site Location', wrap: true },
   { key: 'contact', label: 'Contact Person' },
-  { key: 'executive', label: 'Assigned BD Executive' },
   { key: 'status', label: 'Status', render: (row) => <StatusBadge status={row.status} /> },
 ];
 
-const workflowStages = ['Lead MOM Sent', 'Site Survey / Assessment', 'Site Visit MOM', 'Commercial Review'];
+const workflowStages = ['Site Visit Scheduled', 'Site Survey / Assessment', 'Site Visit MOM', 'Commercial Review', 'Finance Review', 'BD Team Review', 'COO Approval'];
 
 const surveySections = [
   {
@@ -112,6 +115,21 @@ function Toast({ message }) {
       {message}
     </div>
   );
+}
+
+function formatDate(value) {
+  if (!value) return 'Not scheduled';
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function formatTime(value) {
+  if (!value) return 'Not scheduled';
+  const [hourValue, minuteValue] = value.split(':');
+  const date = new Date();
+  date.setHours(Number(hourValue), Number(minuteValue || 0), 0, 0);
+  return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 }
 
 function buildSiteVisitMom(visit, survey) {
@@ -286,6 +304,22 @@ export default function Sites() {
               </div>
               <div className="mt-5">
                 <StageTracker stages={workflowStages} currentStage={selectedVisit.currentStage || 'Site Survey / Assessment'} />
+              </div>
+              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {[
+                  ['Client Name', selectedVisit.company],
+                  ['Site Name', selectedVisit.location || selectedVisit.company],
+                  ['Scheduled Visit Date', formatDate(selectedVisit.scheduledVisitDate)],
+                  ['Scheduled Visit Time', formatTime(selectedVisit.scheduledVisitTime)],
+                  ['Assigned BD Executive', selectedVisit.executive || 'Unassigned'],
+                  ['MOM Status', selectedVisit.momStatus || 'Pending'],
+                  ['Current Stage', selectedVisit.currentStage || 'Site Survey / Assessment'],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/55">
+                    <p className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400">{label}</p>
+                    <p className="mt-1 text-sm font-semibold leading-5 text-slate-900 dark:text-white">{value}</p>
+                  </div>
+                ))}
               </div>
             </div>
 

@@ -39,6 +39,9 @@ const initialMomDraft = {
   serviceScopeDiscussion: '',
   actionItems: '',
   nextFollowUpDate: '',
+  scheduledVisitDate: '',
+  scheduledVisitTime: '',
+  siteVisitRemarks: '',
   remarks: '',
   sent: false,
 };
@@ -117,8 +120,11 @@ function createLeadMomDraft(lead) {
     subject: `Lead MOM - ${lead.company || 'Client'} - QPMS`,
     discussionSummary: `Initial discussion completed with ${lead.contact || 'client contact'} for ${lead.company || 'the client'} regarding QPMS facility management support.`,
     serviceScopeDiscussion: 'Facility management, housekeeping operations, site management, and related operational support were discussed at a high level.',
-    actionItems: '1. Confirm decision-maker availability.\n2. Share site visit readiness details.\n3. Schedule site survey with QPMS team.',
+    actionItems: '1. Share Lead MOM with client.\n2. Conduct scheduled site visit.\n3. Capture operational requirements during site assessment.',
     nextFollowUpDate: lead.followUp === 'Not scheduled' ? '' : lead.followUp || '',
+    scheduledVisitDate: lead.scheduledVisitDate || '',
+    scheduledVisitTime: lead.scheduledVisitTime || '',
+    siteVisitRemarks: lead.siteVisitRemarks || '',
     remarks: lead.remarks || 'Lead MOM prepared from desktop application.',
   };
 }
@@ -153,7 +159,7 @@ export default function CRM() {
     () => [
       ['Total leads', leads.length],
       ['New leads', leads.filter((lead) => lead.stage === 'New Lead').length],
-      ['MOM sent', leads.filter((lead) => lead.stage === 'Lead MOM Sent').length],
+      ['Site visits scheduled', leads.filter((lead) => lead.stage === 'Site Visit Scheduled').length],
       ['Active leads', leads.filter((lead) => lead.status === 'Active').length],
     ],
     [leads],
@@ -224,10 +230,15 @@ export default function CRM() {
   }
 
   function handleSendMom() {
+    if (!momDraft.scheduledVisitDate || !momDraft.scheduledVisitTime) {
+      showSuccess('Add scheduled site visit date and time before sending MOM');
+      return;
+    }
+
     sendLeadMom(selectedLeadId, momDraft);
     setIsMomOpen(false);
     setShowMomPreview(false);
-    showSuccess('Lead MOM sent successfully');
+    showSuccess('Lead MOM sent and Site Visit scheduled successfully');
   }
 
   return (
@@ -402,6 +413,26 @@ export default function CRM() {
                     <TextField label="Discussion Summary" value={momDraft.discussionSummary} onChange={(value) => updateMomDraft('discussionSummary', value)} multiline />
                     <TextField label="Service Scope Discussion" value={momDraft.serviceScopeDiscussion} onChange={(value) => updateMomDraft('serviceScopeDiscussion', value)} multiline />
                     <TextField label="Action Items" value={momDraft.actionItems} onChange={(value) => updateMomDraft('actionItems', value)} multiline />
+                    <div className="rounded-2xl border border-qpms-100 bg-qpms-50/70 p-4 dark:border-qpms-500/20 dark:bg-qpms-500/10">
+                      <div className="flex items-start gap-3">
+                        <div className="grid h-10 w-10 place-items-center rounded-xl bg-white text-qpms-600 shadow-sm dark:bg-slate-950">
+                          <CheckCircle2 className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-bold text-slate-950 dark:text-white">Site Visit Scheduling</h4>
+                          <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
+                            Capture the client-agreed site visit schedule before sending the Lead MOM.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-4 grid gap-4 md:grid-cols-2">
+                        <TextField label="Scheduled Site Visit Date" type="date" value={momDraft.scheduledVisitDate} onChange={(value) => updateMomDraft('scheduledVisitDate', value)} required />
+                        <TextField label="Scheduled Site Visit Time" type="time" value={momDraft.scheduledVisitTime} onChange={(value) => updateMomDraft('scheduledVisitTime', value)} required />
+                        <div className="md:col-span-2">
+                          <TextField label="Site Visit Remarks" value={momDraft.siteVisitRemarks} onChange={(value) => updateMomDraft('siteVisitRemarks', value)} multiline />
+                        </div>
+                      </div>
+                    </div>
                     <TextField label="Next Follow-up Date" type="date" value={momDraft.nextFollowUpDate} onChange={(value) => updateMomDraft('nextFollowUpDate', value)} />
                     <TextField label="Remarks" value={momDraft.remarks} onChange={(value) => updateMomDraft('remarks', value)} multiline />
                   </div>
@@ -412,6 +443,10 @@ export default function CRM() {
                       <p className="mt-3 whitespace-pre-line">{momDraft.discussionSummary}</p>
                       <p className="mt-3 whitespace-pre-line">{momDraft.serviceScopeDiscussion}</p>
                       <p className="mt-3 whitespace-pre-line">{momDraft.actionItems}</p>
+                      <p className="mt-3">
+                        Site visit: {momDraft.scheduledVisitDate || 'Date pending'} at {momDraft.scheduledVisitTime || 'time pending'}
+                      </p>
+                      <p className="mt-3 whitespace-pre-line">{momDraft.siteVisitRemarks || 'No site visit remarks added.'}</p>
                       <p className="mt-3">Next follow-up: {momDraft.nextFollowUpDate || 'To be confirmed'}</p>
                       <p className="mt-3 whitespace-pre-line">{momDraft.remarks}</p>
                     </div>
@@ -424,7 +459,12 @@ export default function CRM() {
                     <button type="button" onClick={() => setShowMomPreview((value) => !value)} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:text-white">
                       <FileText className="h-4 w-4" /> Preview Email
                     </button>
-                    <button type="button" onClick={handleSendMom} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-qpms-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700">
+                    <button
+                      type="button"
+                      onClick={handleSendMom}
+                      disabled={!momDraft.scheduledVisitDate || !momDraft.scheduledVisitTime}
+                      className="focus-ring inline-flex items-center gap-2 rounded-xl bg-qpms-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
                       <Send className="h-4 w-4" /> Send MOM
                     </button>
                   </div>

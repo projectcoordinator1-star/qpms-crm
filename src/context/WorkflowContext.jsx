@@ -57,7 +57,11 @@ function buildSiteVisitFromLead(lead) {
     location: lead.location,
     state: lead.state,
     city: lead.city,
-    status: 'Pending Survey',
+    scheduledVisitDate: lead.scheduledVisitDate || '',
+    scheduledVisitTime: lead.scheduledVisitTime || '',
+    siteVisitRemarks: lead.siteVisitRemarks || '',
+    momStatus: 'Pending',
+    status: 'Scheduled',
     currentStage: 'Site Survey / Assessment',
     createdFrom: 'Lead MOM Sent',
     survey: {
@@ -81,7 +85,7 @@ function buildSiteVisitFromLead(lead) {
       finalRemarks: '',
     },
     siteMom: null,
-    activity: ['Lead MOM sent. Site survey workflow opened.'],
+    activity: ['Site Visit scheduled with client', 'Lead MOM sent. Site survey workflow opened.'],
   };
 }
 
@@ -149,9 +153,16 @@ export function WorkflowProvider({ children }) {
 
         const nextLead = {
           ...lead,
-          stage: 'Lead MOM Sent',
+          stage: 'Site Visit Scheduled',
+          scheduledVisitDate: mom.scheduledVisitDate || '',
+          scheduledVisitTime: mom.scheduledVisitTime || '',
+          siteVisitRemarks: mom.siteVisitRemarks || '',
           mom: { ...mom, sent: true, sentAt: new Date().toISOString() },
-          activity: ['Lead MOM sent to client. Moved to Site Visit & Estimation.', ...(lead.activity || [])].slice(0, 8),
+          activity: [
+            'Site Visit scheduled with client',
+            'Lead MOM sent to client. Moved to Site Visit & Estimation.',
+            ...(lead.activity || []),
+          ].slice(0, 8),
         };
         createdVisit = buildSiteVisitFromLead(nextLead);
         return nextLead;
@@ -185,6 +196,7 @@ export function WorkflowProvider({ children }) {
   function saveSiteVisitMom(siteVisitId, mom) {
     updateSiteVisit(siteVisitId, (visit) => ({
       siteMom: { ...mom, sent: Boolean(mom.sent) },
+      momStatus: 'Created',
       status: 'Site Visit MOM Created',
       activity: ['Site Visit MOM generated', ...(visit.activity || [])].slice(0, 8),
     }));
@@ -193,6 +205,7 @@ export function WorkflowProvider({ children }) {
   function sendSiteVisitMom(siteVisitId, mom) {
     updateSiteVisit(siteVisitId, (visit) => ({
       siteMom: { ...mom, sent: true, sentAt: new Date().toISOString() },
+      momStatus: 'Sent',
       status: 'Site Visit MOM Sent',
       activity: ['Site Visit MOM sent to client and internal stakeholders', ...(visit.activity || [])].slice(0, 8),
     }));
