@@ -16,7 +16,6 @@ import {
 } from 'lucide-react';
 import DataTable from '../components/DataTable.jsx';
 import PageHeader from '../components/PageHeader.jsx';
-import StageTracker from '../components/StageTracker.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import { useWorkflow } from '../context/workflow-context.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
@@ -32,8 +31,6 @@ const siteVisitColumns = [
   { key: 'location', label: 'Site Location', wrap: true },
   { key: 'status', label: 'Status', render: (row) => <StatusBadge status={row.status} /> },
 ];
-
-const workflowStages = ['Site Visit Scheduled', 'Pre-Operational Assessment', 'Site Visit MOM', 'Commercial Review', 'Finance Review', 'BD Team Review', 'COO Approval'];
 
 const surveySections = [
   'Basic Site Information',
@@ -293,6 +290,21 @@ function SummaryPill({ label, value }) {
       <p className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400">{label}</p>
       <p className="mt-1 text-sm font-semibold leading-5 text-slate-900 dark:text-white">{value}</p>
     </div>
+  );
+}
+
+function CompactStatusBadge({ label, value, tone = 'slate' }) {
+  const toneClass = {
+    slate: 'border-slate-200 bg-white/80 text-slate-700 dark:border-slate-700 dark:bg-slate-950/50 dark:text-slate-200',
+    blue: 'border-qpms-200 bg-qpms-50 text-qpms-700 dark:border-qpms-500/30 dark:bg-qpms-500/10 dark:text-qpms-200',
+    amber: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200',
+  }[tone];
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold shadow-sm ${toneClass}`}>
+      <span className="text-slate-500 dark:text-slate-400">{label}:</span>
+      <span className="text-current">{value}</span>
+    </span>
   );
 }
 
@@ -908,23 +920,17 @@ export default function Sites() {
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <div className="mt-5">
-                <StageTracker stages={workflowStages} currentStage={selectedStage} />
-              </div>
-              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                <SummaryPill label="Client Name" value={selectedVisit.company} />
-                <SummaryPill label="Site Name" value={selectedVisit.location || selectedVisit.company} />
-                <SummaryPill label="Scheduled Visit Date" value={formatDate(selectedVisit.scheduledVisitDate)} />
-                <SummaryPill label="Scheduled Visit Time" value={formatTime(selectedVisit.scheduledVisitTime)} />
-                <SummaryPill label="Assigned BD Executive" value={selectedVisit.executive || 'Unassigned'} />
-                <SummaryPill label="MOM Status" value={selectedVisit.momStatus || 'Pending'} />
-                <SummaryPill label="Current Stage" value={selectedStage} />
-                <SummaryPill label="Auto-save" value={autoSaveLabel} />
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <CompactStatusBadge label="Client" value={selectedVisit.company} />
+                <CompactStatusBadge label="Stage" value={selectedStage} tone="blue" />
+                <CompactStatusBadge label="Status" value={selectedVisit.status || 'Draft'} />
+                <CompactStatusBadge label="MOM" value={selectedVisit.momStatus || 'Pending'} tone="amber" />
+                <CompactStatusBadge label="Visit Date" value={formatDate(selectedVisit.scheduledVisitDate)} />
               </div>
             </div>
 
             <div className="grid gap-6 p-5 xl:grid-cols-[0.28fr_0.72fr]">
-              <section className="enterprise-card sticky top-64 h-fit p-4">
+              <section className="enterprise-card sticky top-44 h-fit p-4">
                 <div className="flex items-center justify-between gap-3">
                   <h3 className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400">Assessment Sections</h3>
                   <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500 dark:bg-slate-800">{activeSectionIndex + 1}/{surveySections.length}</span>
