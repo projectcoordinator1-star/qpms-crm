@@ -21,6 +21,7 @@ import { useAuth } from '../context/auth-context.js';
 import { useWorkflow } from '../context/workflow-context.js';
 import { canViewBdTeam } from '../data/mockUsers.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
+import { sendSiteVisitMomEmail } from '../services/mailService.js';
 
 const siteVisitColumns = [
   { key: 'company', label: 'Client / Company' },
@@ -45,8 +46,9 @@ const surveySections = [
   'Tools / Equipment / Consumables',
   'Client KYC',
   'Risk Assessment',
+  'Penalty Clauses',
   'Commercial Statement',
-  'Approval Workflow',
+  'Approval Mechanism',
   'Final Remarks & Sign-Off',
 ];
 
@@ -115,7 +117,7 @@ const softServiceGroups = [
 const hseItems = ['Fire Safety', 'Emergency Exit', 'PPE', 'Chemical Storage', 'Safety Signage', 'Electrical Safety', 'Work at Height Safety', 'First Aid', 'Emergency Response Plan'];
 const manpowerDepartments = ['Housekeeping', 'Security', 'Technical', 'Waste Management', 'Landscaping', 'Pantry', 'Helpdesk'];
 const riskTypes = ['Financial Risk', 'Operational Risk', 'Compliance Risk', 'Workforce Risk', 'Safety Risk', 'Client Reputation Risk'];
-const ifmScopeItems = ['Integrated Facility Management', 'Housekeeping', 'Security', 'Technical Maintenance', 'Waste Management', 'Pest Control', 'Landscaping', 'Pantry', 'Helpdesk', 'Consumable Management'];
+const ifmScopeItems = ['Hard Services MEP', 'Soft Services Housekeeping', 'Security Services', 'Waste Management', 'Landscaping Irrigation', 'Pest Control', 'Helpdesk CAFM', 'Energy Management', 'Sustainability ESG', 'Other Services'];
 const landscapeItems = ['Gardens', 'Indoor Plants', 'External Green Areas', 'Pest Control', 'Rodent Control', 'Mosquito Control'];
 
 const defaultSurvey = {
@@ -124,6 +126,18 @@ const defaultSurvey = {
   operatingHours: '',
   clientOccupancy: '',
   buildingAge: '',
+  siteSurveyDate: '',
+  assessedBy: '',
+  siteContactPerson: '',
+  contactNumber: '',
+  contactEmail: '',
+  totalSiteArea: '',
+  contractPeriod: '',
+  marginAgreed: '',
+  marginType: 'Percentage',
+  paymentTerms: '',
+  groupOrSisterConcernBusiness: 'No',
+  is247Operation: 'No',
   takeoverComplexity: 'Medium',
   ifmScope: {},
   hardServices: {},
@@ -146,7 +160,8 @@ const defaultSurvey = {
   equipment: [{ id: 'equipment-1', name: 'Ride-on Scrubber', brand: '', capacity: '', quantity: 1, purchaseType: 'Rental', vendor: '', monthlyCost: 0, remarks: '' }],
   chemicals: [{ id: 'chemical-1', name: 'Floor Cleaner', brand: '', usageArea: 'Common Areas', quantity: 1, monthlyConsumption: '' }],
   tools: [{ id: 'tool-1', name: 'Mop Set', quantity: 1, department: 'Housekeeping', remarks: '' }],
-  clientKyc: { gst: '', billingAddress: '', paymentTerms: '', contractPeriod: '', complianceDocs: '' },
+  clientKyc: { gstRegistration: '', pan: '', aadhaar: '', tan: '', kycRemarks: '', documentUploadPlaceholders: '', billingAddress: '', complianceDocs: '' },
+  penaltyClauses: { penaltyClauseAvailable: 'No', penaltyDetails: '', riskImpact: 'Medium', remarks: '' },
   risks: riskTypes.map((name) => ({ name, level: 'Medium', notes: '', mitigation: '' })),
   commercial: {
     billingComponents: [
@@ -160,6 +175,12 @@ const defaultSurvey = {
     nonBillableCost: 0,
   },
   approvalWorkflow: '',
+  operationsTeamApproval: 'Pending',
+  hrWageVetting: 'Pending',
+  procurementEquipmentTccCosting: 'Pending',
+  commercialVetting: 'Pending',
+  financeViabilityReview: 'Pending',
+  commercialGreenSignal: 'Pending',
   finalRemarks: '',
   signOffName: '',
 };
@@ -535,6 +556,7 @@ export default function Sites() {
     saveSiteVisitMom,
     sendSiteVisitMom,
     submitCommercialReview,
+    uploadSiteImage,
   } = useWorkflow();
   const [query, setQuery] = useState('');
   const [selectedVisitId, setSelectedVisitId] = useState(null);
@@ -623,9 +645,27 @@ export default function Sites() {
     setSurveyDraft((current) => ({ ...current, [section]: current[section].filter((_, itemIndex) => itemIndex !== index) }));
   }
 
-  function addPhotos(slot, files) {
+  async function addPhotos(slot, files) {
     const nextPhotos = files.map((file) => ({ id: `${slot}-${file.name}-${Date.now()}-${Math.random()}`, name: file.name, url: URL.createObjectURL(file) }));
     setPhotoEvidence((current) => ({ ...current, [slot]: [...(current[slot] || []), ...nextPhotos] }));
+    if (selectedVisit) {
+      const uploaded = await Promise.all(
+        files.map((file) =>
+          uploadSiteImage({
+            visit: selectedVisit,
+            assessmentId: selectedVisit.assessmentId,
+            category: slot,
+            file,
+            uploadedBy: user?.email,
+          }),
+        ),
+      );
+      const uploadedPhotos = uploaded.filter(Boolean);
+      if (uploadedPhotos.length) {
+        setPhotoEvidence((current) => ({ ...current, [slot]: [...(current[slot] || []), ...uploadedPhotos] }));
+        showSuccess('Site images uploaded to Supabase');
+      }
+    }
   }
 
   function removePhoto(slot, id) {
@@ -637,13 +677,13 @@ export default function Sites() {
   }
 
   function handleSaveDraft() {
-    saveSiteSurvey(selectedVisitId, surveyDraft);
+    saveSiteSurvey(selectedVisitId, surveyDraft, 'Draft', user);
     setAutoSaveLabel('Saved locally');
     showSuccess('Pre-operational assessment draft saved');
   }
 
   function handleGenerateMom() {
-    saveSiteSurvey(selectedVisitId, surveyDraft);
+    saveSiteSurvey(selectedVisitId, surveyDraft, 'Draft', user);
     const nextMom = buildSiteVisitMom(selectedVisit, surveyDraft);
     setSiteMomDraft(nextMom);
     saveSiteVisitMom(selectedVisitId, nextMom);
@@ -652,15 +692,20 @@ export default function Sites() {
     showSuccess('Site Visit MOM generated');
   }
 
-  function handleSendMom() {
+  async function handleSendMom() {
     const nextMom = siteMomDraft || buildSiteVisitMom(selectedVisit, surveyDraft);
-    sendSiteVisitMom(selectedVisitId, nextMom);
-    setSiteMomDraft({ ...nextMom, sent: true });
-    showSuccess('Site Visit MOM sent successfully');
+    try {
+      await sendSiteVisitMomEmail(nextMom, selectedVisit);
+      sendSiteVisitMom(selectedVisitId, nextMom);
+      setSiteMomDraft({ ...nextMom, sent: true });
+      showSuccess('Site Visit MOM sent successfully');
+    } catch (error) {
+      showSuccess(`Email failed: ${error.response?.data?.message || error.message}`);
+    }
   }
 
   function handleSubmitCommercialReview() {
-    saveSiteSurvey(selectedVisitId, surveyDraft);
+    saveSiteSurvey(selectedVisitId, surveyDraft, 'Submitted', user);
     submitCommercialReview(selectedVisitId);
     setAutoSaveLabel('Submitted');
     showSuccess('Submitted for Commercial Review');
@@ -681,6 +726,18 @@ export default function Sites() {
                 <TextField label="Client Occupancy" value={surveyDraft.clientOccupancy} onChange={(value) => updateSurveyDraft('clientOccupancy', value)} />
                 <TextField label="Building Age" value={surveyDraft.buildingAge} onChange={(value) => updateSurveyDraft('buildingAge', value)} />
                 <SelectField label="Takeover Complexity" value={surveyDraft.takeoverComplexity} onChange={(value) => updateSurveyDraft('takeoverComplexity', value)} options={['Low', 'Medium', 'High', 'Critical']} />
+                <TextField label="Site Survey Date" type="date" value={surveyDraft.siteSurveyDate} onChange={(value) => updateSurveyDraft('siteSurveyDate', value)} />
+                <TextField label="Assessed By" value={surveyDraft.assessedBy} onChange={(value) => updateSurveyDraft('assessedBy', value)} />
+                <TextField label="Site Contact Person" value={surveyDraft.siteContactPerson} onChange={(value) => updateSurveyDraft('siteContactPerson', value)} />
+                <TextField label="Contact Number" value={surveyDraft.contactNumber} onChange={(value) => updateSurveyDraft('contactNumber', value)} />
+                <TextField label="Contact Email" type="email" value={surveyDraft.contactEmail} onChange={(value) => updateSurveyDraft('contactEmail', value)} />
+                <TextField label="Total Site Area" value={surveyDraft.totalSiteArea} onChange={(value) => updateSurveyDraft('totalSiteArea', value)} />
+                <TextField label="Contract Period" value={surveyDraft.contractPeriod} onChange={(value) => updateSurveyDraft('contractPeriod', value)} />
+                <TextField label="Margin Agreed" value={surveyDraft.marginAgreed} onChange={(value) => updateSurveyDraft('marginAgreed', value)} />
+                <SelectField label="Margin Type" value={surveyDraft.marginType} onChange={(value) => updateSurveyDraft('marginType', value)} options={['Percentage', 'Fixed Value', 'Not Finalized']} />
+                <TextField label="Payment Terms" value={surveyDraft.paymentTerms} onChange={(value) => updateSurveyDraft('paymentTerms', value)} />
+                <SelectField label="Group / Sister Concern Business" value={surveyDraft.groupOrSisterConcernBusiness} onChange={(value) => updateSurveyDraft('groupOrSisterConcernBusiness', value)} options={['Yes', 'No']} />
+                <SelectField label="24 / 7 Operation" value={surveyDraft.is247Operation} onChange={(value) => updateSurveyDraft('is247Operation', value)} options={['Yes', 'No']} />
               </div>
             </section>
             <PhotoEvidenceSection photos={photoEvidence} onAdd={addPhotos} onRemove={removePhoto} onPreview={setPreviewPhoto} />
@@ -726,25 +783,34 @@ export default function Sites() {
         return <AuditTable rows={surveyDraft.hseCompliance} onChange={(index, patch) => updateArray('hseCompliance', index, patch)} />;
       case 'Manpower Requirement':
         return (
-          <EditableTable
-            columns={[
-              { key: 'department', label: 'Department', type: 'select', options: manpowerDepartments },
-              { key: 'designation', label: 'Designation' },
-              { key: 'shiftType', label: 'Shift Type', type: 'select', options: ['General', 'Day', 'Night', 'Rotational'] },
-              { key: 'count', label: 'Count', type: 'number' },
-              { key: 'relieverRequired', label: 'Reliever?', type: 'select', options: ['Yes', 'No'] },
-              { key: 'otRequired', label: 'OT?', type: 'select', options: ['Yes', 'No'] },
-              { key: 'accommodationRequired', label: 'Accommodation?', type: 'select', options: ['Yes', 'No'] },
-              { key: 'transportationRequired', label: 'Transportation?', type: 'select', options: ['Yes', 'No'] },
-              { key: 'wageCategory', label: 'Wage Category', type: 'select', options: ['Unskilled', 'Semi-skilled', 'Skilled', 'Highly Skilled'] },
-              { key: 'remarks', label: 'Remarks' },
-            ]}
-            rows={surveyDraft.manpowerPlan}
-            onChange={(index, patch) => updateArray('manpowerPlan', index, patch)}
-            onAdd={() => addRow('manpowerPlan', defaultSurvey.manpowerPlan[0])}
-            onRemove={(index) => removeRow('manpowerPlan', index)}
-            addLabel="Add manpower row"
-          />
+          <div className="space-y-5">
+            <EditableTable
+              columns={[
+                { key: 'department', label: 'Department', type: 'select', options: manpowerDepartments },
+                { key: 'designation', label: 'Designation' },
+                { key: 'shiftType', label: 'Shift Type', type: 'select', options: ['General', 'Day', 'Night', 'Rotational'] },
+                { key: 'count', label: 'Count', type: 'number' },
+                { key: 'relieverRequired', label: 'Reliever?', type: 'select', options: ['Yes', 'No'] },
+                { key: 'otRequired', label: 'OT?', type: 'select', options: ['Yes', 'No'] },
+                { key: 'accommodationRequired', label: 'Accommodation?', type: 'select', options: ['Yes', 'No'] },
+                { key: 'transportationRequired', label: 'Transportation?', type: 'select', options: ['Yes', 'No'] },
+                { key: 'wageCategory', label: 'Wage Category', type: 'select', options: ['Unskilled', 'Semi-skilled', 'Skilled', 'Highly Skilled'] },
+                { key: 'remarks', label: 'Remarks' },
+              ]}
+              rows={surveyDraft.manpowerPlan}
+              onChange={(index, patch) => updateArray('manpowerPlan', index, patch)}
+              onAdd={() => addRow('manpowerPlan', defaultSurvey.manpowerPlan[0])}
+              onRemove={(index) => removeRow('manpowerPlan', index)}
+              addLabel="Add manpower row"
+            />
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {['minimumWagesType', 'applicableZone', 'wageComputationNotes', 'relieverCostRequired', 'budgetedTakeHomeFeasibility', 'localWorkforceAvailability', 'transportationImpact', 'bonusPaymentType', 'leaveWithWagesDays', 'nfhApplicable', 'travelAccommodationProvided'].map((key) => (
+                  <TextField key={key} label={fieldLabel(key)} value={surveyDraft[key]} onChange={(value) => updateSurveyDraft(key, value)} multiline={key.includes('Notes')} />
+                ))}
+              </div>
+            </section>
+          </div>
         );
       case 'Tools / Equipment / Consumables':
         return (
@@ -793,6 +859,13 @@ export default function Sites() {
               onRemove={(index) => removeRow('tools', index)}
               addLabel="Add tool"
             />
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+              <div className="grid gap-4 md:grid-cols-2">
+                {['consumables', 'rentalMachinery', 'nonBillableExpenses', 'uniformsShoesAccessories'].map((key) => (
+                  <TextField key={key} label={fieldLabel(key)} value={surveyDraft[key]} onChange={(value) => updateSurveyDraft(key, value)} multiline />
+                ))}
+              </div>
+            </section>
           </div>
         );
       case 'Client KYC':
@@ -806,7 +879,29 @@ export default function Sites() {
           </section>
         );
       case 'Risk Assessment':
-        return <RiskCards risks={surveyDraft.risks} onChange={(index, patch) => updateArray('risks', index, patch)} />;
+        return (
+          <div className="space-y-5">
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {['clientCreditRating', 'marketAssessment', 'goodPaymaster', 'existingVendorChangeReason', 'mitigationPlan', 'riskRemarks'].map((key) => (
+                  <TextField key={key} label={fieldLabel(key)} value={surveyDraft[key]} onChange={(value) => updateSurveyDraft(key, value)} multiline={key.includes('Reason') || key.includes('Plan') || key.includes('Remarks')} />
+                ))}
+              </div>
+            </section>
+            <RiskCards risks={surveyDraft.risks} onChange={(index, patch) => updateArray('risks', index, patch)} />
+          </div>
+        );
+      case 'Penalty Clauses':
+        return (
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+            <div className="grid gap-4 md:grid-cols-2">
+              <SelectField label="Penalty Clause Available" value={surveyDraft.penaltyClauses.penaltyClauseAvailable} onChange={(value) => updateNested('penaltyClauses', { ...surveyDraft.penaltyClauses, penaltyClauseAvailable: value })} options={['Yes', 'No']} />
+              <SelectField label="Risk Impact" value={surveyDraft.penaltyClauses.riskImpact} onChange={(value) => updateNested('penaltyClauses', { ...surveyDraft.penaltyClauses, riskImpact: value })} options={['Low', 'Medium', 'High', 'Critical']} />
+              <TextField label="Penalty Details" value={surveyDraft.penaltyClauses.penaltyDetails} onChange={(value) => updateNested('penaltyClauses', { ...surveyDraft.penaltyClauses, penaltyDetails: value })} multiline />
+              <TextField label="Remarks" value={surveyDraft.penaltyClauses.remarks} onChange={(value) => updateNested('penaltyClauses', { ...surveyDraft.penaltyClauses, remarks: value })} multiline />
+            </div>
+          </section>
+        );
       case 'Commercial Statement': {
         const totals = getCommercialTotals(surveyDraft);
         return (
@@ -849,10 +944,15 @@ export default function Sites() {
           </div>
         );
       }
-      case 'Approval Workflow':
+      case 'Approval Mechanism':
         return (
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
-            <TextField label="Approval Workflow Notes" value={surveyDraft.approvalWorkflow} onChange={(value) => updateSurveyDraft('approvalWorkflow', value)} multiline />
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {['operationsTeamApproval', 'hrWageVetting', 'procurementEquipmentTccCosting', 'commercialVetting', 'financeViabilityReview', 'commercialGreenSignal'].map((key) => (
+                <SelectField key={key} label={fieldLabel(key)} value={surveyDraft[key]} onChange={(value) => updateSurveyDraft(key, value)} options={['Pending', 'Approved', 'Rejected', 'Not Required']} />
+              ))}
+              <TextField label="Approval Workflow Notes" value={surveyDraft.approvalWorkflow} onChange={(value) => updateSurveyDraft('approvalWorkflow', value)} multiline />
+            </div>
           </section>
         );
       case 'Final Remarks & Sign-Off':

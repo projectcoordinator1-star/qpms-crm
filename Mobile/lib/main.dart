@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'services/supabase_service.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await QpmsSupabaseService.initialize();
   runApp(const QpmsMobileApp());
 }
 
@@ -131,6 +134,19 @@ class _QpmsMobileAppState extends State<QpmsMobileApp> {
     setState(() {
       _leads.insert(0, lead);
     });
+    QpmsSupabaseService.createLead(
+          lead: lead.toSupabaseLeadMap(),
+          contacts: lead.toSupabaseContactMaps(),
+        )
+        .then((remoteId) {
+          if (remoteId != null) {
+            setState(() => lead.remoteLeadId = remoteId);
+          }
+        })
+        .catchError((Object error) {
+          debugPrint('Supabase lead insert failed: $error');
+          return null;
+        });
   }
 
   @override
@@ -258,6 +274,8 @@ class Lead {
     this.scheduledVisitTime,
     this.siteVisitRemarks = '',
     this.siteMomStatus = 'Pending',
+    this.remoteLeadId,
+    this.remoteSiteVisitId,
   });
 
   final String id;
@@ -280,6 +298,8 @@ class Lead {
   String? scheduledVisitTime;
   String siteVisitRemarks;
   String siteMomStatus;
+  String? remoteLeadId;
+  String? remoteSiteVisitId;
 
   ContactPerson get primaryContact {
     return contactPersons.firstWhere(
@@ -292,6 +312,39 @@ class Lead {
   String get contactPersonDesignation => primaryContact.designation;
   String get contactNumber => primaryContact.phone;
   String get emailId => primaryContact.email;
+
+  Map<String, dynamic> toSupabaseLeadMap() {
+    return {
+      'client_name': clientName,
+      'industry_type': industryType,
+      'lead_source': leadSource,
+      'site_location': siteLocation,
+      'state': state,
+      'city': city,
+      'lead_priority': leadPriority,
+      'remarks': remarks,
+      'assigned_bd_executive': assignedBdExecutive,
+      'assigned_bd_email': assignedBdEmail,
+      'created_by_user_id': createdByUserId,
+      'created_by_name': createdByName,
+      'lead_stage': status,
+      'status': 'Active',
+    };
+  }
+
+  List<Map<String, dynamic>> toSupabaseContactMaps() {
+    return contactPersons
+        .map(
+          (contact) => {
+            'contact_person_name': contact.name,
+            'contact_person_designation': contact.designation,
+            'contact_number': contact.phone,
+            'email_id': contact.email,
+            'is_primary': contact.isPrimary,
+          },
+        )
+        .toList();
+  }
 }
 
 class ContactPerson {
@@ -1481,6 +1534,64 @@ class _LeadMomPreviewScreenState extends State<LeadMomPreviewScreen> {
     lead.scheduledVisitTime = formatTimeOfDay(_scheduledTime!);
     lead.siteVisitRemarks = _siteVisitRemarks.text.trim();
     lead.siteMomStatus = 'Pending';
+    QpmsSupabaseService.sendLeadMomEmail({
+      'to': lead.emailId,
+      'cc': 'BD Head, COO',
+      'subject': 'Lead MOM - ${lead.clientName} - QPMS',
+      'clientName': lead.clientName,
+      'discussionSummary':
+          'Initial lead discussion completed for ${lead.clientName}.',
+      'serviceScopeDiscussion':
+          'Facility management and site assessment scope discussed.',
+      'actionItems':
+          'Conduct scheduled site visit and capture assessment inputs.',
+      'siteVisitRemarks': lead.siteVisitRemarks,
+    }).catchError((Object error) {
+      debugPrint('Lead MOM email failed: $error');
+    });
+    final remoteLeadId = lead.remoteLeadId;
+    if (remoteLeadId != null) {
+      QpmsSupabaseService.saveLeadMom(
+        leadId: remoteLeadId,
+        sent: true,
+        mom: {
+          'to_email': lead.emailId,
+          'cc_emails': 'BD Head, COO',
+          'subject': 'Lead MOM - ${lead.clientName} - QPMS',
+          'discussion_summary':
+              'Initial lead discussion completed for ${lead.clientName}.',
+          'service_scope_discussion':
+              'Facility management and site assessment scope discussed.',
+          'action_items':
+              'Conduct scheduled site visit and capture assessment inputs.',
+          'next_followup_date': _followUpDate
+              .toIso8601String()
+              .split('T')
+              .first,
+          'scheduled_site_visit_date': _scheduledDate!
+              .toIso8601String()
+              .split('T')
+              .first,
+          'scheduled_site_visit_time': formatTimeOfDay(_scheduledTime!),
+          'site_visit_remarks': lead.siteVisitRemarks,
+        },
+      );
+      QpmsSupabaseService.createSiteVisit({
+        'lead_id': remoteLeadId,
+        'client_name': lead.clientName,
+        'site_name': lead.siteLocation,
+        'scheduled_visit_date': _scheduledDate!
+            .toIso8601String()
+            .split('T')
+            .first,
+        'scheduled_visit_time': formatTimeOfDay(_scheduledTime!),
+        'assigned_bd_executive': lead.assignedBdExecutive,
+        'assigned_bd_email': lead.assignedBdEmail,
+        'current_stage': 'Pre-Operational Assessment',
+        'status': 'Scheduled',
+        'mom_status': 'Pending',
+      }).then((siteVisitId) => lead.remoteSiteVisitId = siteVisitId);
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -1709,6 +1820,58 @@ class _SiteVisitAssessmentScreenState extends State<SiteVisitAssessmentScreen> {
   double get _margin => _revenue - _expense - _nonBillable;
   double get _marginPercent => _revenue == 0 ? 0 : (_margin / _revenue) * 100;
 
+  Future<void> _saveAssessment({required bool submit}) async {
+    final siteVisitId = widget.lead.remoteSiteVisitId;
+    final leadId = widget.lead.remoteLeadId;
+    if (siteVisitId != null) {
+      await QpmsSupabaseService.saveAssessment({
+        'site_visit_id': siteVisitId,
+        'lead_id': leadId,
+        'basic_site_information': {
+          'site_address': widget.lead.siteLocation,
+          'site_type': widget.lead.industryType,
+          'site_survey_date': DateTime.now().toIso8601String(),
+          'assessed_by': widget.lead.assignedBdExecutive,
+          'site_contact_person': widget.lead.contactPersonName,
+          'contact_number': widget.lead.contactNumber,
+          'contact_email': widget.lead.emailId,
+        },
+        'ifm_service_scope': {},
+        'hard_services': {
+          'mechanical_services': _mechanical.toList(),
+          'electrical_services': _electrical.toList(),
+        },
+        'soft_services': {
+          'housekeeping_services': _housekeeping.toList(),
+          'security_services': _security.toList(),
+          'waste_management_services': _waste.toList(),
+        },
+        'landscaping_pest_control': {},
+        'hse_compliance': {},
+        'manpower_requirement': {},
+        'tools_equipment_consumables': {},
+        'client_kyc': {},
+        'risk_assessment': {},
+        'penalty_clauses': {},
+        'commercial_statement': {
+          'estimated_monthly_billing': _revenue,
+          'estimated_monthly_expense': _expense,
+          'non_billable_items': _nonBillable,
+          'monthly_margin': _margin,
+          'expected_margin_percentage': _marginPercent,
+        },
+        'approval_mechanism': {
+          'coo_approval_required': _revenue > 500000,
+          'cfo_approval_required': _revenue > 500000,
+          'cmd_counter_approval_required': _revenue > 2500000,
+        },
+        'final_remarks_signoff': {},
+        'assessment_status': submit ? 'Submitted' : 'Draft',
+        'created_by': widget.lead.assignedBdEmail,
+      });
+    }
+  }
+
   void _toggle(Set<String> target, String value) {
     setState(() {
       if (target.contains(value)) {
@@ -1742,7 +1905,9 @@ class _SiteVisitAssessmentScreenState extends State<SiteVisitAssessmentScreen> {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: () {
+                  onPressed: () async {
+                    await _saveAssessment(submit: false);
+                    if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Assessment draft saved.')),
                     );
@@ -1754,7 +1919,9 @@ class _SiteVisitAssessmentScreenState extends State<SiteVisitAssessmentScreen> {
               const SizedBox(width: 10),
               Expanded(
                 child: FilledButton.icon(
-                  onPressed: () {
+                  onPressed: () async {
+                    await _saveAssessment(submit: true);
+                    if (!context.mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('Submitted for Commercial Review.'),

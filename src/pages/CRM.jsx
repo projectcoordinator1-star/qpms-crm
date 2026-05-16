@@ -7,6 +7,7 @@ import { useWorkflow } from '../context/workflow-context.js';
 import { useAuth } from '../context/auth-context.js';
 import { bdExecutives, canViewBdTeam } from '../data/mockUsers.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
+import { sendLeadMomEmail } from '../services/mailService.js';
 
 function formatContactSummary(lead) {
   const contacts = normalizeContacts(lead.contacts, lead);
@@ -372,16 +373,21 @@ export default function CRM() {
     showSuccess('Lead MOM draft saved');
   }
 
-  function handleSendMom() {
+  async function handleSendMom() {
     if (!momDraft.scheduledVisitDate || !momDraft.scheduledVisitTime) {
       showSuccess('Add scheduled site visit date and time before sending MOM');
       return;
     }
 
-    sendLeadMom(selectedLeadId, momDraft);
-    setIsMomOpen(false);
-    setShowMomPreview(false);
-    showSuccess('Lead MOM sent and Site Visit scheduled successfully');
+    try {
+      await sendLeadMomEmail(momDraft, selectedLead);
+      sendLeadMom(selectedLeadId, momDraft);
+      setIsMomOpen(false);
+      setShowMomPreview(false);
+      showSuccess('Lead MOM sent and Site Visit scheduled successfully');
+    } catch (error) {
+      showSuccess(`Email failed: ${error.response?.data?.message || error.message}`);
+    }
   }
 
   return (

@@ -1,6 +1,18 @@
 import { useEffect, useState } from 'react';
 import { leadRows } from '../data/qpmsWorkflowData.js';
 import { bdExecutives, getExecutiveByName } from '../data/mockUsers.js';
+import {
+  createLeadRemote,
+  createSiteVisitRemote,
+  fetchWorkflowData,
+  isRemoteWorkflowEnabled,
+  saveLeadMomRemote,
+  saveSiteAssessmentRemote,
+  saveSiteMomRemote,
+  submitApprovalRemote,
+  updateLeadRemote,
+  uploadSiteImageRemote,
+} from '../services/workflowRepository.js';
 import { WorkflowContext } from './workflow-context.js';
 
 const leadsStorageKey = 'qpms-crm-workflow-leads';
@@ -160,6 +172,28 @@ function upsertById(items, nextItem) {
 export function WorkflowProvider({ children }) {
   const [leads, setLeads] = useState(() => readStorage(leadsStorageKey, leadRows).map(normalizeLead));
   const [siteVisits, setSiteVisits] = useState(() => readStorage(siteVisitsStorageKey, []));
+  const [backendStatus, setBackendStatus] = useState(isRemoteWorkflowEnabled() ? 'connecting' : 'local');
+
+  useEffect(() => {
+    if (!isRemoteWorkflowEnabled()) return;
+
+    let active = true;
+    fetchWorkflowData()
+      .then((data) => {
+        if (!active) return;
+        setLeads(data.leads.map(normalizeLead));
+        setSiteVisits(data.siteVisits);
+        setBackendStatus('connected');
+      })
+      .catch((error) => {
+        console.warn('Supabase workflow fallback enabled:', error.message);
+        if (active) setBackendStatus('fallback');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem(leadsStorageKey, JSON.stringify(leads));
@@ -183,7 +217,7 @@ export function WorkflowProvider({ children }) {
     const nextLead = normalizeLead({
       ...lead,
       ...ownerFields,
-      id: Date.now(),
+      id: isRemoteWorkflowEnabled() && typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Date.now(),
       leadId: `LD-${Date.now().toString().slice(-5)}`,
       stage: 'New Lead',
       status: 'Active',
@@ -192,6 +226,12 @@ export function WorkflowProvider({ children }) {
     });
 
     setLeads((current) => [nextLead, ...current]);
+    if (isRemoteWorkflowEnabled()) {
+      createLeadRemote(nextLead).catch((error) => {
+        console.warn('Lead Supabase insert failed:', error.message);
+        setBackendStatus('fallback');
+      });
+    }
     return nextLead;
   }
 
@@ -200,7 +240,14 @@ export function WorkflowProvider({ children }) {
       current.map((lead) => {
         if (lead.id !== leadId) return lead;
         const patch = typeof updater === 'function' ? updater(lead) : updater;
-        return normalizeLead({ ...lead, ...patch });
+        const nextLead = normalizeLead({ ...lead, ...patch });
+        if (isRemoteWorkflowEnabled()) {
+          updateLeadRemote(leadId, nextLead).catch((error) => {
+            console.warn('Lead Supabase update failed:', error.message);
+            setBackendStatus('fallback');
+          });
+        }
+        return nextLead;
       }),
     );
   }
@@ -216,6 +263,12 @@ export function WorkflowProvider({ children }) {
       mom: { ...mom, sent: Boolean(mom.sent) },
       activity: ['Lead MOM draft saved', ...(lead.activity || [])].slice(0, 8),
     }));
+    if (isRemoteWorkflowEnabled()) {
+      saveLeadMomRemote(leadId, mom, 'Draft').catch((error) => {
+        console.warn('Lead MOM Supabase save failed:', error.message);
+        setBackendStatus('fallback');
+      });
+    }
   }
 
   function sendLeadMom(leadId, mom) {
@@ -239,6 +292,16 @@ export function WorkflowProvider({ children }) {
           ].slice(0, 8),
         };
         createdVisit = buildSiteVisitFromLead(nextLead);
+        if (isRemoteWorkflowEnabled()) {
+          Promise.all([
+            updateLeadRemote(leadId, nextLead),
+            saveLeadMomRemote(leadId, mom, 'Sent'),
+            createSiteVisitRemote(nextLead),
+          ]).catch((error) => {
+            console.warn('Lead MOM/Site Visit Supabase save failed:', error.message);
+            setBackendStatus('fallback');
+          });
+        }
         return nextLead;
       }),
     );
@@ -260,11 +323,18 @@ export function WorkflowProvider({ children }) {
     );
   }
 
-  function saveSiteSurvey(siteVisitId, survey) {
+  function saveSiteSurvey(siteVisitId, survey, status = 'Draft', user) {
+    const visit = siteVisits.find((item) => item.id === siteVisitId);
     updateSiteVisit(siteVisitId, (visit) => ({
       survey: { ...visit.survey, ...survey },
       activity: ['Site survey draft saved', ...(visit.activity || [])].slice(0, 8),
     }));
+    if (isRemoteWorkflowEnabled() && visit) {
+      saveSiteAssessmentRemote(visit, survey, status, user).catch((error) => {
+        console.warn('Site assessment Supabase save failed:', error.message);
+        setBackendStatus('fallback');
+      });
+    }
   }
 
   function saveSiteVisitMom(siteVisitId, mom) {
@@ -274,6 +344,12 @@ export function WorkflowProvider({ children }) {
       status: 'Site Visit MOM Created',
       activity: ['Site Visit MOM generated', ...(visit.activity || [])].slice(0, 8),
     }));
+    if (isRemoteWorkflowEnabled()) {
+      saveSiteMomRemote(siteVisitId, mom, 'Draft').catch((error) => {
+        console.warn('Site MOM Supabase save failed:', error.message);
+        setBackendStatus('fallback');
+      });
+    }
   }
 
   function sendSiteVisitMom(siteVisitId, mom) {
@@ -283,19 +359,44 @@ export function WorkflowProvider({ children }) {
       status: 'Site Visit MOM Sent',
       activity: ['Site Visit MOM sent to client and internal stakeholders', ...(visit.activity || [])].slice(0, 8),
     }));
+    if (isRemoteWorkflowEnabled()) {
+      saveSiteMomRemote(siteVisitId, mom, 'Sent').catch((error) => {
+        console.warn('Site MOM Supabase send save failed:', error.message);
+        setBackendStatus('fallback');
+      });
+    }
   }
 
   function submitCommercialReview(siteVisitId) {
+    const visit = siteVisits.find((item) => item.id === siteVisitId);
     updateSiteVisit(siteVisitId, (visit) => ({
       status: 'Commercial Review',
       currentStage: 'Commercial Review',
       activity: ['Submitted for Commercial Review', ...(visit.activity || [])].slice(0, 8),
     }));
+    if (isRemoteWorkflowEnabled() && visit) {
+      submitApprovalRemote(visit, visit.assessmentId).catch((error) => {
+        console.warn('Approval Supabase submit failed:', error.message);
+        setBackendStatus('fallback');
+      });
+    }
+  }
+
+  async function uploadSiteImage(payload) {
+    if (!isRemoteWorkflowEnabled()) return null;
+    try {
+      return await uploadSiteImageRemote(payload);
+    } catch (error) {
+      console.warn('Site image Supabase upload failed:', error.message);
+      setBackendStatus('fallback');
+      return null;
+    }
   }
 
   const value = {
     leads,
     siteVisits,
+    backendStatus,
     addLead,
     updateLead,
     addLeadActivity,
@@ -306,6 +407,7 @@ export function WorkflowProvider({ children }) {
     saveSiteVisitMom,
     sendSiteVisitMom,
     submitCommercialReview,
+    uploadSiteImage,
   };
 
   return <WorkflowContext.Provider value={value}>{children}</WorkflowContext.Provider>;
