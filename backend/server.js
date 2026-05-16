@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import express from 'express';
 import nodemailer from 'nodemailer';
 
-dotenv.config();
+dotenv.config({ path: './backend/.env' });
 
 const app = express();
 const port = Number(process.env.PORT || 4000);
