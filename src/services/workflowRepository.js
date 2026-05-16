@@ -309,6 +309,7 @@ function dbSiteMomToApp(row) {
 
 export async function fetchWorkflowData() {
   assertConfigured();
+  console.info('[QPMS Supabase] Fetching workflow data from leads and site_visits');
 
   const [leadsResponse, visitsResponse] = await Promise.all([
     supabase
@@ -321,8 +322,19 @@ export async function fetchWorkflowData() {
       .order('created_at', { ascending: false }),
   ]);
 
-  if (leadsResponse.error) throw leadsResponse.error;
-  if (visitsResponse.error) throw visitsResponse.error;
+  if (leadsResponse.error) {
+    console.error('[QPMS Supabase] Leads fetch failed', leadsResponse.error);
+    throw leadsResponse.error;
+  }
+  if (visitsResponse.error) {
+    console.error('[QPMS Supabase] Site visits fetch failed', visitsResponse.error);
+    throw visitsResponse.error;
+  }
+
+  console.info('[QPMS Supabase] Workflow fetch success', {
+    leads: leadsResponse.data?.length || 0,
+    siteVisits: visitsResponse.data?.length || 0,
+  });
 
   return {
     leads: (leadsResponse.data || []).map(dbLeadToAppLead),
@@ -333,8 +345,24 @@ export async function fetchWorkflowData() {
 export async function createLeadRemote(lead) {
   assertConfigured();
   const { contacts = [] } = lead;
-  const { data, error } = await supabase.from('leads').insert(appLeadToDbLead(lead)).select('*').single();
-  if (error) throw error;
+  const payload = appLeadToDbLead(lead);
+  console.info('[QPMS Supabase] Creating lead payload', {
+    client_name: payload.client_name,
+    assigned_bd_email: payload.assigned_bd_email,
+    lead_stage: payload.lead_stage,
+    contactCount: contacts.length,
+  });
+
+  const { data, error } = await supabase.from('leads').insert(payload).select('*').single();
+  if (error) {
+    console.error('[QPMS Supabase] Lead insert failed', error);
+    throw error;
+  }
+
+  console.info('[QPMS Supabase] Lead insert success', {
+    id: data.id,
+    client_name: data.client_name,
+  });
 
   if (contacts.length) {
     const { error: contactsError } = await supabase.from('lead_contacts').insert(
@@ -347,7 +375,14 @@ export async function createLeadRemote(lead) {
         is_primary: Boolean(contact.isPrimary),
       })),
     );
-    if (contactsError) throw contactsError;
+    if (contactsError) {
+      console.error('[QPMS Supabase] Lead contacts insert failed', contactsError);
+      throw contactsError;
+    }
+    console.info('[QPMS Supabase] Lead contacts insert success', {
+      leadId: data.id,
+      contactCount: contacts.length,
+    });
   }
 
   await logActivity({ leadId: data.id, type: 'Lead Created', message: 'Lead Created', createdBy: lead.created_by_name });

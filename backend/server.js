@@ -7,8 +7,9 @@ dotenv.config();
 
 const app = express();
 const port = Number(process.env.PORT || 4000);
+const frontendOrigin = process.env.FRONTEND_ORIGIN || true;
 
-app.use(cors({ origin: process.env.FRONTEND_ORIGIN || true }));
+app.use(cors({ origin: frontendOrigin }));
 app.use(express.json({ limit: '10mb' }));
 
 function createTransporter() {
@@ -109,5 +110,10 @@ app.post('/send-lead-mom', routeSendMom('lead'));
 app.post('/send-sitevisit-mom', routeSendMom('sitevisit'));
 
 app.listen(port, () => {
-  console.log(`QPMS mail API listening on ${port}`);
+  console.log('[QPMS Mail API] Startup complete', {
+    port,
+    frontendOrigin,
+    emailUserConfigured: Boolean(process.env.EMAIL_USER),
+    emailPassConfigured: Boolean(process.env.EMAIL_PASS),
+  });
 });

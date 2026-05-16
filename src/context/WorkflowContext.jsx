@@ -175,15 +175,23 @@ export function WorkflowProvider({ children }) {
   const [backendStatus, setBackendStatus] = useState(isRemoteWorkflowEnabled() ? 'connecting' : 'local');
 
   useEffect(() => {
-    if (!isRemoteWorkflowEnabled()) return;
+    if (!isRemoteWorkflowEnabled()) {
+      console.info('[QPMS Workflow] Supabase env missing; using local/mock workflow storage');
+      return;
+    }
 
     let active = true;
+    console.info('[QPMS Workflow] Supabase env detected; loading remote workflow data');
     fetchWorkflowData()
       .then((data) => {
         if (!active) return;
         setLeads(data.leads.map(normalizeLead));
         setSiteVisits(data.siteVisits);
         setBackendStatus('connected');
+        console.info('[QPMS Workflow] Supabase workflow connected', {
+          leads: data.leads.length,
+          siteVisits: data.siteVisits.length,
+        });
       })
       .catch((error) => {
         console.warn('Supabase workflow fallback enabled:', error.message);
@@ -226,6 +234,12 @@ export function WorkflowProvider({ children }) {
     });
 
     setLeads((current) => [nextLead, ...current]);
+    console.info('[QPMS Workflow] Add lead invoked', {
+      mode: isRemoteWorkflowEnabled() ? 'supabase' : 'local',
+      leadId: nextLead.id,
+      company: nextLead.company,
+      contactCount: nextLead.contacts?.length || 0,
+    });
     if (isRemoteWorkflowEnabled()) {
       createLeadRemote(nextLead).catch((error) => {
         console.warn('Lead Supabase insert failed:', error.message);
