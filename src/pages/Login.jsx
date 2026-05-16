@@ -16,6 +16,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Logo from '../components/Logo.jsx';
 import { useAuth } from '../context/auth-context.js';
+import { findMockUser } from '../data/mockUsers.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 
 const socialLinks = [
@@ -48,17 +49,21 @@ export default function Login() {
 
     const normalizedUsername = username.trim().toLowerCase();
 
-    if (!['admin', 'admin@qpms.com'].includes(normalizedUsername) || password !== 'admin') {
+    const matchedUser = findMockUser(normalizedUsername, password);
+
+    if (!matchedUser) {
       setError('Incorrect username or password.');
       setIsSubmitting(false);
       return;
     }
 
     const nextUser = {
-      name: 'Admin',
-      username: 'admin',
-      email: 'admin@qpms.com',
-      role: 'Admin',
+      id: matchedUser.id,
+      name: matchedUser.name,
+      username: matchedUser.email,
+      email: matchedUser.email,
+      role: matchedUser.role,
+      access: matchedUser.access,
     };
 
     window.setTimeout(() => {
@@ -72,7 +77,8 @@ export default function Login() {
     }, 650);
   }
 
-  const welcomeText = username ? `Welcome, ${username.trim().toLowerCase() === 'admin' ? 'Admin' : username.trim()}` : 'Welcome Back';
+  const matchedWelcomeUser = findMockUser(username, password);
+  const welcomeText = matchedWelcomeUser ? `Welcome, ${matchedWelcomeUser.name}` : 'Welcome Back';
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-950">

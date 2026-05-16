@@ -17,7 +17,9 @@ import {
 import DataTable from '../components/DataTable.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
+import { useAuth } from '../context/auth-context.js';
 import { useWorkflow } from '../context/workflow-context.js';
+import { canViewBdTeam } from '../data/mockUsers.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 
 const siteVisitColumns = [
@@ -526,6 +528,7 @@ function RiskCards({ risks, onChange }) {
 }
 
 export default function Sites() {
+  const { user } = useAuth();
   const {
     siteVisits,
     saveSiteSurvey,
@@ -545,19 +548,24 @@ export default function Sites() {
   const [autoSaveLabel, setAutoSaveLabel] = useState('Saved locally');
   usePageTitle('Site Visit & Estimation');
 
-  const selectedVisit = siteVisits.find((visit) => visit.id === selectedVisitId);
+  const visibleSiteVisits = useMemo(() => {
+    if (canViewBdTeam(user)) return siteVisits;
+    return siteVisits.filter((visit) => visit.assigned_bd_email === user?.email || visit.created_by_user_id === user?.id);
+  }, [siteVisits, user]);
+
+  const selectedVisit = visibleSiteVisits.find((visit) => visit.id === selectedVisitId);
   const selectedStage = normalizeStage(selectedVisit?.currentStage || 'Pre-Operational Assessment');
   const activeSection = surveySections[activeSectionIndex];
 
   const filteredVisits = useMemo(() => {
     const value = query.trim().toLowerCase();
-    if (!value) return siteVisits;
-    return siteVisits.filter((visit) =>
+    if (!value) return visibleSiteVisits;
+    return visibleSiteVisits.filter((visit) =>
       [visit.company, visit.contact, visit.state, visit.city, visit.location, visit.status].some((item) =>
         String(item || '').toLowerCase().includes(value),
       ),
     );
-  }, [query, siteVisits]);
+  }, [query, visibleSiteVisits]);
 
   function showSuccess(message) {
     setSuccessMessage(message);

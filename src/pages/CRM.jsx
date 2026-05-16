@@ -4,12 +4,21 @@ import DataTable from '../components/DataTable.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import { useWorkflow } from '../context/workflow-context.js';
+import { useAuth } from '../context/auth-context.js';
+import { bdExecutives, canViewBdTeam } from '../data/mockUsers.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
+
+function formatContactSummary(lead) {
+  const contacts = normalizeContacts(lead.contacts, lead);
+  const primary = getPrimaryContact({ ...lead, contacts });
+  const remaining = Math.max(contacts.length - 1, 0);
+  return remaining ? `${primary.name} + ${remaining} more` : primary.name;
+}
 
 const leadColumns = [
   { key: 'leadId', label: 'Lead ID' },
   { key: 'company', label: 'Company Name' },
-  { key: 'contact', label: 'Contact Person' },
+  { key: 'contact', label: 'Primary Contact', render: (row) => formatContactSummary(row) },
   { key: 'source', label: 'Lead Source' },
   { key: 'executive', label: 'Assigned BD Executive' },
   { key: 'stage', label: 'Lead Stage' },
@@ -23,10 +32,9 @@ const initialLeadForm = {
   location: '',
   state: '',
   city: '',
-  contact: '',
-  designation: '',
-  phone: '',
-  email: '',
+  contacts: [
+    { id: 'contact-1', name: '', designation: '', phone: '', email: '', isPrimary: true },
+  ],
   priority: '',
   remarks: '',
 };
@@ -34,6 +42,7 @@ const initialLeadForm = {
 const initialMomDraft = {
   to: '',
   cc: 'bdhead@qpms.in, coo@qpms.in',
+  additionalRecipients: '',
   subject: '',
   discussionSummary: '',
   serviceScopeDiscussion: '',
@@ -51,7 +60,26 @@ const sourceOptions = ['LinkedIn', 'Website', 'Campaign', 'Referral', 'Direct Vi
 const stateOptions = ['Tamil Nadu', 'Kerala', 'Karnataka', 'Telangana', 'Andhra Pradesh - 1', 'Andhra Pradesh - 2'];
 const priorityOptions = ['High', 'Medium', 'Low'];
 const statusOptions = ['Active', 'Pending', 'Escalated', 'Completed'];
-const executiveOptions = ['Unassigned', 'Ananya Rao', 'Karthik Menon', 'Nisha Iyer', 'Rahul Shah'];
+const executiveOptions = ['Unassigned', ...bdExecutives.map((user) => user.name)];
+
+function normalizeContacts(contacts, lead = {}) {
+  const fallback = [{ id: `contact-${lead.id || 1}`, name: lead.contact || '', designation: lead.designation || '', phone: lead.phone || '', email: lead.email || '', isPrimary: true }];
+  const source = Array.isArray(contacts) && contacts.length ? contacts : fallback;
+  const hasPrimary = source.some((contact) => contact.isPrimary);
+  return source.map((contact, index) => ({
+    id: contact.id || `contact-${Date.now()}-${index}`,
+    name: contact.name || '',
+    designation: contact.designation || '',
+    phone: contact.phone || '',
+    email: contact.email || '',
+    isPrimary: source.length === 1 ? true : hasPrimary ? Boolean(contact.isPrimary) : index === 0,
+  }));
+}
+
+function getPrimaryContact(lead) {
+  const contacts = normalizeContacts(lead.contacts, lead);
+  return contacts.find((contact) => contact.isPrimary) || contacts[0];
+}
 
 function TextField({ label, value, onChange, type = 'text', required = false, multiline = false, disabled = false }) {
   const className =
@@ -113,12 +141,116 @@ function FormSection({ title, children }) {
   );
 }
 
+function ContactPersonsEditor({ contacts, onChange, disabled = false }) {
+  const normalizedContacts = normalizeContacts(contacts);
+
+  function updateContact(contactId, patch) {
+    let nextContacts = normalizedContacts.map((contact) =>
+      contact.id === contactId ? { ...contact, ...patch } : contact,
+    );
+
+    if (patch.isPrimary) {
+      nextContacts = nextContacts.map((contact) => ({ ...contact, isPrimary: contact.id === contactId }));
+    }
+
+    if (nextContacts.length === 1) {
+      nextContacts = [{ ...nextContacts[0], isPrimary: true }];
+    }
+
+    onChange(nextContacts);
+  }
+
+  function addContact() {
+    onChange([
+      ...normalizedContacts,
+      { id: `contact-${normalizedContacts.length + 1}`, name: '', designation: '', phone: '', email: '', isPrimary: false },
+    ]);
+  }
+
+  function removeContact(contactId) {
+    const remaining = normalizedContacts.filter((contact) => contact.id !== contactId);
+    if (!remaining.length) return;
+    onChange(remaining.length === 1 ? [{ ...remaining[0], isPrimary: true }] : remaining.some((contact) => contact.isPrimary) ? remaining : remaining.map((contact, index) => ({ ...contact, isPrimary: index === 0 })));
+  }
+
+  return (
+    <div className="md:col-span-2">
+      <div className="space-y-3">
+        {normalizedContacts.map((contact, index) => (
+          <div key={contact.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-bold text-slate-900 dark:text-white">Contact Person {index + 1}</p>
+                {contact.isPrimary ? <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">Primary</span> : null}
+              </div>
+              {!disabled && normalizedContacts.length > 1 ? (
+                <button type="button" onClick={() => removeContact(contact.id)} className="rounded-xl border border-rose-200 px-3 py-1.5 text-xs font-bold text-rose-600 transition hover:bg-rose-50 dark:border-rose-500/25 dark:hover:bg-rose-500/10">
+                  Remove
+                </button>
+              ) : null}
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <TextField label="Contact Person Name" value={contact.name} onChange={(value) => updateContact(contact.id, { name: value })} required disabled={disabled} />
+              <TextField label="Designation" value={contact.designation} onChange={(value) => updateContact(contact.id, { designation: value })} disabled={disabled} />
+              <TextField label="Contact Number" type="tel" value={contact.phone} onChange={(value) => updateContact(contact.id, { phone: value })} required disabled={disabled} />
+              <TextField label="Email ID" type="email" value={contact.email} onChange={(value) => updateContact(contact.id, { email: value })} disabled={disabled} />
+            </div>
+            <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-900">
+              <span className="text-sm font-semibold text-slate-600 dark:text-slate-300">Is Primary Contact?</span>
+              <button
+                type="button"
+                disabled={disabled || contact.isPrimary}
+                onClick={() => updateContact(contact.id, { isPrimary: true })}
+                className={`rounded-full px-3 py-1 text-xs font-bold transition ${contact.isPrimary ? 'bg-qpms-600 text-white' : 'bg-white text-slate-600 shadow-sm hover:text-qpms-700 dark:bg-slate-950 dark:text-slate-300'}`}
+              >
+                {contact.isPrimary ? 'Yes' : 'Set Primary'}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {!disabled ? (
+        <button type="button" onClick={addContact} className="mt-3 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+          <Plus className="h-4 w-4" /> Add Contact Person
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function ContactPersonsList({ contacts, lead }) {
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      {normalizeContacts(contacts, lead).map((contact) => (
+        <div key={contact.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-950/70">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold text-slate-950 dark:text-white">{contact.name || 'Unnamed contact'}</p>
+              <p className="mt-1 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">{contact.designation || 'Designation pending'}</p>
+            </div>
+            {contact.isPrimary ? <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">Primary</span> : null}
+          </div>
+          <p className="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300">{contact.phone || 'Phone pending'}</p>
+          <p className="mt-1 text-sm font-medium text-slate-600 dark:text-slate-300">{contact.email || 'Email pending'}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function createLeadMomDraft(lead) {
+  const primaryContact = getPrimaryContact(lead);
+  const otherEmails = normalizeContacts(lead.contacts, lead)
+    .filter((contact) => !contact.isPrimary && contact.email)
+    .map((contact) => contact.email)
+    .join(', ');
+
   return {
     ...initialMomDraft,
-    to: lead.email || '',
+    to: primaryContact?.email || '',
+    additionalRecipients: otherEmails,
     subject: `Lead MOM - ${lead.company || 'Client'} - QPMS`,
-    discussionSummary: `Initial discussion completed with ${lead.contact || 'client contact'} for ${lead.company || 'the client'} regarding QPMS facility management support.`,
+    discussionSummary: `Initial discussion completed with ${primaryContact?.name || 'client contact'} for ${lead.company || 'the client'} regarding QPMS facility management support.`,
     serviceScopeDiscussion: 'Facility management, housekeeping operations, site management, and related operational support were discussed at a high level.',
     actionItems: '1. Share Lead MOM with client.\n2. Conduct scheduled site visit.\n3. Capture operational requirements during site assessment.',
     nextFollowUpDate: lead.followUp === 'Not scheduled' ? '' : lead.followUp || '',
@@ -142,6 +274,7 @@ function Toast({ message }) {
 
 export default function CRM() {
   const { leads, addLead, updateLead, saveLeadMomDraft, sendLeadMom } = useWorkflow();
+  const { user } = useAuth();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [leadForm, setLeadForm] = useState(initialLeadForm);
   const [selectedLeadId, setSelectedLeadId] = useState(null);
@@ -153,16 +286,21 @@ export default function CRM() {
   const [successMessage, setSuccessMessage] = useState('');
   usePageTitle('Lead Management');
 
-  const selectedLead = leads.find((lead) => lead.id === selectedLeadId);
+  const visibleLeads = useMemo(() => {
+    if (canViewBdTeam(user)) return leads;
+    return leads.filter((lead) => lead.assigned_bd_email === user?.email || lead.created_by_user_id === user?.id);
+  }, [leads, user]);
+
+  const selectedLead = visibleLeads.find((lead) => lead.id === selectedLeadId);
 
   const stats = useMemo(
     () => [
-      ['Total leads', leads.length],
-      ['New leads', leads.filter((lead) => lead.stage === 'New Lead').length],
-      ['Site visits scheduled', leads.filter((lead) => lead.stage === 'Site Visit Scheduled').length],
-      ['Active leads', leads.filter((lead) => lead.status === 'Active').length],
+      ['Total leads', visibleLeads.length],
+      ['New leads', visibleLeads.filter((lead) => lead.stage === 'New Lead').length],
+      ['Site visits scheduled', visibleLeads.filter((lead) => lead.stage === 'Site Visit Scheduled').length],
+      ['Active leads', visibleLeads.filter((lead) => lead.status === 'Active').length],
     ],
-    [leads],
+    [visibleLeads],
   );
 
   function showSuccess(message) {
@@ -206,7 +344,12 @@ export default function CRM() {
 
   function handleCreateLead(event) {
     event.preventDefault();
-    addLead(leadForm);
+    const contacts = normalizeContacts(leadForm.contacts);
+    if (!contacts.length || contacts.some((contact) => !contact.name.trim() || !contact.phone.trim())) {
+      showSuccess('At least one contact person with name and phone is required');
+      return;
+    }
+    addLead({ ...leadForm, contacts }, user);
     showSuccess('Lead created successfully');
     closeLeadForm();
   }
@@ -268,7 +411,7 @@ export default function CRM() {
         ))}
       </section>
 
-      <DataTable columns={leadColumns} rows={leads} onRowClick={openLeadDrawer} />
+      <DataTable columns={leadColumns} rows={visibleLeads} onRowClick={openLeadDrawer} />
 
       {isFormOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
@@ -300,10 +443,7 @@ export default function CRM() {
               </FormSection>
 
               <FormSection title="Contact Details">
-                <TextField label="Contact Person Name" value={leadForm.contact} onChange={(value) => updateLeadForm('contact', value)} required />
-                <TextField label="Contact Person Designation" value={leadForm.designation} onChange={(value) => updateLeadForm('designation', value)} />
-                <TextField label="Contact Number" type="tel" value={leadForm.phone} onChange={(value) => updateLeadForm('phone', value)} required />
-                <TextField label="Email ID" type="email" value={leadForm.email} onChange={(value) => updateLeadForm('email', value)} />
+                <ContactPersonsEditor contacts={leadForm.contacts} onChange={(contacts) => updateLeadForm('contacts', contacts)} />
               </FormSection>
 
               <FormSection title="Lead Information">
@@ -372,10 +512,13 @@ export default function CRM() {
               </FormSection>
 
               <FormSection title="Contact Details">
-                <TextField label="Contact Person Name" value={draftLead.contact} onChange={(value) => updateDraftLead('contact', value)} disabled={!isEditingLead} />
-                <TextField label="Designation" value={draftLead.designation} onChange={(value) => updateDraftLead('designation', value)} disabled={!isEditingLead} />
-                <TextField label="Contact Number" value={draftLead.phone} onChange={(value) => updateDraftLead('phone', value)} disabled={!isEditingLead} />
-                <TextField label="Email ID" type="email" value={draftLead.email} onChange={(value) => updateDraftLead('email', value)} disabled={!isEditingLead} />
+                {isEditingLead ? (
+                  <ContactPersonsEditor contacts={draftLead.contacts} onChange={(contacts) => updateDraftLead('contacts', contacts)} />
+                ) : (
+                  <div className="md:col-span-2">
+                    <ContactPersonsList contacts={draftLead.contacts} lead={draftLead} />
+                  </div>
+                )}
               </FormSection>
 
               <FormSection title="Lead Information">
@@ -408,6 +551,7 @@ export default function CRM() {
                   </div>
                   <div className="mt-5 grid gap-4">
                     <TextField label="To" value={momDraft.to} onChange={(value) => updateMomDraft('to', value)} />
+                    <TextField label="Additional Contact Recipients" value={momDraft.additionalRecipients} onChange={(value) => updateMomDraft('additionalRecipients', value)} />
                     <TextField label="CC" value={momDraft.cc} onChange={(value) => updateMomDraft('cc', value)} />
                     <TextField label="Subject" value={momDraft.subject} onChange={(value) => updateMomDraft('subject', value)} />
                     <TextField label="Discussion Summary" value={momDraft.discussionSummary} onChange={(value) => updateMomDraft('discussionSummary', value)} multiline />

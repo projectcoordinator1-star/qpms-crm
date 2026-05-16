@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { leadRows } from '../data/qpmsWorkflowData.js';
+import { bdExecutives, getExecutiveByName } from '../data/mockUsers.js';
 import { WorkflowContext } from './workflow-context.js';
 
 const leadsStorageKey = 'qpms-crm-workflow-leads';
@@ -18,6 +19,46 @@ const defaultLeadDetails = {
   activity: [],
 };
 
+function createFallbackContact(lead) {
+  return {
+    id: `contact-${lead.id || Date.now()}-primary`,
+    name: lead.contact || '',
+    designation: lead.designation || '',
+    phone: lead.phone || '',
+    email: lead.email || '',
+    isPrimary: true,
+  };
+}
+
+function normalizeContacts(contacts, lead = {}) {
+  const sourceContacts = Array.isArray(contacts) && contacts.length ? contacts : [createFallbackContact(lead)];
+  const hasPrimary = sourceContacts.some((contact) => contact.isPrimary);
+
+  return sourceContacts.map((contact, index) => ({
+    id: contact.id || `contact-${Date.now()}-${index}`,
+    name: contact.name || '',
+    designation: contact.designation || '',
+    phone: contact.phone || '',
+    email: contact.email || '',
+    isPrimary: sourceContacts.length === 1 ? true : hasPrimary ? Boolean(contact.isPrimary) : index === 0,
+  }));
+}
+
+function getPrimaryContact(lead) {
+  return normalizeContacts(lead.contacts, lead).find((contact) => contact.isPrimary) || normalizeContacts(lead.contacts, lead)[0];
+}
+
+function ownerFieldsForExecutive(executiveName) {
+  const executive = getExecutiveByName(executiveName) || bdExecutives[0];
+  return {
+    executive: executive?.name || executiveName || 'Unassigned',
+    assigned_bd_executive: executive?.name || executiveName || 'Unassigned',
+    assigned_bd_email: executive?.email || '',
+    created_by_user_id: executive?.id || '',
+    created_by_name: executive?.name || executiveName || 'Unassigned',
+  };
+}
+
 function readStorage(key, fallback) {
   if (typeof window === 'undefined') return fallback;
 
@@ -30,30 +71,52 @@ function readStorage(key, fallback) {
 }
 
 function normalizeLead(lead) {
+  const contacts = normalizeContacts(lead.contacts, lead);
+  const primaryContact = contacts.find((contact) => contact.isPrimary) || contacts[0];
+  const ownerFields = ownerFieldsForExecutive(lead.executive || lead.assigned_bd_executive);
+
   return {
     ...defaultLeadDetails,
     ...lead,
+    ...ownerFields,
+    ...lead,
+    executive: lead.executive || ownerFields.executive,
+    assigned_bd_executive: lead.assigned_bd_executive || ownerFields.assigned_bd_executive,
+    assigned_bd_email: lead.assigned_bd_email || ownerFields.assigned_bd_email,
+    created_by_user_id: lead.created_by_user_id || ownerFields.created_by_user_id,
+    created_by_name: lead.created_by_name || ownerFields.created_by_name,
+    contacts,
+    contact: primaryContact?.name || '',
+    designation: primaryContact?.designation || '',
+    phone: primaryContact?.phone || '',
+    email: primaryContact?.email || '',
     leadId: lead.leadId || `LD-${String(lead.id).padStart(4, '0')}`,
     stage: lead.stage || 'New Lead',
     status: lead.status || 'Active',
-    executive: lead.executive || 'Unassigned',
     activity: lead.activity || ['Lead record available in desktop workflow'],
   };
 }
 
 function buildSiteVisitFromLead(lead) {
+  const primaryContact = getPrimaryContact(lead);
+
   return {
     id: `SV-${lead.id}`,
     leadId: lead.id,
     company: lead.company,
     industry: lead.industry,
-    contact: lead.contact,
-    designation: lead.designation,
-    phone: lead.phone,
-    email: lead.email,
+    contacts: normalizeContacts(lead.contacts, lead),
+    contact: primaryContact?.name || '',
+    designation: primaryContact?.designation || '',
+    phone: primaryContact?.phone || '',
+    email: primaryContact?.email || '',
     source: lead.source,
     priority: lead.priority,
     executive: lead.executive,
+    assigned_bd_executive: lead.assigned_bd_executive,
+    assigned_bd_email: lead.assigned_bd_email,
+    created_by_user_id: lead.created_by_user_id,
+    created_by_name: lead.created_by_name,
     location: lead.location,
     state: lead.state,
     city: lead.city,
@@ -95,7 +158,7 @@ function upsertById(items, nextItem) {
 }
 
 export function WorkflowProvider({ children }) {
-  const [leads, setLeads] = useState(() => readStorage(leadsStorageKey, leadRows.map(normalizeLead)));
+  const [leads, setLeads] = useState(() => readStorage(leadsStorageKey, leadRows).map(normalizeLead));
   const [siteVisits, setSiteVisits] = useState(() => readStorage(siteVisitsStorageKey, []));
 
   useEffect(() => {
@@ -106,14 +169,25 @@ export function WorkflowProvider({ children }) {
     window.localStorage.setItem(siteVisitsStorageKey, JSON.stringify(siteVisits));
   }, [siteVisits]);
 
-  function addLead(lead) {
+  function addLead(lead, user) {
+    const selectedExecutive = user?.role === 'BD Executive' ? user.name : lead.executive || lead.assigned_bd_executive || bdExecutives[0]?.name;
+    const ownerFields = user?.role === 'BD Executive'
+      ? {
+          executive: user.name,
+          assigned_bd_executive: user.name,
+          assigned_bd_email: user.email,
+          created_by_user_id: user.id,
+          created_by_name: user.name,
+        }
+      : ownerFieldsForExecutive(selectedExecutive);
     const nextLead = normalizeLead({
       ...lead,
+      ...ownerFields,
       id: Date.now(),
       leadId: `LD-${Date.now().toString().slice(-5)}`,
       stage: 'New Lead',
       status: 'Active',
-      executive: lead.executive || 'Unassigned',
+      contacts: normalizeContacts(lead.contacts, lead),
       activity: ['New lead created from desktop application'],
     });
 
@@ -126,7 +200,7 @@ export function WorkflowProvider({ children }) {
       current.map((lead) => {
         if (lead.id !== leadId) return lead;
         const patch = typeof updater === 'function' ? updater(lead) : updater;
-        return { ...lead, ...patch };
+        return normalizeLead({ ...lead, ...patch });
       }),
     );
   }

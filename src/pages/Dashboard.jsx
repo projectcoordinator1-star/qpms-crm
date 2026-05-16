@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import {
   Area,
@@ -44,6 +44,9 @@ import {
   stateOperationsSummary,
   taskCompletionDistribution,
 } from '../data/qpmsWorkflowData.js';
+import { useAuth } from '../context/auth-context.js';
+import { useWorkflow } from '../context/workflow-context.js';
+import { bdExecutives, canViewBdTeam } from '../data/mockUsers.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 
 const tabs = [
@@ -100,6 +103,16 @@ const officerColumns = [
   { key: 'lastActivity', label: 'Last Activity', wrap: true },
   { key: 'assignedSite', label: 'Assigned Site' },
   { key: 'status', label: 'Status', render: (row) => <StatusBadge status={row.status} /> },
+];
+
+const bdOverviewColumns = [
+  { key: 'executive', label: 'BD Executive' },
+  { key: 'totalLeads', label: 'Total Leads' },
+  { key: 'leadMomSent', label: 'Lead MOM Sent' },
+  { key: 'siteVisitsScheduled', label: 'Site Visits Scheduled' },
+  { key: 'commercialPending', label: 'Commercial Pending' },
+  { key: 'financePending', label: 'Finance Pending' },
+  { key: 'cooPending', label: 'COO Pending' },
 ];
 
 function ChartFrame({ children, height = 'h-72' }) {
@@ -397,11 +410,77 @@ function DashboardDetailPanel({ sectionId, sections, renderChart }) {
   );
 }
 
-function NewBusinessPipeline({ activeDashboardSection, onSectionChange }) {
+function NewBusinessPipeline({ activeDashboardSection, onSectionChange, visibleLeads, visibleSiteVisits, user }) {
+  const roleAwareKpis = useMemo(() => {
+    const openLeads = visibleLeads.filter((lead) => !['Converted', 'Lost'].includes(lead.stage));
+    const siteVisitsScheduled = visibleLeads.filter((lead) => lead.stage === 'Site Visit Scheduled').length || visibleSiteVisits.length;
+    const commercialPending = visibleLeads.filter((lead) => lead.stage === 'Commercial Review').length + visibleSiteVisits.filter((visit) => visit.currentStage === 'Commercial Review' || visit.status === 'Commercial Review').length;
+    const financePending = visibleLeads.filter((lead) => lead.stage === 'Finance Validation').length;
+    const bdPending = visibleLeads.filter((lead) => ['BD Team Review', 'Approval Pending'].includes(lead.stage)).length;
+    const cooPending = visibleLeads.filter((lead) => lead.pendingWith === 'COO' || lead.stage === 'COO Approval').length;
+    const proposals = visibleLeads.filter((lead) => lead.stage === 'Proposal Sent').length;
+    const converted = visibleLeads.filter((lead) => lead.stage === 'Converted').length;
+
+    return newBusinessKpis.map((kpi) => {
+      const valueById = {
+        openLeads: openLeads.length,
+        siteVisitsPlanned: siteVisitsScheduled,
+        estimationsPending: visibleSiteVisits.filter((visit) => ['Scheduled', 'Site Visit MOM Created', 'Site Visit MOM Sent'].includes(visit.status)).length,
+        commercialReviews: commercialPending,
+        approvalPending: bdPending + financePending + cooPending,
+        proposalsSent: proposals,
+        convertedLeads: converted,
+      };
+      const changeById = {
+        openLeads: user?.role === 'BD Executive' ? 'Only your assigned leads' : 'Visible by current role',
+        siteVisitsPlanned: 'Scheduled from Lead MOMs',
+        estimationsPending: 'Site assessment queue',
+        commercialReviews: 'Pending commercial review',
+        approvalPending: `Finance ${financePending} / BD ${bdPending} / COO ${cooPending}`,
+        proposalsSent: kpi.change,
+        convertedLeads: kpi.change,
+      };
+      return { ...kpi, value: String(valueById[kpi.id] ?? kpi.value), change: changeById[kpi.id] || kpi.change };
+    });
+  }, [user, visibleLeads, visibleSiteVisits]);
+
+  const recentVisibleLeads = useMemo(
+    () =>
+      visibleLeads.slice(0, 8).map((lead) => ({
+        id: lead.id,
+        company: lead.company,
+        source: lead.source,
+        assignedTo: lead.assigned_bd_executive || lead.executive,
+        stage: lead.stage,
+        nextFollowUp: lead.followUp || lead.scheduledVisitDate || 'Not scheduled',
+        status: lead.status,
+      })),
+    [visibleLeads],
+  );
+
+  const bdTeamOverview = useMemo(
+    () =>
+      bdExecutives.map((executive) => {
+        const executiveLeads = visibleLeads.filter((lead) => lead.assigned_bd_email === executive.email || lead.assigned_bd_executive === executive.name);
+        const executiveVisits = visibleSiteVisits.filter((visit) => visit.assigned_bd_email === executive.email || visit.assigned_bd_executive === executive.name);
+        return {
+          id: executive.id,
+          executive: executive.name,
+          totalLeads: executiveLeads.length,
+          leadMomSent: executiveLeads.filter((lead) => ['Site Visit Scheduled', 'Lead MOM Sent'].includes(lead.stage) || lead.mom?.sent).length,
+          siteVisitsScheduled: executiveVisits.length,
+          commercialPending: executiveLeads.filter((lead) => lead.stage === 'Commercial Review').length + executiveVisits.filter((visit) => visit.currentStage === 'Commercial Review').length,
+          financePending: executiveLeads.filter((lead) => lead.stage === 'Finance Validation').length,
+          cooPending: executiveLeads.filter((lead) => lead.pendingWith === 'COO' || lead.stage === 'COO Approval').length,
+        };
+      }),
+    [visibleLeads, visibleSiteVisits],
+  );
+
   return (
     <div className="space-y-6">
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {newBusinessKpis.map((kpi) => (
+        {roleAwareKpis.map((kpi) => (
           <KpiCard
             key={kpi.title}
             {...kpi}
@@ -496,8 +575,14 @@ function NewBusinessPipeline({ activeDashboardSection, onSectionChange }) {
           </section>
 
           <ChartCard title="Recent Leads" description="Latest opportunities requiring follow-up, estimation, commercial review, or approval action.">
-            <DataTable columns={recentLeadColumns} rows={recentLeads} embedded />
+            <DataTable columns={recentLeadColumns} rows={recentVisibleLeads.length ? recentVisibleLeads : recentLeads} embedded />
           </ChartCard>
+
+          {['Admin', 'BD Head'].includes(user?.role) ? (
+            <ChartCard title="BD Team Overview" description="Executive-wise pipeline ownership and pending review visibility.">
+              <DataTable columns={bdOverviewColumns} rows={bdTeamOverview} embedded />
+            </ChartCard>
+          ) : null}
         </div>
       )}
     </div>
@@ -638,10 +723,22 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
 }
 
 export default function Dashboard() {
+  const { user } = useAuth();
+  const { leads, siteVisits } = useWorkflow();
   const [activeTab, setActiveTab] = useState('new-business');
   const [activeDashboardSection, setActiveDashboardSection] = useState(null);
   const [activeOperationsSection, setActiveOperationsSection] = useState(null);
   usePageTitle('Dashboard');
+
+  const visibleLeads = useMemo(() => {
+    if (canViewBdTeam(user)) return leads;
+    return leads.filter((lead) => lead.assigned_bd_email === user?.email || lead.created_by_user_id === user?.id);
+  }, [leads, user]);
+
+  const visibleSiteVisits = useMemo(() => {
+    if (canViewBdTeam(user)) return siteVisits;
+    return siteVisits.filter((visit) => visit.assigned_bd_email === user?.email || visit.created_by_user_id === user?.id);
+  }, [siteVisits, user]);
 
   return (
     <div className="space-y-7">
@@ -655,6 +752,9 @@ export default function Dashboard() {
         <NewBusinessPipeline
           activeDashboardSection={activeDashboardSection}
           onSectionChange={setActiveDashboardSection}
+          visibleLeads={visibleLeads}
+          visibleSiteVisits={visibleSiteVisits}
+          user={user}
         />
       ) : (
         <ExistingBusinessOperations

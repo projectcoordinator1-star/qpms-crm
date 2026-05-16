@@ -27,6 +27,60 @@ const List<String> leadSources = [
 
 const List<String> leadPriorities = ['Low', 'Medium', 'High', 'Urgent'];
 
+const List<MockUser> mockUsers = [
+  MockUser(
+    id: 'admin',
+    name: 'Admin',
+    email: 'admin@qpms.co.in',
+    role: 'Admin',
+    password: '123456',
+  ),
+  MockUser(
+    id: 'bd-head',
+    name: 'BD Head',
+    email: 'bdhead@qpms.co.in',
+    role: 'BD Head',
+    password: '123456',
+  ),
+  MockUser(
+    id: 'bd-1',
+    name: 'Ananya Rao',
+    email: 'bd1@qpms.co.in',
+    role: 'BD Executive',
+    password: '123456',
+  ),
+  MockUser(
+    id: 'bd-2',
+    name: 'Karthik Menon',
+    email: 'bd2@qpms.co.in',
+    role: 'BD Executive',
+    password: '123456',
+  ),
+  MockUser(
+    id: 'bd-3',
+    name: 'Nisha Iyer',
+    email: 'bd3@qpms.co.in',
+    role: 'BD Executive',
+    password: '123456',
+  ),
+];
+
+class MockUser {
+  const MockUser({
+    required this.id,
+    required this.name,
+    required this.email,
+    required this.role,
+    required this.password,
+  });
+
+  final String id;
+  final String name;
+  final String email;
+  final String role;
+  final String password;
+}
+
 class QpmsMobileApp extends StatefulWidget {
   const QpmsMobileApp({super.key});
 
@@ -45,10 +99,27 @@ class _QpmsMobileAppState extends State<QpmsMobileApp> {
       siteLocation: 'IT Park, Phase 2',
       state: 'Karnataka',
       city: 'Bengaluru',
-      contactPersonName: 'Ravi Menon',
-      contactPersonDesignation: 'Admin Manager',
-      contactNumber: '9876543210',
-      emailId: 'ravi.menon@example.com',
+      contactPersons: const [
+        ContactPerson(
+          id: 'contact-001-a',
+          name: 'Ravi Menon',
+          designation: 'Admin Manager',
+          phone: '9876543210',
+          email: 'ravi.menon@example.com',
+          isPrimary: true,
+        ),
+        ContactPerson(
+          id: 'contact-001-b',
+          name: 'Sneha Iyer',
+          designation: 'Procurement',
+          phone: '9876543211',
+          email: 'sneha.iyer@example.com',
+        ),
+      ],
+      createdByUserId: 'bd-1',
+      createdByName: 'Ananya Rao',
+      assignedBdExecutive: 'Ananya Rao',
+      assignedBdEmail: 'bd1@qpms.co.in',
       leadPriority: 'High',
       remarks:
           'Initial visit completed. Client asked for a follow-up discussion with operations.',
@@ -149,10 +220,14 @@ class _QpmsMobileAppState extends State<QpmsMobileApp> {
         ),
       ),
       home: LoginScreen(
-        onLogin: () {
+        onLogin: (user) {
           _navigatorKey.currentState?.pushReplacement(
             fadeRoute(
-              FieldOfficerHomeScreen(leads: _leads, onAddLead: _addLead),
+              FieldOfficerHomeScreen(
+                leads: _leads,
+                onAddLead: _addLead,
+                user: user,
+              ),
             ),
           );
         },
@@ -170,10 +245,11 @@ class Lead {
     required this.siteLocation,
     required this.state,
     required this.city,
-    required this.contactPersonName,
-    required this.contactPersonDesignation,
-    required this.contactNumber,
-    required this.emailId,
+    required this.contactPersons,
+    required this.createdByUserId,
+    required this.createdByName,
+    required this.assignedBdExecutive,
+    required this.assignedBdEmail,
     required this.leadPriority,
     required this.remarks,
     required this.createdAt,
@@ -191,10 +267,11 @@ class Lead {
   final String siteLocation;
   final String state;
   final String city;
-  final String contactPersonName;
-  final String contactPersonDesignation;
-  final String contactNumber;
-  final String emailId;
+  final List<ContactPerson> contactPersons;
+  final String createdByUserId;
+  final String createdByName;
+  final String assignedBdExecutive;
+  final String assignedBdEmail;
   final String leadPriority;
   final String remarks;
   String status;
@@ -203,6 +280,54 @@ class Lead {
   String? scheduledVisitTime;
   String siteVisitRemarks;
   String siteMomStatus;
+
+  ContactPerson get primaryContact {
+    return contactPersons.firstWhere(
+      (contact) => contact.isPrimary,
+      orElse: () => contactPersons.first,
+    );
+  }
+
+  String get contactPersonName => primaryContact.name;
+  String get contactPersonDesignation => primaryContact.designation;
+  String get contactNumber => primaryContact.phone;
+  String get emailId => primaryContact.email;
+}
+
+class ContactPerson {
+  const ContactPerson({
+    required this.id,
+    required this.name,
+    required this.designation,
+    required this.phone,
+    required this.email,
+    this.isPrimary = false,
+  });
+
+  final String id;
+  final String name;
+  final String designation;
+  final String phone;
+  final String email;
+  final bool isPrimary;
+
+  ContactPerson copyWith({
+    String? id,
+    String? name,
+    String? designation,
+    String? phone,
+    String? email,
+    bool? isPrimary,
+  }) {
+    return ContactPerson(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      designation: designation ?? this.designation,
+      phone: phone ?? this.phone,
+      email: email ?? this.email,
+      isPrimary: isPrimary ?? this.isPrimary,
+    );
+  }
 }
 
 Route<T> fadeRoute<T>(Widget page) {
@@ -230,15 +355,15 @@ Route<T> fadeRoute<T>(Widget page) {
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, required this.onLogin});
 
-  final VoidCallback onLogin;
+  final ValueChanged<MockUser> onLogin;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _emailController = TextEditingController(text: 'fo@qpms.co.in');
-  final _passwordController = TextEditingController(text: '123456');
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _showPassword = false;
   bool _isSubmitting = false;
   String? _error;
@@ -261,14 +386,18 @@ class _LoginScreenState extends State<LoginScreen> {
     final email = _emailController.text.trim().toLowerCase();
     final password = _passwordController.text;
 
-    if (email == 'fo@qpms.co.in' && password == '123456') {
-      widget.onLogin();
+    final matchedUser = mockUsers.where(
+      (user) => user.email == email && user.password == password,
+    );
+
+    if (matchedUser.isNotEmpty) {
+      widget.onLogin(matchedUser.first);
       return;
     }
 
     setState(() {
       _isSubmitting = false;
-      _error = 'Invalid Field Officer credentials.';
+      _error = 'Incorrect username or password.';
     });
   }
 
@@ -408,7 +537,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                                 SizedBox(width: 8),
                                 Text(
-                                  'Mock login enabled',
+                                  'Mock role login enabled',
                                   style: TextStyle(
                                     color: slate500,
                                     fontWeight: FontWeight.w700,
@@ -437,10 +566,12 @@ class FieldOfficerHomeScreen extends StatefulWidget {
     super.key,
     required this.leads,
     required this.onAddLead,
+    required this.user,
   });
 
   final List<Lead> leads;
   final ValueChanged<Lead> onAddLead;
+  final MockUser user;
 
   @override
   State<FieldOfficerHomeScreen> createState() => _FieldOfficerHomeScreenState();
@@ -449,10 +580,19 @@ class FieldOfficerHomeScreen extends StatefulWidget {
 class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
   int _selectedIndex = 0;
 
-  int get _momPending =>
-      widget.leads.where((lead) => lead.status == 'New Lead').length;
+  List<Lead> get _visibleLeads {
+    if (widget.user.role == 'Admin' || widget.user.role == 'BD Head') {
+      return widget.leads;
+    }
+    return widget.leads
+        .where((lead) => lead.assignedBdEmail == widget.user.email)
+        .toList();
+  }
 
-  int get _siteVisitPending => widget.leads
+  int get _momPending =>
+      _visibleLeads.where((lead) => lead.status == 'New Lead').length;
+
+  int get _siteVisitPending => _visibleLeads
       .where((lead) => lead.status == 'Site Visit Scheduled')
       .length;
 
@@ -461,6 +601,7 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
       fadeRoute<void>(
         AddLeadScreen(
           leadCount: widget.leads.length,
+          user: widget.user,
           onLeadCreated: (lead) {
             widget.onAddLead(lead);
             setState(() {});
@@ -480,6 +621,7 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final showOverview = _selectedIndex == 0;
+    final visibleLeads = _visibleLeads;
 
     return Scaffold(
       body: Container(
@@ -495,9 +637,10 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
             slivers: [
               SliverToBoxAdapter(
                 child: HomeHeader(
-                  totalLeads: widget.leads.length,
+                  totalLeads: visibleLeads.length,
                   momPending: _momPending,
                   siteVisitPending: _siteVisitPending,
+                  user: widget.user,
                 ),
               ),
               SliverPadding(
@@ -512,7 +655,7 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
                           ),
                           const SizedBox(height: 12),
                           UpcomingSiteVisitsCard(
-                            leads: widget.leads
+                            leads: visibleLeads
                                 .where(
                                   (lead) =>
                                       lead.status == 'Site Visit Scheduled',
@@ -520,10 +663,10 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
                                 .toList(),
                           ),
                           const SizedBox(height: 14),
-                          if (widget.leads.isEmpty)
+                          if (visibleLeads.isEmpty)
                             const EmptyLeadsCard()
                           else
-                            ...widget.leads
+                            ...visibleLeads
                                 .take(3)
                                 .map(
                                   (lead) => Padding(
@@ -537,9 +680,9 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
                         ],
                       )
                     : SliverList.builder(
-                        itemCount: widget.leads.isEmpty
+                        itemCount: visibleLeads.isEmpty
                             ? 2
-                            : widget.leads.length + 1,
+                            : visibleLeads.length + 1,
                         itemBuilder: (context, index) {
                           if (index == 0) {
                             return const Padding(
@@ -547,10 +690,10 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
                               child: SectionTitle(title: 'My Leads'),
                             );
                           }
-                          if (widget.leads.isEmpty) {
+                          if (visibleLeads.isEmpty) {
                             return const EmptyLeadsCard();
                           }
-                          final lead = widget.leads[index - 1];
+                          final lead = visibleLeads[index - 1];
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 14),
                             child: LeadListTile(
@@ -609,11 +752,13 @@ class HomeHeader extends StatelessWidget {
     required this.totalLeads,
     required this.momPending,
     required this.siteVisitPending,
+    required this.user,
   });
 
   final int totalLeads;
   final int momPending;
   final int siteVisitPending;
+  final MockUser user;
 
   @override
   Widget build(BuildContext context) {
@@ -654,8 +799,8 @@ class HomeHeader extends StatelessWidget {
                     color: Colors.white.withValues(alpha: 0.16),
                   ),
                 ),
-                child: const Text(
-                  'Field Officer',
+                child: Text(
+                  user.role,
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
@@ -666,8 +811,8 @@ class HomeHeader extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 18),
-          const Text(
-            'Welcome, Field Officer',
+          Text(
+            'Welcome, ${user.name}',
             style: TextStyle(
               color: Colors.white,
               fontSize: 24,
@@ -720,13 +865,45 @@ class AddLeadScreen extends StatefulWidget {
     super.key,
     required this.leadCount,
     required this.onLeadCreated,
+    required this.user,
   });
 
   final int leadCount;
   final ValueChanged<Lead> onLeadCreated;
+  final MockUser user;
 
   @override
   State<AddLeadScreen> createState() => _AddLeadScreenState();
+}
+
+class _ContactFormState {
+  _ContactFormState({this.isPrimary = false})
+    : id = 'contact-${DateTime.now().microsecondsSinceEpoch}';
+
+  final String id;
+  final TextEditingController name = TextEditingController();
+  final TextEditingController designation = TextEditingController();
+  final TextEditingController phone = TextEditingController();
+  final TextEditingController email = TextEditingController();
+  bool isPrimary;
+
+  void dispose() {
+    name.dispose();
+    designation.dispose();
+    phone.dispose();
+    email.dispose();
+  }
+
+  ContactPerson toContact() {
+    return ContactPerson(
+      id: id,
+      name: name.text.trim(),
+      designation: designation.text.trim(),
+      phone: phone.text.trim(),
+      email: email.text.trim(),
+      isPrimary: isPrimary,
+    );
+  }
 }
 
 class _AddLeadScreenState extends State<AddLeadScreen> {
@@ -736,11 +913,10 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
   final _siteLocation = TextEditingController();
   final _state = TextEditingController();
   final _city = TextEditingController();
-  final _contactName = TextEditingController();
-  final _contactDesignation = TextEditingController();
-  final _contactNumber = TextEditingController();
-  final _emailId = TextEditingController();
   final _remarks = TextEditingController();
+  final List<_ContactFormState> _contacts = [
+    _ContactFormState(isPrimary: true),
+  ];
 
   String _leadSource = leadSources.first;
   String _priority = 'Medium';
@@ -752,10 +928,9 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
     _siteLocation.dispose();
     _state.dispose();
     _city.dispose();
-    _contactName.dispose();
-    _contactDesignation.dispose();
-    _contactNumber.dispose();
-    _emailId.dispose();
+    for (final contact in _contacts) {
+      contact.dispose();
+    }
     _remarks.dispose();
     super.dispose();
   }
@@ -773,10 +948,15 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
       siteLocation: _siteLocation.text.trim(),
       state: _state.text.trim(),
       city: _city.text.trim(),
-      contactPersonName: _contactName.text.trim(),
-      contactPersonDesignation: _contactDesignation.text.trim(),
-      contactNumber: _contactNumber.text.trim(),
-      emailId: _emailId.text.trim(),
+      contactPersons: _contacts.map((contact) => contact.toContact()).toList(),
+      createdByUserId: widget.user.id,
+      createdByName: widget.user.name,
+      assignedBdExecutive: widget.user.role == 'BD Executive'
+          ? widget.user.name
+          : 'Ananya Rao',
+      assignedBdEmail: widget.user.role == 'BD Executive'
+          ? widget.user.email
+          : 'bd1@qpms.co.in',
       leadPriority: _priority,
       remarks: _remarks.text.trim(),
       createdAt: DateTime.now(),
@@ -844,42 +1024,51 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  AppTextField(
-                    controller: _contactName,
-                    label: 'Contact Person Name',
+                  ..._contacts.asMap().entries.map(
+                    (entry) => _ContactPersonFormCard(
+                      index: entry.key,
+                      contact: entry.value,
+                      canRemove: _contacts.length > 1,
+                      onPrimary: () {
+                        setState(() {
+                          for (final contact in _contacts) {
+                            contact.isPrimary = contact == entry.value;
+                          }
+                        });
+                      },
+                      onRemove: () {
+                        setState(() {
+                          entry.value.dispose();
+                          _contacts.remove(entry.value);
+                          if (_contacts.length == 1) {
+                            _contacts.first.isPrimary = true;
+                          } else if (!_contacts.any(
+                            (contact) => contact.isPrimary,
+                          )) {
+                            _contacts.first.isPrimary = true;
+                          }
+                        });
+                      },
+                    ),
                   ),
-                  AppTextField(
-                    controller: _contactDesignation,
-                    label: 'Contact Person Designation',
-                  ),
-                  AppTextField(
-                    controller: _contactNumber,
-                    label: 'Contact Number',
-                    keyboardType: TextInputType.phone,
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Required';
-                      }
-                      if (value.trim().length < 10) {
-                        return 'Enter a valid contact number';
-                      }
-                      return null;
-                    },
-                  ),
-                  AppTextField(
-                    controller: _emailId,
-                    label: 'Email ID',
-                    keyboardType: TextInputType.emailAddress,
-                    validator: (value) {
-                      final text = value?.trim() ?? '';
-                      if (text.isEmpty) {
-                        return 'Required';
-                      }
-                      if (!text.contains('@')) {
-                        return 'Enter a valid email';
-                      }
-                      return null;
-                    },
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _contacts.add(_ContactFormState());
+                        });
+                      },
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Add Contact Person'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: qpms600,
+                        side: const BorderSide(color: qpms300),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -931,6 +1120,109 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
   }
 }
 
+class _ContactPersonFormCard extends StatelessWidget {
+  const _ContactPersonFormCard({
+    required this.index,
+    required this.contact,
+    required this.canRemove,
+    required this.onPrimary,
+    required this.onRemove,
+  });
+
+  final int index;
+  final _ContactFormState contact;
+  final bool canRemove;
+  final VoidCallback onPrimary;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: ExpansionTile(
+        initiallyExpanded: index == 0,
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: EdgeInsets.zero,
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Contact Person ${index + 1}',
+                style: const TextStyle(
+                  color: slate950,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            if (contact.isPrimary)
+              const StatusBadge(text: 'Primary', color: Color(0xFF10B981)),
+          ],
+        ),
+        children: [
+          const SizedBox(height: 10),
+          AppTextField(controller: contact.name, label: 'Contact Person Name'),
+          AppTextField(controller: contact.designation, label: 'Designation'),
+          AppTextField(
+            controller: contact.phone,
+            label: 'Contact Number',
+            keyboardType: TextInputType.phone,
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) {
+                return 'Required';
+              }
+              if (value.trim().length < 10) {
+                return 'Enter a valid contact number';
+              }
+              return null;
+            },
+          ),
+          AppTextField(
+            controller: contact.email,
+            label: 'Email ID',
+            keyboardType: TextInputType.emailAddress,
+            validator: (value) {
+              final text = value?.trim() ?? '';
+              if (text.isEmpty) {
+                return 'Required';
+              }
+              if (!text.contains('@')) {
+                return 'Enter a valid email';
+              }
+              return null;
+            },
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: contact.isPrimary ? null : onPrimary,
+                  child: Text(
+                    contact.isPrimary ? 'Primary Contact' : 'Set as Primary',
+                  ),
+                ),
+              ),
+              if (canRemove) ...[
+                const SizedBox(width: 10),
+                IconButton.outlined(
+                  onPressed: onRemove,
+                  color: const Color(0xFFE11D48),
+                  icon: const Icon(Icons.delete_outline),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class LeadDetailScreen extends StatelessWidget {
   const LeadDetailScreen({super.key, required this.lead});
 
@@ -969,10 +1261,9 @@ class LeadDetailScreen extends StatelessWidget {
                     'Site Location': lead.siteLocation,
                     'State': lead.state,
                     'City': lead.city,
-                    'Contact Person': lead.contactPersonName,
-                    'Designation': lead.contactPersonDesignation,
-                    'Contact Number': lead.contactNumber,
-                    'Email ID': lead.emailId,
+                    'Primary Contact': lead.contactPersonName,
+                    'Assigned BD Executive': lead.assignedBdExecutive,
+                    'Created By': lead.createdByName,
                     'Workflow Stage': lead.status,
                     'Scheduled Visit Date': lead.scheduledVisitDate == null
                         ? 'Not scheduled'
@@ -982,6 +1273,58 @@ class LeadDetailScreen extends StatelessWidget {
                     'Site MOM Status': lead.siteMomStatus,
                     'Remarks': lead.remarks,
                   },
+                ),
+                const SizedBox(height: 16),
+                const SectionTitle(title: 'Contact Persons'),
+                const SizedBox(height: 10),
+                ...lead.contactPersons.map(
+                  (contact) => Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(13),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                contact.name,
+                                style: const TextStyle(
+                                  color: slate950,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ),
+                            if (contact.isPrimary)
+                              const StatusBadge(
+                                text: 'Primary',
+                                color: Color(0xFF10B981),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${contact.designation} • ${contact.phone}',
+                          style: const TextStyle(
+                            color: slate500,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Text(
+                          contact.email,
+                          style: const TextStyle(
+                            color: slate500,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -1206,6 +1549,22 @@ class _LeadMomPreviewScreenState extends State<LeadMomPreviewScreen> {
                 const SizedBox(height: 18),
                 MomRow(label: 'Client Name', value: lead.clientName),
                 MomRow(label: 'To', value: lead.emailId),
+                MomRow(
+                  label: 'Additional Recipients',
+                  value:
+                      lead.contactPersons
+                          .where((contact) => !contact.isPrimary)
+                          .map((contact) => contact.email)
+                          .where((email) => email.isNotEmpty)
+                          .join(', ')
+                          .isEmpty
+                      ? 'None'
+                      : lead.contactPersons
+                            .where((contact) => !contact.isPrimary)
+                            .map((contact) => contact.email)
+                            .where((email) => email.isNotEmpty)
+                            .join(', '),
+                ),
                 const MomRow(label: 'CC', value: 'BD Head, COO'),
                 MomRow(
                   label: 'Contact Person',
@@ -2367,6 +2726,13 @@ class LeadListTile extends StatelessWidget {
             LeadMetaRow(
               icon: Icons.location_on_outlined,
               text: '${lead.city}, ${lead.state}',
+            ),
+            const SizedBox(height: 8),
+            LeadMetaRow(
+              icon: Icons.person_outline,
+              text: lead.contactPersons.length > 1
+                  ? '${lead.contactPersonName} + ${lead.contactPersons.length - 1} more'
+                  : lead.contactPersonName,
             ),
             const SizedBox(height: 10),
             Row(
