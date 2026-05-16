@@ -1008,6 +1008,30 @@ class LeadDetailScreen extends StatelessWidget {
               ),
             ),
           ),
+          if (lead.status == 'Site Visit Scheduled') ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).push(
+                    fadeRoute<void>(SiteVisitAssessmentScreen(lead: lead)),
+                  );
+                },
+                icon: const Icon(Icons.fact_check_outlined),
+                label: const Text('Open Site Visit Assessment'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: qpms600,
+                  minimumSize: const Size.fromHeight(52),
+                  side: const BorderSide(color: qpms300),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -1271,6 +1295,748 @@ class _LeadMomPreviewScreenState extends State<LeadMomPreviewScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class SiteVisitAssessmentScreen extends StatefulWidget {
+  const SiteVisitAssessmentScreen({super.key, required this.lead});
+
+  final Lead lead;
+
+  @override
+  State<SiteVisitAssessmentScreen> createState() =>
+      _SiteVisitAssessmentScreenState();
+}
+
+class _SiteVisitAssessmentScreenState extends State<SiteVisitAssessmentScreen> {
+  final List<String> _sections = const [
+    'Basic Site Information',
+    'Hard Services',
+    'Soft Services',
+    'HSE Compliance',
+    'Manpower',
+    'Equipment & Consumables',
+    'Risk Assessment',
+    'Commercial Statement',
+  ];
+
+  final Set<String> _mechanical = <String>{};
+  final Set<String> _electrical = <String>{};
+  final Set<String> _housekeeping = <String>{};
+  final Set<String> _security = <String>{};
+  final Set<String> _waste = <String>{};
+  final List<String> _photoSlots = const [
+    'Entrance',
+    'Service Area',
+    'Equipment Scope',
+    'HK Area',
+    'Washroom',
+    'Electrical Room',
+    'Fire Panel',
+    'Pump Room',
+    'DG Area',
+    'Basement / Parking',
+    'Waste Disposal Area',
+  ];
+
+  int _activeSection = 0;
+  int _photoCount = 0;
+  double _revenue = 0;
+  double _expense = 0;
+  double _nonBillable = 0;
+
+  double get _margin => _revenue - _expense - _nonBillable;
+  double get _marginPercent => _revenue == 0 ? 0 : (_margin / _revenue) * 100;
+
+  void _toggle(Set<String> target, String value) {
+    setState(() {
+      if (target.contains(value)) {
+        target.remove(value);
+      } else {
+        target.add(value);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AppShell(
+      title: 'Site Assessment',
+      subtitle: widget.lead.clientName,
+      bottomBar: SafeArea(
+        top: false,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.96),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 24,
+                offset: const Offset(0, -10),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Assessment draft saved.')),
+                    );
+                  },
+                  icon: const Icon(Icons.save_outlined),
+                  label: const Text('Save Draft'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Submitted for Commercial Review.'),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.send_rounded),
+                  label: const Text('Commercial Review'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: qpms600,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          PremiumCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.lead.clientName,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ),
+                    const StatusBadge(text: 'Scheduled'),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                DetailGrid(
+                  items: {
+                    'Scheduled Date': widget.lead.scheduledVisitDate == null
+                        ? 'Not scheduled'
+                        : formatDate(widget.lead.scheduledVisitDate!),
+                    'Scheduled Time':
+                        widget.lead.scheduledVisitTime ?? 'Not scheduled',
+                    'Site': widget.lead.siteLocation,
+                    'City': widget.lead.city,
+                    'Stage': 'Pre-Operational Assessment',
+                    'MOM Status': widget.lead.siteMomStatus,
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: List.generate(
+                _sections.length,
+                (index) => Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(_sections[index]),
+                    selected: _activeSection == index,
+                    onSelected: (_) => setState(() => _activeSection = index),
+                    selectedColor: qpms100,
+                    labelStyle: TextStyle(
+                      color: _activeSection == index ? qpms700 : slate500,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          _buildActiveSection(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActiveSection() {
+    switch (_sections[_activeSection]) {
+      case 'Basic Site Information':
+        return _basicSection();
+      case 'Hard Services':
+        return _hardServices();
+      case 'Soft Services':
+        return _softServices();
+      case 'HSE Compliance':
+        return _hseCompliance();
+      case 'Manpower':
+        return _manpower();
+      case 'Equipment & Consumables':
+        return _equipment();
+      case 'Risk Assessment':
+        return _riskAssessment();
+      case 'Commercial Statement':
+        return _commercial();
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _basicSection() {
+    return Column(
+      children: [
+        PremiumCard(
+          child: Column(
+            children: const [
+              AssessmentField(label: 'Site Address'),
+              AssessmentField(label: 'Site Type'),
+              AssessmentField(label: 'Operating Hours'),
+              AssessmentField(label: 'Client Occupancy'),
+              AssessmentField(label: 'Building Age'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        PremiumCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.photo_camera_outlined, color: qpms600),
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      'Site Photos & Evidence',
+                      style: TextStyle(
+                        color: slate950,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  StatusBadge(text: '$_photoCount images'),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: _photoSlots
+                    .map(
+                      (slot) => InkWell(
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: () => setState(() => _photoCount++),
+                        child: Container(
+                          width: 150,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Column(
+                            children: [
+                              const Icon(
+                                Icons.cloud_upload_outlined,
+                                color: qpms600,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                slot,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: slate950,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                'Tap to add',
+                                style: TextStyle(
+                                  color: slate500,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _hardServices() {
+    return Column(
+      children: [
+        ServiceChecklistCard(
+          title: 'Mechanical Services',
+          selected: _mechanical,
+          items: const [
+            'HVAC Systems',
+            'Chillers',
+            'AHU',
+            'FCU',
+            'Ventilation',
+            'Pumps',
+            'Fire Fighting',
+            'STP / WTP',
+            'RO Plant',
+            'Air Compressors',
+          ],
+          onToggle: (value) => _toggle(_mechanical, value),
+        ),
+        const SizedBox(height: 14),
+        ServiceChecklistCard(
+          title: 'Electrical Services',
+          selected: _electrical,
+          items: const [
+            'Main Panels / MDB',
+            'SMDB / DB',
+            'Generators',
+            'UPS Systems',
+            'Lighting Systems',
+            'Transformers',
+            'LT Panels',
+            'Battery Banks',
+          ],
+          onToggle: (value) => _toggle(_electrical, value),
+        ),
+      ],
+    );
+  }
+
+  Widget _softServices() {
+    return Column(
+      children: [
+        ServiceChecklistCard(
+          title: 'Housekeeping Areas',
+          selected: _housekeeping,
+          items: const [
+            'Lobby',
+            'Common Areas',
+            'Washrooms',
+            'Cafeteria',
+            'Parking',
+            'External Areas',
+            'Glass Cleaning',
+            'Facade Cleaning',
+            'Pantry',
+          ],
+          onToggle: (value) => _toggle(_housekeeping, value),
+        ),
+        const SizedBox(height: 14),
+        ServiceChecklistCard(
+          title: 'Security Services',
+          selected: _security,
+          items: const [
+            'CCTV Monitoring',
+            'Access Control',
+            'Visitor Management',
+            'Emergency Response',
+            'Parking Security',
+            'Night Patrol',
+            'Baggage Screening',
+          ],
+          onToggle: (value) => _toggle(_security, value),
+        ),
+        const SizedBox(height: 14),
+        ServiceChecklistCard(
+          title: 'Waste Management',
+          selected: _waste,
+          items: const [
+            'General Waste',
+            'Dry Waste',
+            'Wet Waste',
+            'Biomedical Waste',
+            'Hazardous Waste',
+            'E-Waste',
+          ],
+          onToggle: (value) => _toggle(_waste, value),
+        ),
+      ],
+    );
+  }
+
+  Widget _hseCompliance() {
+    const items = [
+      'Fire Safety',
+      'Emergency Exit',
+      'PPE',
+      'Chemical Storage',
+      'Safety Signage',
+      'Electrical Safety',
+      'Work at Height Safety',
+      'First Aid',
+      'Emergency Response Plan',
+    ];
+    return PremiumCard(
+      child: Column(
+        children: items
+            .map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: AssessmentStatusRow(label: item),
+              ),
+            )
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _manpower() {
+    const departments = [
+      'Housekeeping',
+      'Security',
+      'Technical',
+      'Waste Management',
+      'Landscaping',
+      'Pantry',
+      'Helpdesk',
+    ];
+    return PremiumCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: departments
+            .map(
+              (department) => Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      department,
+                      style: const TextStyle(
+                        color: slate950,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const AssessmentField(label: 'Designation'),
+                    const AssessmentField(label: 'Shift Type'),
+                    const AssessmentField(label: 'Count'),
+                    const AssessmentField(label: 'Wage Category'),
+                  ],
+                ),
+              ),
+            )
+            .toList(),
+      ),
+    );
+  }
+
+  Widget _equipment() {
+    return const Column(
+      children: [
+        PremiumCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Equipment Inventory',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+              ),
+              SizedBox(height: 12),
+              AssessmentField(label: 'Equipment Name'),
+              AssessmentField(label: 'Brand'),
+              AssessmentField(label: 'Capacity'),
+              AssessmentField(label: 'Quantity'),
+              AssessmentField(label: 'Monthly Cost'),
+            ],
+          ),
+        ),
+        SizedBox(height: 14),
+        PremiumCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Chemicals & Tools',
+                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+              ),
+              SizedBox(height: 12),
+              AssessmentField(label: 'Chemical Name'),
+              AssessmentField(label: 'Usage Area'),
+              AssessmentField(label: 'Monthly Consumption'),
+              AssessmentField(label: 'Tool Name'),
+              AssessmentField(label: 'Department'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _riskAssessment() {
+    const risks = [
+      'Financial Risk',
+      'Operational Risk',
+      'Compliance Risk',
+      'Workforce Risk',
+      'Safety Risk',
+      'Client Reputation Risk',
+    ];
+    return Column(
+      children: risks
+          .map(
+            (risk) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: PremiumCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      risk,
+                      style: const TextStyle(
+                        color: slate950,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const AssessmentField(label: 'Risk Level'),
+                    const AssessmentField(label: 'Notes'),
+                    const AssessmentField(label: 'Mitigation Plan'),
+                  ],
+                ),
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Widget _commercial() {
+    return PremiumCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Commercial Viability',
+            style: TextStyle(
+              color: slate950,
+              fontWeight: FontWeight.w900,
+              fontSize: 18,
+            ),
+          ),
+          const SizedBox(height: 12),
+          NumberAssessmentField(
+            label: 'Estimated Revenue',
+            onChanged: (value) => setState(() => _revenue = value),
+          ),
+          NumberAssessmentField(
+            label: 'Monthly Operational Cost',
+            onChanged: (value) => setState(() => _expense = value),
+          ),
+          NumberAssessmentField(
+            label: 'Non-Billable Cost',
+            onChanged: (value) => setState(() => _nonBillable = value),
+          ),
+          const SizedBox(height: 12),
+          DetailGrid(
+            items: {
+              'Margin Summary': currencyMobile(_margin),
+              'Expected Margin %': '${_marginPercent.toStringAsFixed(1)}%',
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class ServiceChecklistCard extends StatelessWidget {
+  const ServiceChecklistCard({
+    super.key,
+    required this.title,
+    required this.items,
+    required this.selected,
+    required this.onToggle,
+  });
+
+  final String title;
+  final List<String> items;
+  final Set<String> selected;
+  final ValueChanged<String> onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return PremiumCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: slate950,
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: items
+                .map(
+                  (item) => FilterChip(
+                    label: Text(item),
+                    selected: selected.contains(item),
+                    onSelected: (_) => onToggle(item),
+                    selectedColor: qpms100,
+                    checkmarkColor: qpms600,
+                    labelStyle: TextStyle(
+                      color: selected.contains(item) ? qpms700 : slate500,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+          if (selected.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            ...selected.map(
+              (item) => Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item,
+                      style: const TextStyle(
+                        color: slate950,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const AssessmentField(label: 'Quantity / Capacity'),
+                    const AssessmentField(label: 'Existing Condition'),
+                    const AssessmentField(label: 'Vendor / AMC Support'),
+                    const AssessmentField(label: 'Remarks'),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class AssessmentStatusRow extends StatelessWidget {
+  const AssessmentStatusRow({super.key, required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              color: slate950,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: const [
+              StatusBadge(text: 'Compliant', color: Color(0xFF059669)),
+              StatusBadge(text: 'Partial', color: Color(0xFFF59E0B)),
+              StatusBadge(text: 'Non-Compliant', color: Color(0xFFE11D48)),
+              StatusBadge(text: 'Risk: Medium', color: Color(0xFF2563EB)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          const AssessmentField(label: 'Remarks'),
+        ],
+      ),
+    );
+  }
+}
+
+class AssessmentField extends StatelessWidget {
+  const AssessmentField({super.key, required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextField(decoration: InputDecoration(labelText: label)),
+    );
+  }
+}
+
+class NumberAssessmentField extends StatelessWidget {
+  const NumberAssessmentField({
+    super.key,
+    required this.label,
+    required this.onChanged,
+  });
+
+  final String label;
+  final ValueChanged<double> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextField(
+        keyboardType: TextInputType.number,
+        onChanged: (value) => onChanged(double.tryParse(value) ?? 0),
+        decoration: InputDecoration(labelText: label),
       ),
     );
   }
@@ -2166,4 +2932,17 @@ String formatTimeOfDay(TimeOfDay time) {
   final minute = time.minute.toString().padLeft(2, '0');
   final period = time.period == DayPeriod.am ? 'AM' : 'PM';
   return '$hour:$minute $period';
+}
+
+String currencyMobile(double value) {
+  final rounded = value.round().toString();
+  final buffer = StringBuffer();
+  for (var i = 0; i < rounded.length; i++) {
+    final reverseIndex = rounded.length - i;
+    buffer.write(rounded[i]);
+    if (reverseIndex > 1 && reverseIndex % 3 == 1) {
+      buffer.write(',');
+    }
+  }
+  return 'INR ${buffer.toString()}';
 }

@@ -62,7 +62,7 @@ function buildSiteVisitFromLead(lead) {
     siteVisitRemarks: lead.siteVisitRemarks || '',
     momStatus: 'Pending',
     status: 'Scheduled',
-    currentStage: 'Site Survey / Assessment',
+    currentStage: 'Pre-Operational Assessment',
     createdFrom: 'Lead MOM Sent',
     survey: {
       siteAddress: lead.location,
