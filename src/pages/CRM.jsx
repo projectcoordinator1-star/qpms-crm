@@ -274,7 +274,7 @@ function Toast({ message }) {
 }
 
 export default function CRM() {
-  const { leads, addLead, updateLead, saveLeadMomDraft, sendLeadMom } = useWorkflow();
+  const { leads, addLead, updateLead, saveLeadMomDraft, sendLeadMom, workflowError } = useWorkflow();
   const { user } = useAuth();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [leadForm, setLeadForm] = useState(initialLeadForm);
@@ -343,16 +343,20 @@ export default function CRM() {
     setShowMomPreview(false);
   }
 
-  function handleCreateLead(event) {
+  async function handleCreateLead(event) {
     event.preventDefault();
     const contacts = normalizeContacts(leadForm.contacts);
     if (!contacts.length || contacts.some((contact) => !contact.name.trim() || !contact.phone.trim())) {
       showSuccess('At least one contact person with name and phone is required');
       return;
     }
-    addLead({ ...leadForm, contacts }, user);
-    showSuccess('Lead created successfully');
-    closeLeadForm();
+    try {
+      await addLead({ ...leadForm, contacts }, user);
+      showSuccess('Lead created successfully');
+      closeLeadForm();
+    } catch (error) {
+      showSuccess(`Lead create failed: ${error.message}`);
+    }
   }
 
   function saveLeadChanges() {
@@ -406,7 +410,7 @@ export default function CRM() {
         }
       />
 
-      <Toast message={successMessage} />
+      <Toast message={successMessage || workflowError} />
 
       <section className="grid gap-4 md:grid-cols-4">
         {stats.map(([label, value]) => (

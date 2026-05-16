@@ -170,9 +170,10 @@ function upsertById(items, nextItem) {
 }
 
 export function WorkflowProvider({ children }) {
-  const [leads, setLeads] = useState(() => readStorage(leadsStorageKey, leadRows).map(normalizeLead));
-  const [siteVisits, setSiteVisits] = useState(() => readStorage(siteVisitsStorageKey, []));
+  const [leads, setLeads] = useState(() => (isRemoteWorkflowEnabled() ? [] : readStorage(leadsStorageKey, leadRows).map(normalizeLead)));
+  const [siteVisits, setSiteVisits] = useState(() => (isRemoteWorkflowEnabled() ? [] : readStorage(siteVisitsStorageKey, [])));
   const [backendStatus, setBackendStatus] = useState(isRemoteWorkflowEnabled() ? 'connecting' : 'local');
+  const [workflowError, setWorkflowError] = useState('');
 
   useEffect(() => {
     if (!isRemoteWorkflowEnabled()) {
@@ -182,9 +183,25 @@ export function WorkflowProvider({ children }) {
 
     let active = true;
     console.info('[QPMS Workflow] Supabase env detected; loading remote workflow data');
-    fetchWorkflowData()
-      .then((data) => {
+    refreshWorkflowData()
+      .then(() => {
         if (!active) return;
+      })
+      .catch(() => {
+        if (active) setBackendStatus('error');
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function refreshWorkflowData() {
+    if (!isRemoteWorkflowEnabled()) return;
+    setBackendStatus('connecting');
+    setWorkflowError('');
+    return fetchWorkflowData()
+      .then((data) => {
         setLeads(data.leads.map(normalizeLead));
         setSiteVisits(data.siteVisits);
         setBackendStatus('connected');
@@ -194,24 +211,26 @@ export function WorkflowProvider({ children }) {
         });
       })
       .catch((error) => {
-        console.warn('Supabase workflow fallback enabled:', error.message);
-        if (active) setBackendStatus('fallback');
+        console.error('[QPMS Workflow] Supabase fetch failed; mock data disabled for remote mode', error);
+        setLeads([]);
+        setSiteVisits([]);
+        setBackendStatus('error');
+        setWorkflowError(`Supabase fetch failed: ${error.message}`);
+        throw error;
       });
-
-    return () => {
-      active = false;
-    };
-  }, []);
+  }
 
   useEffect(() => {
+    if (isRemoteWorkflowEnabled()) return;
     window.localStorage.setItem(leadsStorageKey, JSON.stringify(leads));
   }, [leads]);
 
   useEffect(() => {
+    if (isRemoteWorkflowEnabled()) return;
     window.localStorage.setItem(siteVisitsStorageKey, JSON.stringify(siteVisits));
   }, [siteVisits]);
 
-  function addLead(lead, user) {
+  async function addLead(lead, user) {
     const selectedExecutive = user?.role === 'BD Executive' ? user.name : lead.executive || lead.assigned_bd_executive || bdExecutives[0]?.name;
     const ownerFields = user?.role === 'BD Executive'
       ? {
@@ -233,7 +252,6 @@ export function WorkflowProvider({ children }) {
       activity: ['New lead created from desktop application'],
     });
 
-    setLeads((current) => [nextLead, ...current]);
     console.info('[QPMS Workflow] Add lead invoked', {
       mode: isRemoteWorkflowEnabled() ? 'supabase' : 'local',
       leadId: nextLead.id,
@@ -241,11 +259,21 @@ export function WorkflowProvider({ children }) {
       contactCount: nextLead.contacts?.length || 0,
     });
     if (isRemoteWorkflowEnabled()) {
-      createLeadRemote(nextLead).catch((error) => {
-        console.warn('Lead Supabase insert failed:', error.message);
-        setBackendStatus('fallback');
-      });
+      setBackendStatus('saving');
+      setWorkflowError('');
+      try {
+        const insertedId = await createLeadRemote(nextLead);
+        console.info('[QPMS Workflow] Lead insert complete; refetching Supabase leads', { insertedId });
+        await refreshWorkflowData();
+        return { ...nextLead, id: insertedId };
+      } catch (error) {
+        console.error('[QPMS Workflow] Lead Supabase insert failed', error);
+        setBackendStatus('error');
+        setWorkflowError(`Lead insert failed: ${error.message}`);
+        throw error;
+      }
     }
+    setLeads((current) => [nextLead, ...current]);
     return nextLead;
   }
 
@@ -411,6 +439,8 @@ export function WorkflowProvider({ children }) {
     leads,
     siteVisits,
     backendStatus,
+    workflowError,
+    refreshWorkflowData,
     addLead,
     updateLead,
     addLeadActivity,

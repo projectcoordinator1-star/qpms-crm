@@ -10,8 +10,32 @@ export function isRemoteWorkflowEnabled() {
   return isSupabaseConfigured;
 }
 
+function pick(row, keys, fallback = '') {
+  const key = keys.find((item) => row[item] !== undefined && row[item] !== null);
+  return key ? row[key] : fallback;
+}
+
 export function dbLeadToAppLead(row) {
-  const contacts = (row.lead_contacts || []).map((contact) => ({
+  const relationContacts = row.lead_contacts || [];
+  const directContact = pick(row, ['contact_person_name', 'contact', 'primary_contact_name']);
+  const directContactPhone = pick(row, ['contact_number', 'phone']);
+  const directContactEmail = pick(row, ['email_id', 'email']);
+  const directContactDesignation = pick(row, ['contact_person_designation', 'designation']);
+  const contacts = (relationContacts.length
+    ? relationContacts
+    : directContact || directContactPhone || directContactEmail
+      ? [
+          {
+            id: `direct-${row.id}`,
+            contact_person_name: directContact,
+            contact_person_designation: directContactDesignation,
+            contact_number: directContactPhone,
+            email_id: directContactEmail,
+            is_primary: true,
+          },
+        ]
+      : []
+  ).map((contact) => ({
     id: contact.id,
     name: contact.contact_person_name || '',
     designation: contact.contact_person_designation || '',
@@ -24,21 +48,21 @@ export function dbLeadToAppLead(row) {
   return {
     id: row.id,
     leadId: row.lead_code || `LD-${String(row.id).slice(0, 5).toUpperCase()}`,
-    company: row.client_name,
-    industry: row.industry_type,
-    source: row.lead_source,
-    location: row.site_location,
+    company: pick(row, ['client_name', 'company_name', 'company', 'client']),
+    industry: pick(row, ['industry_type', 'industry']),
+    source: pick(row, ['lead_source', 'source']),
+    location: pick(row, ['site_location', 'location', 'site_address']),
     state: row.state,
     city: row.city,
-    priority: row.lead_priority,
+    priority: pick(row, ['lead_priority', 'priority']),
     remarks: row.remarks,
     assigned_bd_executive: row.assigned_bd_executive,
     assigned_bd_email: row.assigned_bd_email,
     created_by_user_id: row.created_by_user_id,
     created_by_name: row.created_by_name || row.assigned_bd_executive,
     executive: row.assigned_bd_executive,
-    stage: row.lead_stage,
-    status: row.status,
+    stage: pick(row, ['lead_stage', 'stage'], 'New Lead'),
+    status: pick(row, ['status'], 'Active'),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     contacts,
@@ -53,7 +77,6 @@ export function dbLeadToAppLead(row) {
 
 export function appLeadToDbLead(lead) {
   return {
-    id: lead.id,
     client_name: lead.company,
     industry_type: lead.industry,
     lead_source: lead.source,
@@ -309,51 +332,86 @@ function dbSiteMomToApp(row) {
 
 export async function fetchWorkflowData() {
   assertConfigured();
-  console.info('[QPMS Supabase] Fetching workflow data from leads and site_visits');
+  console.info('[QPMS Supabase] Fetching leads directly from leads table');
 
-  const [leadsResponse, visitsResponse] = await Promise.all([
-    supabase
-      .from('leads')
-      .select('*, lead_contacts(*), lead_mom(*), activity_logs(activity_message, created_at)')
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('site_visits')
-      .select('*, leads(*, lead_contacts(*)), site_assessments(*), site_mom(*), activity_logs(activity_message, created_at)')
-      .order('created_at', { ascending: false }),
-  ]);
+  const leadsResponse = await supabase.from('leads').select('*').order('created_at', { ascending: false });
 
   if (leadsResponse.error) {
     console.error('[QPMS Supabase] Leads fetch failed', leadsResponse.error);
     throw leadsResponse.error;
   }
-  if (visitsResponse.error) {
-    console.error('[QPMS Supabase] Site visits fetch failed', visitsResponse.error);
-    throw visitsResponse.error;
+
+  const leadIds = (leadsResponse.data || []).map((lead) => lead.id);
+  let contactsByLeadId = {};
+
+  if (leadIds.length) {
+    const contactsResponse = await supabase.from('lead_contacts').select('*').in('lead_id', leadIds);
+    if (contactsResponse.error) {
+      console.warn('[QPMS Supabase] lead_contacts fetch skipped/failed', contactsResponse.error);
+    } else {
+      contactsByLeadId = (contactsResponse.data || []).reduce((grouped, contact) => {
+        grouped[contact.lead_id] = [...(grouped[contact.lead_id] || []), contact];
+        return grouped;
+      }, {});
+      console.info('[QPMS Supabase] lead_contacts fetch success', {
+        contacts: contactsResponse.data?.length || 0,
+      });
+    }
   }
+
+  const visitsResponse = await supabase
+    .from('site_visits')
+    .select('*, leads(*), site_assessments(*), site_mom(*), activity_logs(activity_message, created_at)')
+    .order('created_at', { ascending: false });
+
+  if (visitsResponse.error) {
+    console.warn('[QPMS Supabase] Site visits fetch skipped/failed', visitsResponse.error);
+  }
+
+  const leadsWithContacts = (leadsResponse.data || []).map((lead) => ({
+    ...lead,
+    lead_contacts: contactsByLeadId[lead.id] || [],
+  }));
 
   console.info('[QPMS Supabase] Workflow fetch success', {
     leads: leadsResponse.data?.length || 0,
-    siteVisits: visitsResponse.data?.length || 0,
+    siteVisits: visitsResponse.error ? 0 : visitsResponse.data?.length || 0,
   });
+  console.info('[QPMS Supabase] Fetch leads response', leadsWithContacts);
 
   return {
-    leads: (leadsResponse.data || []).map(dbLeadToAppLead),
-    siteVisits: (visitsResponse.data || []).map(dbSiteVisitToApp),
+    leads: leadsWithContacts.map(dbLeadToAppLead),
+    siteVisits: visitsResponse.error ? [] : (visitsResponse.data || []).map(dbSiteVisitToApp),
   };
 }
 
 export async function createLeadRemote(lead) {
   assertConfigured();
   const { contacts = [] } = lead;
-  const payload = appLeadToDbLead(lead);
+  const primaryContact = contacts.find((contact) => contact.isPrimary) || contacts[0] || {};
+  const basePayload = appLeadToDbLead(lead);
+  const payload = {
+    ...basePayload,
+    contact_person_name: primaryContact.name || null,
+    contact_person_designation: primaryContact.designation || null,
+    contact_number: primaryContact.phone || null,
+    email_id: primaryContact.email || null,
+  };
   console.info('[QPMS Supabase] Creating lead payload', {
     client_name: payload.client_name,
     assigned_bd_email: payload.assigned_bd_email,
     lead_stage: payload.lead_stage,
+    contact_person_name: payload.contact_person_name,
     contactCount: contacts.length,
   });
 
-  const { data, error } = await supabase.from('leads').insert(payload).select('*').single();
+  let { data, error } = await supabase.from('leads').insert(payload).select('*').single();
+  if (error && String(error.message || '').toLowerCase().includes('schema cache')) {
+    console.warn('[QPMS Supabase] Direct contact columns not available on leads; retrying lead insert without direct contact fields', error);
+    const retry = await supabase.from('leads').insert(basePayload).select('*').single();
+    data = retry.data;
+    error = retry.error;
+  }
   if (error) {
     console.error('[QPMS Supabase] Lead insert failed', error);
     throw error;
@@ -377,7 +435,11 @@ export async function createLeadRemote(lead) {
     );
     if (contactsError) {
       console.error('[QPMS Supabase] Lead contacts insert failed', contactsError);
-      throw contactsError;
+      if (!['42P01', 'PGRST205'].includes(contactsError.code)) {
+        throw contactsError;
+      }
+      console.warn('[QPMS Supabase] Lead was inserted, but lead_contacts appears unavailable. Primary contact must be stored directly in leads for this project.');
+      return data.id;
     }
     console.info('[QPMS Supabase] Lead contacts insert success', {
       leadId: data.id,
