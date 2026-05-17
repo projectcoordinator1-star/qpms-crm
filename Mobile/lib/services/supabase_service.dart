@@ -9,6 +9,10 @@ class QpmsSupabaseService {
   static const String _url = String.fromEnvironment('SUPABASE_URL');
   static const String _anonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
   static const String _apiBaseUrl = String.fromEnvironment('QPMS_API_URL');
+  static String get apiBaseUrl {
+    if (_apiBaseUrl.isNotEmpty) return _apiBaseUrl;
+    return Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+  }
 
   static bool get isConfigured => _url.isNotEmpty && _anonKey.isNotEmpty;
 
@@ -69,6 +73,18 @@ class QpmsSupabaseService {
       'mom_status': sent ? 'Sent' : 'Draft',
       'sent_at': sent ? DateTime.now().toIso8601String() : null,
     }, onConflict: 'lead_id');
+  }
+
+  static Future<void> deleteLead(String leadId) async {
+    final supabase = client;
+    if (supabase == null) return;
+
+    await logActivity(type: 'Lead Deleted', message: 'Lead Deleted');
+    await supabase.from('site_assessments').delete().eq('lead_id', leadId);
+    await supabase.from('site_visits').delete().eq('lead_id', leadId);
+    await supabase.from('lead_mom').delete().eq('lead_id', leadId);
+    await supabase.from('lead_contacts').delete().eq('lead_id', leadId);
+    await supabase.from('leads').delete().eq('id', leadId);
   }
 
   static Future<String?> createSiteVisit(Map<String, dynamic> visit) async {
@@ -150,10 +166,9 @@ class QpmsSupabaseService {
     String path,
     Map<String, dynamic> payload,
   ) async {
-    if (_apiBaseUrl.isEmpty) return;
     final client = HttpClient();
     try {
-      final uri = Uri.parse('$_apiBaseUrl$path');
+      final uri = Uri.parse('$apiBaseUrl$path');
       final request = await client.postUrl(uri);
       request.headers.contentType = ContentType.json;
       request.write(jsonEncode(payload));

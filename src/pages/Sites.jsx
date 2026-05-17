@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Camera,
@@ -14,6 +14,7 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
@@ -25,14 +26,12 @@ import { sendSiteVisitMomEmail } from '../services/mailService.js';
 
 const siteVisitColumns = [
   { key: 'company', label: 'Client / Company' },
+  { key: 'siteName', label: 'Site Name', render: (row) => row.siteName || row.location || row.company },
   { key: 'scheduledVisitDate', label: 'Scheduled Visit Date', render: (row) => formatDate(row.scheduledVisitDate) },
-  { key: 'scheduledVisitTime', label: 'Scheduled Visit Time', render: (row) => formatTime(row.scheduledVisitTime) },
   { key: 'executive', label: 'Assigned BD Executive' },
-  { key: 'momStatus', label: 'Site MOM Status', render: (row) => <StatusBadge status={row.momStatus || 'Pending'} /> },
-  { key: 'state', label: 'State' },
-  { key: 'city', label: 'City' },
-  { key: 'location', label: 'Site Location', wrap: true },
-  { key: 'status', label: 'Status', render: (row) => <StatusBadge status={row.status} /> },
+  { key: 'momStatus', label: 'MOM Status', render: (row) => <StatusBadge status={row.momStatus || 'Pending'} /> },
+  { key: 'assessmentStatus', label: 'Assessment Status', render: (row) => <StatusBadge status={row.assessmentStatus || row.status || 'Draft'} /> },
+  { key: 'currentStage', label: 'Current Stage', render: (row) => normalizeStage(row.currentStage || row.status || 'Draft') },
 ];
 
 const surveySections = [
@@ -213,6 +212,7 @@ function TextField({ label, value, onChange, multiline = false, type = 'text' })
   const fieldClass =
     'mt-2 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium leading-5 text-slate-800 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-qpms-300 focus:shadow-[0_0_0_4px_rgba(79,130,251,0.14)] dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200';
 
+
   return (
     <label className="block">
       <span className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400">{label}</span>
@@ -259,14 +259,6 @@ function formatDate(value) {
   const date = new Date(`${value}T00:00:00`);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
-function formatTime(value) {
-  if (!value) return 'Not scheduled';
-  const [hourValue, minuteValue] = value.split(':');
-  const date = new Date();
-  date.setHours(Number(hourValue), Number(minuteValue || 0), 0, 0);
-  return date.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 }
 
 function currency(value) {
@@ -550,6 +542,8 @@ function RiskCards({ risks, onChange }) {
 
 export default function Sites() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const { id: routeVisitId } = useParams();
   const {
     siteVisits,
     saveSiteSurvey,
@@ -559,7 +553,6 @@ export default function Sites() {
     uploadSiteImage,
   } = useWorkflow();
   const [query, setQuery] = useState('');
-  const [selectedVisitId, setSelectedVisitId] = useState(null);
   const [activeSectionIndex, setActiveSectionIndex] = useState(0);
   const [surveyDraft, setSurveyDraft] = useState(null);
   const [photoEvidence, setPhotoEvidence] = useState({});
@@ -567,7 +560,8 @@ export default function Sites() {
   const [siteMomDraft, setSiteMomDraft] = useState(null);
   const [showMomPreview, setShowMomPreview] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
-  const [autoSaveLabel, setAutoSaveLabel] = useState('Saved locally');
+  const [autoSaveLabel, setAutoSaveLabel] = useState('Draft saved');
+  const [draftVisitId, setDraftVisitId] = useState(null);
   usePageTitle('Site Visit & Estimation');
 
   const visibleSiteVisits = useMemo(() => {
@@ -575,7 +569,7 @@ export default function Sites() {
     return siteVisits.filter((visit) => visit.assigned_bd_email === user?.email || visit.created_by_user_id === user?.id);
   }, [siteVisits, user]);
 
-  const selectedVisit = visibleSiteVisits.find((visit) => visit.id === selectedVisitId);
+  const selectedVisit = visibleSiteVisits.find((visit) => String(visit.id) === String(routeVisitId));
   const selectedStage = normalizeStage(selectedVisit?.currentStage || 'Pre-Operational Assessment');
   const activeSection = surveySections[activeSectionIndex];
 
@@ -589,6 +583,32 @@ export default function Sites() {
     );
   }, [query, visibleSiteVisits]);
 
+  const queueKpis = useMemo(
+    () => [
+      {
+        label: 'Scheduled Visits',
+        value: visibleSiteVisits.filter((visit) => visit.status === 'Scheduled' || visit.currentStage === 'Pre-Operational Assessment').length,
+        tone: 'border-qpms-100 bg-qpms-50/80 text-qpms-700 dark:border-qpms-500/20 dark:bg-qpms-500/10 dark:text-qpms-200',
+      },
+      {
+        label: 'Assessments Drafted',
+        value: visibleSiteVisits.filter((visit) => visit.assessmentId || visit.assessmentStatus === 'Draft').length,
+        tone: 'border-emerald-100 bg-emerald-50/80 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-200',
+      },
+      {
+        label: 'MOM Pending',
+        value: visibleSiteVisits.filter((visit) => !['Created', 'Sent'].includes(visit.momStatus)).length,
+        tone: 'border-amber-100 bg-amber-50/80 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200',
+      },
+      {
+        label: 'Commercial Review Ready',
+        value: visibleSiteVisits.filter((visit) => visit.currentStage === 'Commercial Review' || visit.status === 'Commercial Review').length,
+        tone: 'border-violet-100 bg-violet-50/80 text-violet-700 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-200',
+      },
+    ],
+    [visibleSiteVisits],
+  );
+
   function showSuccess(message) {
     setSuccessMessage(message);
     window.setTimeout(() => setSuccessMessage(''), 2600);
@@ -598,23 +618,17 @@ export default function Sites() {
     setAutoSaveLabel('Unsaved changes');
   }
 
-  function openVisitDrawer(visit) {
-    setSelectedVisitId(visit.id);
-    setSurveyDraft(mergeSurvey(visit.survey));
-    setPhotoEvidence({});
-    setSiteMomDraft(visit.siteMom || null);
-    setActiveSectionIndex(0);
-    setShowMomPreview(false);
-    setAutoSaveLabel('Saved locally');
-  }
+  useEffect(() => {
+    if (!routeVisitId || !selectedVisit || !surveyDraft || autoSaveLabel !== 'Unsaved changes') return undefined;
+    const timer = window.setInterval(() => {
+      saveSiteSurvey(selectedVisit.id, surveyDraft, 'Draft', user);
+      setAutoSaveLabel('Saved just now');
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [autoSaveLabel, routeVisitId, saveSiteSurvey, selectedVisit, surveyDraft, user]);
 
-  function closeVisitDrawer() {
-    setSelectedVisitId(null);
-    setSurveyDraft(null);
-    setPhotoEvidence({});
-    setPreviewPhoto(null);
-    setSiteMomDraft(null);
-    setShowMomPreview(false);
+  function openVisitPage(visit) {
+    navigate(`/site-visit/${visit.id}`);
   }
 
   function updateSurveyDraft(key, value) {
@@ -677,18 +691,18 @@ export default function Sites() {
   }
 
   function handleSaveDraft() {
-    saveSiteSurvey(selectedVisitId, surveyDraft, 'Draft', user);
-    setAutoSaveLabel('Saved locally');
+    saveSiteSurvey(selectedVisit.id, surveyDraft, 'Draft', user);
+    setAutoSaveLabel('Saved just now');
     showSuccess('Pre-operational assessment draft saved');
   }
 
   function handleGenerateMom() {
-    saveSiteSurvey(selectedVisitId, surveyDraft, 'Draft', user);
+    saveSiteSurvey(selectedVisit.id, surveyDraft, 'Draft', user);
     const nextMom = buildSiteVisitMom(selectedVisit, surveyDraft);
     setSiteMomDraft(nextMom);
-    saveSiteVisitMom(selectedVisitId, nextMom);
+    saveSiteVisitMom(selectedVisit.id, nextMom);
     setShowMomPreview(true);
-    setAutoSaveLabel('Saved locally');
+    setAutoSaveLabel('Saved just now');
     showSuccess('Site Visit MOM generated');
   }
 
@@ -696,7 +710,7 @@ export default function Sites() {
     const nextMom = siteMomDraft || buildSiteVisitMom(selectedVisit, surveyDraft);
     try {
       await sendSiteVisitMomEmail(nextMom, selectedVisit);
-      sendSiteVisitMom(selectedVisitId, nextMom);
+      sendSiteVisitMom(selectedVisit.id, nextMom);
       setSiteMomDraft({ ...nextMom, sent: true });
       showSuccess('Site Visit MOM sent successfully');
     } catch (error) {
@@ -705,8 +719,8 @@ export default function Sites() {
   }
 
   function handleSubmitCommercialReview() {
-    saveSiteSurvey(selectedVisitId, surveyDraft, 'Submitted', user);
-    submitCommercialReview(selectedVisitId);
+    saveSiteSurvey(selectedVisit.id, surveyDraft, 'Submitted', user);
+    submitCommercialReview(selectedVisit.id);
     setAutoSaveLabel('Submitted');
     showSuccess('Submitted for Commercial Review');
   }
@@ -969,14 +983,193 @@ export default function Sites() {
     }
   }
 
+  if (routeVisitId && selectedVisit && draftVisitId !== selectedVisit.id) {
+    setDraftVisitId(selectedVisit.id);
+    setSurveyDraft(mergeSurvey(selectedVisit.survey));
+    setPhotoEvidence({});
+    setSiteMomDraft(selectedVisit.siteMom || null);
+    setActiveSectionIndex(0);
+    setShowMomPreview(false);
+    setAutoSaveLabel('Draft saved');
+  }
+
+  if (routeVisitId) {
+    if (!selectedVisit || !surveyDraft) {
+      return (
+        <div className="space-y-7">
+          <PageHeader title="Site Visit Assessment" description="Loading assessment workspace." />
+          <section className="enterprise-card p-8 text-center">
+            <ClipboardCheck className="mx-auto h-8 w-8 text-slate-400" />
+            <p className="mt-3 text-sm font-semibold text-slate-700 dark:text-slate-200">Assessment is not available</p>
+            <button type="button" onClick={() => navigate('/sites')} className="focus-ring mt-5 rounded-xl bg-qpms-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700">
+              Back to Site Visits
+            </button>
+          </section>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        <PageHeader title={selectedVisit.company} description="Pre-operational facility assessment workspace." />
+        <Toast message={successMessage} />
+
+        <div className="flex flex-wrap items-center gap-2">
+          <CompactStatusBadge label="Client" value={selectedVisit.company} />
+          <CompactStatusBadge label="Stage" value={selectedStage} tone="blue" />
+          <CompactStatusBadge label="Status" value={selectedVisit.status || 'Draft'} />
+          <CompactStatusBadge label="MOM" value={selectedVisit.momStatus || 'Pending'} tone="amber" />
+          <CompactStatusBadge label="Visit Date" value={formatDate(selectedVisit.scheduledVisitDate)} />
+        </div>
+
+        <div className={`grid gap-5 ${siteMomDraft ? 'xl:grid-cols-[260px_minmax(0,1fr)_300px]' : 'xl:grid-cols-[260px_minmax(0,1fr)]'}`}>
+          <section className="enterprise-card sticky top-24 h-fit p-4">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400">Sections</h3>
+              <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500 dark:bg-slate-800">{activeSectionIndex + 1}/{surveySections.length}</span>
+            </div>
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+              <div className="h-full rounded-full bg-qpms-600 transition-all" style={{ width: `${((activeSectionIndex + 1) / surveySections.length) * 100}%` }} />
+            </div>
+            <div className="mt-4 max-h-[68vh] space-y-1 overflow-y-auto pr-1">
+              {surveySections.map((section, index) => (
+                <button
+                  type="button"
+                  key={section}
+                  onClick={() => setActiveSectionIndex(index)}
+                  className={[
+                    'flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition',
+                    activeSectionIndex === index
+                      ? 'bg-qpms-600 text-white shadow-lg shadow-qpms-600/20'
+                      : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
+                  ].join(' ')}
+                >
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/20 text-xs">{index + 1}</span>
+                  {section}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <main className="min-w-0 space-y-5">
+            <section className="enterprise-card p-5">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2">
+                  <ClipboardCheck className="h-5 w-5 text-qpms-600" />
+                  <h3 className="text-lg font-semibold leading-6 text-slate-950 dark:text-white">{activeSection}</h3>
+                </div>
+                <StatusBadge status={autoSaveLabel === 'Unsaved changes' ? 'Draft' : 'Active'} />
+              </div>
+            </section>
+
+            {renderActiveSection()}
+
+            {siteMomDraft ? (
+              <section className="enterprise-card p-5">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-qpms-600" />
+                  <h3 className="text-[17px] font-semibold leading-6 text-slate-950 dark:text-white">Site Visit MOM Editor</h3>
+                </div>
+                <div className="mt-5 grid gap-4">
+                  <TextField label="To" value={siteMomDraft.to} onChange={(value) => updateMomDraft('to', value)} />
+                  <TextField label="CC" value={siteMomDraft.cc} onChange={(value) => updateMomDraft('cc', value)} />
+                  <TextField label="Subject" value={siteMomDraft.subject} onChange={(value) => updateMomDraft('subject', value)} />
+                  <TextField label="Summary" value={siteMomDraft.summary} onChange={(value) => updateMomDraft('summary', value)} multiline />
+                  <TextField label="Scope" value={siteMomDraft.scope} onChange={(value) => updateMomDraft('scope', value)} multiline />
+                  <TextField label="Requirements" value={siteMomDraft.requirements} onChange={(value) => updateMomDraft('requirements', value)} multiline />
+                  <TextField label="Commercial Notes" value={siteMomDraft.commercialNotes} onChange={(value) => updateMomDraft('commercialNotes', value)} multiline />
+                  <TextField label="Next Action" value={siteMomDraft.nextAction} onChange={(value) => updateMomDraft('nextAction', value)} />
+                </div>
+                {showMomPreview ? (
+                  <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700 dark:border-slate-800 dark:bg-slate-950/55 dark:text-slate-300">
+                    <p className="font-bold text-slate-950 dark:text-white">{siteMomDraft.subject}</p>
+                    <p className="mt-3 whitespace-pre-line">{siteMomDraft.summary}</p>
+                    <p className="mt-3 whitespace-pre-line">{siteMomDraft.scope}</p>
+                    <p className="mt-3 whitespace-pre-line">{siteMomDraft.requirements}</p>
+                    <p className="mt-3 whitespace-pre-line">{siteMomDraft.commercialNotes}</p>
+                    <p className="mt-3">Next action: {siteMomDraft.nextAction}</p>
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
+          </main>
+
+          {siteMomDraft ? (
+            <aside className="enterprise-card sticky top-24 h-fit p-5">
+              <h3 className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400">Workflow Summary</h3>
+              <div className="mt-4 space-y-3">
+                <SummaryPill label="Client Name" value={selectedVisit.company} />
+                <SummaryPill label="Site Visit Status" value={selectedVisit.status || 'Draft'} />
+                <SummaryPill label="MOM Draft Status" value={selectedVisit.momStatus || 'Created'} />
+                <SummaryPill label="Last Saved" value={autoSaveLabel} />
+                <SummaryPill label="Approval Status" value={selectedVisit.currentStage === 'Commercial Review' ? 'Pending Review' : 'Draft'} />
+              </div>
+              <div className="mt-5 grid gap-3">
+                <button type="button" onClick={handleGenerateMom} className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                  <FileText className="h-4 w-4" /> Generate MOM
+                </button>
+                <button type="button" onClick={handleSendMom} className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl bg-qpms-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700">
+                  <Send className="h-4 w-4" /> Send MOM
+                </button>
+                <button type="button" onClick={handleSubmitCommercialReview} className="focus-ring rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 hover:bg-slate-800 dark:bg-white dark:text-slate-950">
+                  Submit for Commercial Review
+                </button>
+              </div>
+            </aside>
+          ) : null}
+        </div>
+
+        <div className="sticky bottom-0 z-20 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-[0_-14px_40px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/95">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-sm font-semibold text-slate-500 dark:text-slate-400">{autoSaveLabel}</div>
+            <div className="flex flex-wrap justify-end gap-3">
+              <button type="button" onClick={handleSaveDraft} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                <Save className="h-4 w-4" /> Save Draft
+              </button>
+              <button type="button" onClick={handleGenerateMom} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                <FileText className="h-4 w-4" /> Generate Site Visit MOM
+              </button>
+              <button type="button" onClick={() => setShowMomPreview((value) => !value)} disabled={!siteMomDraft} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                <FileText className="h-4 w-4" /> Preview MOM
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {previewPhoto ? (
+          <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/75 p-5" onClick={() => setPreviewPhoto(null)}>
+            <div className="max-h-[88vh] max-w-5xl overflow-hidden rounded-3xl bg-white p-3 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+              <div className="mb-3 flex items-center justify-between gap-4 px-2">
+                <p className="text-sm font-bold text-slate-900">{previewPhoto.name}</p>
+                <button type="button" onClick={() => setPreviewPhoto(null)} className="rounded-xl p-2 text-slate-500 hover:bg-slate-100">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <img src={previewPhoto.url} alt={previewPhoto.name} className="max-h-[78vh] w-full rounded-2xl object-contain" />
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-7">
       <PageHeader
         title="Site Visit & Estimation"
-        description="Pre-operational facility assessment for feasibility, IFM scope, manpower, equipment, risk, and commercial viability."
+        description="Assessment queue for scheduled site visits and commercial readiness."
       />
 
       <Toast message={successMessage} />
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {queueKpis.map((item) => (
+          <div key={item.label} className={`rounded-2xl border p-5 shadow-sm ${item.tone}`}>
+            <p className="text-sm font-semibold">{item.label}</p>
+            <p className="mt-3 text-3xl font-semibold leading-none text-slate-950 dark:text-white">{item.value}</p>
+          </div>
+        ))}
+      </section>
 
       <section className="enterprise-card p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -1000,144 +1193,37 @@ export default function Sites() {
 
         <div className="mt-5">
           {filteredVisits.length ? (
-            <DataTable columns={siteVisitColumns} rows={filteredVisits} embedded onRowClick={openVisitDrawer} />
+            <DataTable
+              columns={[
+                ...siteVisitColumns,
+                {
+                  key: 'open',
+                  label: '',
+                  render: (row) => (
+                    <button type="button" onClick={(event) => { event.stopPropagation(); openVisitPage(row); }} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-qpms-600 px-3.5 py-2 text-xs font-semibold text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700">
+                      Open Assessment
+                    </button>
+                  ),
+                },
+              ]}
+              rows={filteredVisits}
+              embedded
+              onRowClick={openVisitPage}
+            />
           ) : (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-12 text-center dark:border-slate-700 dark:bg-slate-950/55">
-              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">No assessments ready yet</p>
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-10 text-center dark:border-slate-700 dark:bg-slate-950/55">
+              <ClipboardCheck className="mx-auto h-8 w-8 text-slate-400" />
+              <p className="mt-3 text-sm font-semibold text-slate-700 dark:text-slate-200">No site visits scheduled yet</p>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Send a Lead MOM with scheduled visit details to move the lead into this assessment workflow.
+                Send a Lead MOM with scheduled visit details to move leads here.
               </p>
+              <button type="button" onClick={() => navigate('/crm')} className="focus-ring mt-5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                Go to Lead Management
+              </button>
             </div>
           )}
         </div>
       </section>
-
-      {selectedVisit && surveyDraft ? (
-        <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/35 backdrop-blur-sm">
-          <aside className="h-full w-full max-w-[92rem] overflow-y-auto border-l border-slate-200 bg-white shadow-[0_30px_100px_rgba(15,23,42,0.28)] dark:border-slate-800 dark:bg-slate-900">
-            <div className="sticky top-0 z-20 border-b border-slate-100 bg-white/95 p-5 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/95">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase text-qpms-600 dark:text-qpms-300">Pre-Operational Facility Assessment</p>
-                  <h2 className="mt-1 text-2xl font-semibold leading-tight text-slate-950 dark:text-white">{selectedVisit.company}</h2>
-                  <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                    Determine operational feasibility, technical complexity, manpower, risk, and commercial viability before takeover.
-                  </p>
-                </div>
-                <button type="button" onClick={closeVisitDrawer} className="focus-ring rounded-xl border border-slate-200 p-2 text-slate-500 transition hover:text-slate-950 dark:border-slate-800 dark:text-slate-300 dark:hover:text-white" aria-label="Close site visit drawer">
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <CompactStatusBadge label="Client" value={selectedVisit.company} />
-                <CompactStatusBadge label="Stage" value={selectedStage} tone="blue" />
-                <CompactStatusBadge label="Status" value={selectedVisit.status || 'Draft'} />
-                <CompactStatusBadge label="MOM" value={selectedVisit.momStatus || 'Pending'} tone="amber" />
-                <CompactStatusBadge label="Visit Date" value={formatDate(selectedVisit.scheduledVisitDate)} />
-              </div>
-            </div>
-
-            <div className="grid gap-6 p-5 xl:grid-cols-[0.28fr_0.72fr]">
-              <section className="enterprise-card sticky top-44 h-fit p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400">Assessment Sections</h3>
-                  <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500 dark:bg-slate-800">{activeSectionIndex + 1}/{surveySections.length}</span>
-                </div>
-                <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                  <div className="h-full rounded-full bg-qpms-600 transition-all" style={{ width: `${((activeSectionIndex + 1) / surveySections.length) * 100}%` }} />
-                </div>
-                <div className="mt-4 space-y-2">
-                  {surveySections.map((section, index) => (
-                    <button
-                      type="button"
-                      key={section}
-                      onClick={() => setActiveSectionIndex(index)}
-                      className={[
-                        'flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-semibold transition',
-                        activeSectionIndex === index
-                          ? 'bg-qpms-600 text-white shadow-lg shadow-qpms-600/20'
-                          : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
-                      ].join(' ')}
-                    >
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/20 text-xs">{index + 1}</span>
-                      {section}
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              <div className="space-y-6">
-                <section className="enterprise-card p-6">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="flex items-center gap-2">
-                      <ClipboardCheck className="h-5 w-5 text-qpms-600" />
-                      <div>
-                        <h3 className="text-xl font-semibold leading-6 text-slate-950 dark:text-white">{activeSection}</h3>
-                        <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">Structured enterprise assessment controls for IFM takeover decisions.</p>
-                      </div>
-                    </div>
-                    <StatusBadge status={autoSaveLabel === 'Unsaved changes' ? 'Pending' : 'Active'} />
-                  </div>
-                </section>
-
-                {renderActiveSection()}
-
-                {siteMomDraft ? (
-                  <section className="enterprise-card p-6">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-5 w-5 text-qpms-600" />
-                      <h3 className="text-[17px] font-semibold leading-6 text-slate-950 dark:text-white">Site Visit MOM Editor</h3>
-                    </div>
-                    <div className="mt-5 grid gap-4">
-                      <TextField label="To" value={siteMomDraft.to} onChange={(value) => updateMomDraft('to', value)} />
-                      <TextField label="CC" value={siteMomDraft.cc} onChange={(value) => updateMomDraft('cc', value)} />
-                      <TextField label="Subject" value={siteMomDraft.subject} onChange={(value) => updateMomDraft('subject', value)} />
-                      <TextField label="Summary" value={siteMomDraft.summary} onChange={(value) => updateMomDraft('summary', value)} multiline />
-                      <TextField label="Scope" value={siteMomDraft.scope} onChange={(value) => updateMomDraft('scope', value)} multiline />
-                      <TextField label="Requirements" value={siteMomDraft.requirements} onChange={(value) => updateMomDraft('requirements', value)} multiline />
-                      <TextField label="Commercial Notes" value={siteMomDraft.commercialNotes} onChange={(value) => updateMomDraft('commercialNotes', value)} multiline />
-                      <TextField label="Next Action" value={siteMomDraft.nextAction} onChange={(value) => updateMomDraft('nextAction', value)} />
-                    </div>
-                    {showMomPreview ? (
-                      <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700 dark:border-slate-800 dark:bg-slate-950/55 dark:text-slate-300">
-                        <p className="font-bold text-slate-950 dark:text-white">{siteMomDraft.subject}</p>
-                        <p className="mt-3 whitespace-pre-line">{siteMomDraft.summary}</p>
-                        <p className="mt-3 whitespace-pre-line">{siteMomDraft.scope}</p>
-                        <p className="mt-3 whitespace-pre-line">{siteMomDraft.requirements}</p>
-                        <p className="mt-3 whitespace-pre-line">{siteMomDraft.commercialNotes}</p>
-                        <p className="mt-3">Next action: {siteMomDraft.nextAction}</p>
-                      </div>
-                    ) : null}
-                  </section>
-                ) : null}
-              </div>
-            </div>
-
-            <div className="sticky bottom-0 z-20 border-t border-slate-100 bg-white/95 p-4 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/95">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="text-sm font-semibold text-slate-500 dark:text-slate-400">{autoSaveLabel}</div>
-                <div className="flex flex-wrap justify-end gap-3">
-                  <button type="button" onClick={handleSaveDraft} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:text-white">
-                    <Save className="h-4 w-4" /> Save Draft
-                  </button>
-                  <button type="button" onClick={handleGenerateMom} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:text-white">
-                    <FileText className="h-4 w-4" /> Generate Site Visit MOM
-                  </button>
-                  <button type="button" onClick={() => setShowMomPreview((value) => !value)} disabled={!siteMomDraft} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:text-white">
-                    <FileText className="h-4 w-4" /> Preview MOM
-                  </button>
-                  <button type="button" onClick={handleSendMom} disabled={!siteMomDraft} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-qpms-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700 disabled:cursor-not-allowed disabled:opacity-50">
-                    <Send className="h-4 w-4" /> Send Site Visit MOM
-                  </button>
-                  <button type="button" onClick={handleSubmitCommercialReview} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 hover:bg-slate-800 dark:bg-white dark:text-slate-950">
-                    Submit for Commercial Review
-                  </button>
-                </div>
-              </div>
-            </div>
-          </aside>
-        </div>
-      ) : null}
 
       {previewPhoto ? (
         <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/75 p-5" onClick={() => setPreviewPhoto(null)}>

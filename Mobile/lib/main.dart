@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'services/supabase_service.dart';
 
 Future<void> main() async {
@@ -17,6 +18,7 @@ const Color qpms900 = Color(0xFF1F315F);
 const Color slate950 = Color(0xFF172033);
 const Color slate500 = Color(0xFF64748B);
 const Color appBackground = Color(0xFFF5F7FB);
+const String mobileSessionUserKey = 'qpms_mobile_session_user_id';
 
 const List<String> leadSources = [
   'Direct Visit',
@@ -84,6 +86,14 @@ class MockUser {
   final String password;
 }
 
+MockUser? findMockUserById(String? id) {
+  if (id == null) return null;
+  for (final user in mockUsers) {
+    if (user.id == id) return user;
+  }
+  return null;
+}
+
 class QpmsMobileApp extends StatefulWidget {
   const QpmsMobileApp({super.key});
 
@@ -93,6 +103,8 @@ class QpmsMobileApp extends StatefulWidget {
 
 class _QpmsMobileAppState extends State<QpmsMobileApp> {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  bool _sessionLoaded = false;
+  MockUser? _currentUser;
   final List<Lead> _leads = [
     Lead(
       id: 'QPMS-001',
@@ -150,7 +162,58 @@ class _QpmsMobileAppState extends State<QpmsMobileApp> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    _restoreSession();
+  }
+
+  Future<void> _restoreSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    final savedUser = findMockUserById(prefs.getString(mobileSessionUserKey));
+    if (!mounted) return;
+    setState(() {
+      _currentUser = savedUser;
+      _sessionLoaded = true;
+    });
+  }
+
+  Future<void> _handleLogin(MockUser user) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(mobileSessionUserKey, user.id);
+    if (!mounted) return;
+    setState(() => _currentUser = user);
+  }
+
+  Future<void> _handleLogout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(mobileSessionUserKey);
+    if (!mounted) return;
+    setState(() => _currentUser = null);
+    _navigatorKey.currentState?.popUntil((route) => route.isFirst);
+  }
+
+  void _deleteLead(Lead lead) {
+    setState(() => _leads.removeWhere((item) => item.id == lead.id));
+    final remoteLeadId = lead.remoteLeadId;
+    if (remoteLeadId != null) {
+      QpmsSupabaseService.deleteLead(remoteLeadId).catchError((Object error) {
+        debugPrint('Supabase lead delete failed: $error');
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (!_sessionLoaded) {
+      return MaterialApp(
+        title: 'QPMS Mobile',
+        debugShowCheckedModeBanner: false,
+        home: const Scaffold(
+          body: Center(child: CircularProgressIndicator(color: qpms600)),
+        ),
+      );
+    }
+
     return MaterialApp(
       title: 'QPMS Mobile',
       debugShowCheckedModeBanner: false,
@@ -235,19 +298,15 @@ class _QpmsMobileAppState extends State<QpmsMobileApp> {
           hintStyle: const TextStyle(color: Color(0xFF94A3B8)),
         ),
       ),
-      home: LoginScreen(
-        onLogin: (user) {
-          _navigatorKey.currentState?.pushReplacement(
-            fadeRoute(
-              FieldOfficerHomeScreen(
-                leads: _leads,
-                onAddLead: _addLead,
-                user: user,
-              ),
+      home: _currentUser == null
+          ? LoginScreen(onLogin: _handleLogin)
+          : FieldOfficerHomeScreen(
+              leads: _leads,
+              onAddLead: _addLead,
+              onDeleteLead: _deleteLead,
+              onLogout: _handleLogout,
+              user: _currentUser!,
             ),
-          );
-        },
-      ),
     );
   }
 }
@@ -619,11 +678,15 @@ class FieldOfficerHomeScreen extends StatefulWidget {
     super.key,
     required this.leads,
     required this.onAddLead,
+    required this.onDeleteLead,
+    required this.onLogout,
     required this.user,
   });
 
   final List<Lead> leads;
   final ValueChanged<Lead> onAddLead;
+  final ValueChanged<Lead> onDeleteLead;
+  final VoidCallback onLogout;
   final MockUser user;
 
   @override
@@ -667,7 +730,17 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
   Future<void> _openLeadDetail(Lead lead) async {
     await Navigator.of(
       context,
-    ).push(fadeRoute<void>(LeadDetailScreen(lead: lead)));
+    ).push(
+      fadeRoute<void>(
+        LeadDetailScreen(
+          lead: lead,
+          onDelete: () {
+            widget.onDeleteLead(lead);
+            Navigator.of(context).pop();
+          },
+        ),
+      ),
+    );
     setState(() {});
   }
 
@@ -694,6 +767,7 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
                   momPending: _momPending,
                   siteVisitPending: _siteVisitPending,
                   user: widget.user,
+                  onLogout: widget.onLogout,
                 ),
               ),
               SliverPadding(
@@ -806,12 +880,14 @@ class HomeHeader extends StatelessWidget {
     required this.momPending,
     required this.siteVisitPending,
     required this.user,
+    required this.onLogout,
   });
 
   final int totalLeads;
   final int momPending;
   final int siteVisitPending;
   final MockUser user;
+  final VoidCallback onLogout;
 
   @override
   Widget build(BuildContext context) {
@@ -840,24 +916,53 @@ class HomeHeader extends StatelessWidget {
             children: [
               const QpmsLogoBox(size: 42),
               const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.16),
+              PopupMenuButton<String>(
+                tooltip: 'Account menu',
+                onSelected: (value) {
+                  if (value == 'logout') onLogout();
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem<String>(
+                    value: 'logout',
+                    child: Row(
+                      children: [
+                        Icon(Icons.logout_rounded, color: Color(0xFFE11D48)),
+                        SizedBox(width: 10),
+                        Text('Logout'),
+                      ],
+                    ),
                   ),
-                ),
-                child: Text(
-                  user.role,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 12,
+                ],
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.16),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        user.role,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1024,7 +1129,9 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
     );
     Navigator.of(
       context,
-    ).pushReplacement(fadeRoute<void>(LeadDetailScreen(lead: lead)));
+    ).pushReplacement(
+      fadeRoute<void>(LeadDetailScreen(lead: lead, onDelete: () {})),
+    );
   }
 
   @override
@@ -1277,9 +1384,35 @@ class _ContactPersonFormCard extends StatelessWidget {
 }
 
 class LeadDetailScreen extends StatelessWidget {
-  const LeadDetailScreen({super.key, required this.lead});
+  const LeadDetailScreen({super.key, required this.lead, required this.onDelete});
 
   final Lead lead;
+  final VoidCallback onDelete;
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Lead?'),
+        content: const Text(
+          'Are you sure you want to delete this lead? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: FilledButton.styleFrom(backgroundColor: Color(0xFFE11D48)),
+            child: const Text('Delete Lead'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) onDelete();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1383,6 +1516,24 @@ class LeadDetailScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => _confirmDelete(context),
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Delete Lead'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFFE11D48),
+                minimumSize: const Size.fromHeight(50),
+                side: const BorderSide(color: Color(0xFFFECACA)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                textStyle: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
@@ -2728,9 +2879,7 @@ class UpcomingSiteVisitsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (leads.isEmpty) {
-      return const SizedBox.shrink();
-    }
+    final momPending = leads.where((lead) => lead.siteMomStatus == 'Pending').length;
 
     return PremiumCard(
       padding: const EdgeInsets.all(16),
@@ -2751,7 +2900,7 @@ class UpcomingSiteVisitsCard extends StatelessWidget {
               const SizedBox(width: 12),
               const Expanded(
                 child: Text(
-                  'Upcoming Site Visits',
+                  'Site Visit & Estimation',
                   style: TextStyle(
                     color: slate950,
                     fontSize: 17,
@@ -2759,14 +2908,66 @@ class UpcomingSiteVisitsCard extends StatelessWidget {
                   ),
                 ),
               ),
-              StatusBadge(text: 'Scheduled', color: Color(0xFF059669)),
+              StatusBadge(text: '${leads.length} Scheduled', color: qpms600),
             ],
           ),
           const SizedBox(height: 14),
-          ...leads
-              .take(3)
-              .map(
-                (lead) => Container(
+          Row(
+            children: [
+              Expanded(
+                child: SoftKpiTile(
+                  label: 'Scheduled Visits',
+                  value: '${leads.length}',
+                  color: qpms600,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SoftKpiTile(
+                  label: 'MOM Pending',
+                  value: '$momPending',
+                  color: const Color(0xFFD97706),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (leads.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: const Column(
+                children: [
+                  Icon(Icons.event_busy_outlined, color: slate500),
+                  SizedBox(height: 8),
+                  Text(
+                    'No site visits scheduled yet',
+                    style: TextStyle(
+                      color: slate950,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Send a Lead MOM with visit details to move leads here.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: slate500,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ...leads.take(3).map(
+                  (lead) => Container(
                   margin: const EdgeInsets.only(bottom: 10),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -2809,6 +3010,55 @@ class UpcomingSiteVisitsCard extends StatelessWidget {
                   ),
                 ),
               ),
+        ],
+      ),
+    );
+  }
+}
+
+class SoftKpiTile extends StatelessWidget {
+  const SoftKpiTile({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontWeight: FontWeight.w900,
+              fontSize: 20,
+            ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: slate500,
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
         ],
       ),
     );

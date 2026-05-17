@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CheckCircle2, FileText, Mail, Pencil, Plus, Save, Send, X } from 'lucide-react';
+import { CheckCircle2, Eye, FileText, Mail, Pencil, Plus, Save, Send, Trash2, X } from 'lucide-react';
 import DataTable from '../components/DataTable.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
@@ -15,16 +15,6 @@ function formatContactSummary(lead) {
   const remaining = Math.max(contacts.length - 1, 0);
   return remaining ? `${primary.name} + ${remaining} more` : primary.name;
 }
-
-const leadColumns = [
-  { key: 'leadId', label: 'Lead ID' },
-  { key: 'company', label: 'Company Name' },
-  { key: 'contact', label: 'Primary Contact', render: (row) => formatContactSummary(row) },
-  { key: 'source', label: 'Lead Source' },
-  { key: 'executive', label: 'Assigned BD Executive' },
-  { key: 'stage', label: 'Lead Stage' },
-  { key: 'status', label: 'Status', render: (row) => <StatusBadge status={row.status} /> },
-];
 
 const initialLeadForm = {
   company: '',
@@ -274,7 +264,7 @@ function Toast({ message }) {
 }
 
 export default function CRM() {
-  const { leads, addLead, updateLead, saveLeadMomDraft, sendLeadMom, workflowError } = useWorkflow();
+  const { leads, addLead, updateLead, deleteLead, saveLeadMomDraft, sendLeadMom, workflowError } = useWorkflow();
   const { user } = useAuth();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [leadForm, setLeadForm] = useState(initialLeadForm);
@@ -285,6 +275,7 @@ export default function CRM() {
   const [momDraft, setMomDraft] = useState(initialMomDraft);
   const [showMomPreview, setShowMomPreview] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [leadPendingDelete, setLeadPendingDelete] = useState(null);
   usePageTitle('Lead Management');
 
   const visibleLeads = useMemo(() => {
@@ -293,6 +284,36 @@ export default function CRM() {
   }, [leads, user]);
 
   const selectedLead = visibleLeads.find((lead) => lead.id === selectedLeadId);
+
+  const leadColumns = useMemo(
+    () => [
+      { key: 'leadId', label: 'Lead ID' },
+      { key: 'company', label: 'Company Name' },
+      { key: 'contact', label: 'Primary Contact', render: (row) => formatContactSummary(row) },
+      { key: 'source', label: 'Lead Source' },
+      { key: 'executive', label: 'Assigned BD Executive' },
+      { key: 'stage', label: 'Lead Stage' },
+      { key: 'status', label: 'Status', render: (row) => <StatusBadge status={row.status} /> },
+      {
+        key: 'actions',
+        label: 'Actions',
+        render: (row) => (
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={(event) => { event.stopPropagation(); openLeadDrawer(row); }} className="focus-ring rounded-lg border border-slate-200 p-2 text-slate-500 transition hover:text-qpms-700 dark:border-slate-800 dark:text-slate-300" aria-label={`Open ${row.company}`}>
+              <Eye className="h-4 w-4" />
+            </button>
+            <button type="button" onClick={(event) => { event.stopPropagation(); openLeadDrawer(row); setIsEditingLead(true); }} className="focus-ring rounded-lg border border-slate-200 p-2 text-slate-500 transition hover:text-slate-950 dark:border-slate-800 dark:text-slate-300" aria-label={`Edit ${row.company}`}>
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button type="button" onClick={(event) => { event.stopPropagation(); setLeadPendingDelete(row); }} className="focus-ring rounded-lg border border-rose-200 p-2 text-rose-600 transition hover:bg-rose-50 dark:border-rose-500/30 dark:hover:bg-rose-500/10" aria-label={`Delete ${row.company}`}>
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+        ),
+      },
+    ],
+    [],
+  );
 
   const stats = useMemo(
     () => [
@@ -391,6 +412,18 @@ export default function CRM() {
       showSuccess('Lead MOM sent and Site Visit scheduled successfully');
     } catch (error) {
       showSuccess(`Email failed: ${error.response?.data?.message || error.message}`);
+    }
+  }
+
+  async function handleConfirmDeleteLead() {
+    if (!leadPendingDelete) return;
+    try {
+      await deleteLead(leadPendingDelete.id, user);
+      if (selectedLeadId === leadPendingDelete.id) closeLeadDrawer();
+      setLeadPendingDelete(null);
+      showSuccess('Lead deleted successfully');
+    } catch (error) {
+      showSuccess(`Lead delete failed: ${error.message}`);
     }
   }
 
@@ -626,6 +659,32 @@ export default function CRM() {
               ) : null}
             </div>
           </aside>
+        </div>
+      ) : null}
+
+      {leadPendingDelete ? (
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/45 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.28)] dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-start gap-3">
+              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-500/15">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-slate-950 dark:text-white">Delete Lead?</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
+                  Are you sure you want to delete this lead? This action cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" onClick={() => setLeadPendingDelete(null)} className="focus-ring rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                Cancel
+              </button>
+              <button type="button" onClick={handleConfirmDeleteLead} className="focus-ring rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-rose-600/20 transition hover:bg-rose-700">
+                Delete Lead
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </div>

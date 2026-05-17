@@ -7,7 +7,7 @@ dotenv.config({ path: './backend/.env' });
 
 const app = express();
 const port = Number(process.env.PORT || 4000);
-const frontendOrigin = process.env.FRONTEND_ORIGIN || true;
+const frontendOrigin = process.env.FRONTEND_ORIGIN || 'http://localhost:5173';
 
 app.use(cors({ origin: frontendOrigin }));
 app.use(express.json({ limit: '10mb' }));
@@ -94,6 +94,13 @@ function buildDefaultHtml(payload, type) {
 function routeSendMom(type) {
   return async (request, response) => {
     try {
+      if (type === 'lead') {
+        console.log('[QPMS Mail API] /send-lead-mom hit', {
+          to: request.body?.to || request.body?.toEmail || request.body?.to_email || '',
+          subject: request.body?.subject || '',
+        });
+      }
+
       const result = await sendMomEmail(request.body, type);
       response.json({ ok: true, ...result });
     } catch (error) {
@@ -101,6 +108,10 @@ function routeSendMom(type) {
     }
   };
 }
+
+app.get('/', (request, response) => {
+  response.json({ success: true, message: 'QPMS Mail API running' });
+});
 
 app.get('/health', (request, response) => {
   response.json({ ok: true, service: 'qpms-mail-api' });

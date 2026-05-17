@@ -71,7 +71,7 @@ export function dbLeadToAppLead(row) {
     phone: primary.phone || '',
     email: primary.email || '',
     mom: row.lead_mom?.[0] ? dbLeadMomToApp(row.lead_mom[0]) : null,
-    activity: (row.activity_logs || []).map((log) => log.activity_message),
+    activity: (row.activity_logs || []).map((log) => log.activity_message || log.message || log.activity_type).filter(Boolean),
   };
 }
 
@@ -126,18 +126,20 @@ export function dbSiteVisitToApp(row) {
     created_by_user_id: lead.created_by_user_id,
     created_by_name: lead.created_by_name || row.assigned_bd_executive,
     location: lead.site_location || row.site_name,
+    siteName: row.site_name || lead.site_location || row.client_name,
     state: lead.state || '',
     city: lead.city || '',
     scheduledVisitDate: row.scheduled_visit_date || '',
     scheduledVisitTime: row.scheduled_visit_time || '',
     momStatus: row.mom_status,
     status: row.status,
+    assessmentStatus: assessment?.assessment_status || 'Draft',
     currentStage: row.current_stage,
     createdFrom: 'Supabase',
     survey: assessment ? dbAssessmentToSurvey(assessment) : undefined,
     assessmentId: assessment?.id,
     siteMom: row.site_mom?.[0] ? dbSiteMomToApp(row.site_mom[0]) : null,
-    activity: (row.activity_logs || []).map((log) => log.activity_message),
+    activity: (row.activity_logs || []).map((log) => log.activity_message || log.message || log.activity_type).filter(Boolean),
   };
 }
 
@@ -361,7 +363,7 @@ export async function fetchWorkflowData() {
 
   const visitsResponse = await supabase
     .from('site_visits')
-    .select('*, leads(*), site_assessments(*), site_mom(*), activity_logs(activity_message, created_at)')
+    .select('*, leads(*), site_assessments(*), site_mom(*), activity_logs(*)')
     .order('created_at', { ascending: false });
 
   if (visitsResponse.error) {
@@ -472,6 +474,19 @@ export async function updateLeadRemote(leadId, lead) {
   }
 
   await logActivity({ leadId, type: 'Lead Updated', message: 'Lead Updated', createdBy: lead.created_by_name });
+}
+
+export async function deleteLeadRemote(leadId, createdBy) {
+  assertConfigured();
+
+  await logActivity({ type: 'Lead Deleted', message: 'Lead Deleted', createdBy });
+  await supabase.from('site_assessments').delete().eq('lead_id', leadId);
+  await supabase.from('site_visits').delete().eq('lead_id', leadId);
+  await supabase.from('lead_mom').delete().eq('lead_id', leadId);
+  await supabase.from('lead_contacts').delete().eq('lead_id', leadId);
+
+  const { error } = await supabase.from('leads').delete().eq('id', leadId);
+  if (error) throw error;
 }
 
 export async function saveLeadMomRemote(leadId, mom, status = 'Draft') {

@@ -4,6 +4,7 @@ import { bdExecutives, getExecutiveByName } from '../data/mockUsers.js';
 import {
   createLeadRemote,
   createSiteVisitRemote,
+  deleteLeadRemote,
   fetchWorkflowData,
   isRemoteWorkflowEnabled,
   saveLeadMomRemote,
@@ -130,6 +131,7 @@ function buildSiteVisitFromLead(lead) {
     created_by_user_id: lead.created_by_user_id,
     created_by_name: lead.created_by_name,
     location: lead.location,
+    siteName: lead.location || lead.company,
     state: lead.state,
     city: lead.city,
     scheduledVisitDate: lead.scheduledVisitDate || '',
@@ -277,6 +279,27 @@ export function WorkflowProvider({ children }) {
     return nextLead;
   }
 
+  async function deleteLead(leadId, user) {
+    const leadToDelete = leads.find((lead) => lead.id === leadId);
+    setLeads((current) => current.filter((lead) => lead.id !== leadId));
+    setSiteVisits((current) => current.filter((visit) => visit.leadId !== leadId));
+
+    if (!isRemoteWorkflowEnabled()) return;
+
+    setBackendStatus('saving');
+    setWorkflowError('');
+    try {
+      await deleteLeadRemote(leadId, user?.name || user?.email || leadToDelete?.created_by_name);
+      await refreshWorkflowData();
+    } catch (error) {
+      console.error('[QPMS Workflow] Lead Supabase delete failed', error);
+      setBackendStatus('error');
+      setWorkflowError(`Lead delete failed: ${error.message}`);
+      if (leadToDelete) setLeads((current) => upsertById(current, leadToDelete));
+      throw error;
+    }
+  }
+
   function updateLead(leadId, updater) {
     setLeads((current) =>
       current.map((lead) => {
@@ -339,10 +362,12 @@ export function WorkflowProvider({ children }) {
             updateLeadRemote(leadId, nextLead),
             saveLeadMomRemote(leadId, mom, 'Sent'),
             createSiteVisitRemote(nextLead),
-          ]).catch((error) => {
-            console.warn('Lead MOM/Site Visit Supabase save failed:', error.message);
-            setBackendStatus('fallback');
-          });
+          ])
+            .then(() => refreshWorkflowData())
+            .catch((error) => {
+              console.warn('Lead MOM/Site Visit Supabase save failed:', error.message);
+              setBackendStatus('fallback');
+            });
         }
         return nextLead;
       }),
@@ -442,6 +467,7 @@ export function WorkflowProvider({ children }) {
     workflowError,
     refreshWorkflowData,
     addLead,
+    deleteLead,
     updateLead,
     addLeadActivity,
     saveLeadMomDraft,
