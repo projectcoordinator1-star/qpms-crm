@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Camera,
-  CheckCircle2,
   ClipboardCheck,
   Eye,
   FileText,
@@ -18,6 +17,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import DataTable from '../components/DataTable.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
+import Toast from '../components/Toast.jsx';
 import { useAuth } from '../context/auth-context.js';
 import { useWorkflow } from '../context/workflow-context.js';
 import { canViewBdTeam } from '../data/mockUsers.js';
@@ -244,16 +244,6 @@ function SelectField({ label, value, onChange, options }) {
   );
 }
 
-function Toast({ message }) {
-  if (!message) return null;
-  return (
-    <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-300">
-      <CheckCircle2 className="h-5 w-5" />
-      {message}
-    </div>
-  );
-}
-
 function formatDate(value) {
   if (!value) return 'Not scheduled';
   const date = new Date(`${value}T00:00:00`);
@@ -320,6 +310,15 @@ function CompactStatusBadge({ label, value, tone = 'slate' }) {
       <span className="text-slate-500 dark:text-slate-400">{label}:</span>
       <span className="text-current">{value}</span>
     </span>
+  );
+}
+
+function ButtonContent({ loading, icon: Icon, children }) {
+  return (
+    <>
+      {loading ? <span className="button-spinner" aria-hidden="true" /> : Icon ? <Icon className="h-4 w-4" /> : null}
+      <span>{children}</span>
+    </>
   );
 }
 
@@ -559,9 +558,10 @@ export default function Sites() {
   const [previewPhoto, setPreviewPhoto] = useState(null);
   const [siteMomDraft, setSiteMomDraft] = useState(null);
   const [showMomPreview, setShowMomPreview] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
+  const [toast, setToast] = useState(null);
   const [autoSaveLabel, setAutoSaveLabel] = useState('Draft saved');
   const [draftVisitId, setDraftVisitId] = useState(null);
+  const [pendingAction, setPendingAction] = useState('');
   usePageTitle('Site Visit & Estimation');
 
   const visibleSiteVisits = useMemo(() => {
@@ -609,9 +609,9 @@ export default function Sites() {
     [visibleSiteVisits],
   );
 
-  function showSuccess(message) {
-    setSuccessMessage(message);
-    window.setTimeout(() => setSuccessMessage(''), 2600);
+  function showToast(message, type = 'success') {
+    setToast({ message, type });
+    window.setTimeout(() => setToast(null), 3000);
   }
 
   function markChanged() {
@@ -677,7 +677,7 @@ export default function Sites() {
       const uploadedPhotos = uploaded.filter(Boolean);
       if (uploadedPhotos.length) {
         setPhotoEvidence((current) => ({ ...current, [slot]: [...(current[slot] || []), ...uploadedPhotos] }));
-        showSuccess('Site images uploaded to Supabase');
+        showToast('Site images uploaded to Supabase', 'success');
       }
     }
   }
@@ -690,39 +690,72 @@ export default function Sites() {
     setSiteMomDraft((current) => ({ ...current, [key]: value }));
   }
 
-  function handleSaveDraft() {
-    saveSiteSurvey(selectedVisit.id, surveyDraft, 'Draft', user);
-    setAutoSaveLabel('Saved just now');
-    showSuccess('Pre-operational assessment draft saved');
+  async function handleSaveDraft() {
+    setPendingAction('saveSiteDraft');
+    setAutoSaveLabel('Saving...');
+    showToast('Saving...', 'info');
+    try {
+      await Promise.resolve(saveSiteSurvey(selectedVisit.id, surveyDraft, 'Draft', user));
+      setAutoSaveLabel('Saved successfully');
+      showToast('Saved successfully', 'success');
+    } catch (error) {
+      setAutoSaveLabel('Failed to save');
+      showToast(`Failed to save: ${error.message}`, 'error');
+    } finally {
+      setPendingAction('');
+    }
   }
 
-  function handleGenerateMom() {
-    saveSiteSurvey(selectedVisit.id, surveyDraft, 'Draft', user);
-    const nextMom = buildSiteVisitMom(selectedVisit, surveyDraft);
-    setSiteMomDraft(nextMom);
-    saveSiteVisitMom(selectedVisit.id, nextMom);
-    setShowMomPreview(true);
-    setAutoSaveLabel('Saved just now');
-    showSuccess('Site Visit MOM generated');
+  async function handleGenerateMom() {
+    setPendingAction('generateSiteMom');
+    setAutoSaveLabel('Saving...');
+    showToast('Saving...', 'info');
+    try {
+      await Promise.resolve(saveSiteSurvey(selectedVisit.id, surveyDraft, 'Draft', user));
+      const nextMom = buildSiteVisitMom(selectedVisit, surveyDraft);
+      setSiteMomDraft(nextMom);
+      await Promise.resolve(saveSiteVisitMom(selectedVisit.id, nextMom));
+      setShowMomPreview(true);
+      setAutoSaveLabel('Saved successfully');
+      showToast('Site Visit MOM generated', 'success');
+    } catch (error) {
+      setAutoSaveLabel('Failed to save');
+      showToast(`Failed to save: ${error.message}`, 'error');
+    } finally {
+      setPendingAction('');
+    }
   }
 
   async function handleSendMom() {
     const nextMom = siteMomDraft || buildSiteVisitMom(selectedVisit, surveyDraft);
     try {
+      setPendingAction('sendSiteMom');
       await sendSiteVisitMomEmail(nextMom, selectedVisit);
       sendSiteVisitMom(selectedVisit.id, nextMom);
       setSiteMomDraft({ ...nextMom, sent: true });
-      showSuccess('Site Visit MOM sent successfully');
+      showToast('Site Visit MOM sent successfully', 'success');
     } catch (error) {
-      showSuccess(`Email failed: ${error.response?.data?.message || error.message}`);
+      showToast(`Email failed: ${error.response?.data?.message || error.message}`, 'error');
+    } finally {
+      setPendingAction('');
     }
   }
 
-  function handleSubmitCommercialReview() {
-    saveSiteSurvey(selectedVisit.id, surveyDraft, 'Submitted', user);
-    submitCommercialReview(selectedVisit.id);
-    setAutoSaveLabel('Submitted');
-    showSuccess('Submitted for Commercial Review');
+  async function handleSubmitCommercialReview() {
+    setPendingAction('submitReview');
+    setAutoSaveLabel('Saving...');
+    showToast('Saving...', 'info');
+    try {
+      await Promise.resolve(saveSiteSurvey(selectedVisit.id, surveyDraft, 'Submitted', user));
+      await Promise.resolve(submitCommercialReview(selectedVisit.id));
+      setAutoSaveLabel('Submitted');
+      showToast('Submitted for Commercial Review', 'success');
+    } catch (error) {
+      setAutoSaveLabel('Failed to save');
+      showToast(`Failed to submit: ${error.message}`, 'error');
+    } finally {
+      setPendingAction('');
+    }
   }
 
   function renderActiveSection() {
@@ -1012,7 +1045,7 @@ export default function Sites() {
     return (
       <div className="space-y-6">
         <PageHeader title={selectedVisit.company} description="Pre-operational facility assessment workspace." />
-        <Toast message={successMessage} />
+      <Toast message={toast?.message} type={toast?.type} />
 
         <div className="flex flex-wrap items-center gap-2">
           <CompactStatusBadge label="Client" value={selectedVisit.company} />
@@ -1105,14 +1138,14 @@ export default function Sites() {
                 <SummaryPill label="Approval Status" value={selectedVisit.currentStage === 'Commercial Review' ? 'Pending Review' : 'Draft'} />
               </div>
               <div className="mt-5 grid gap-3">
-                <button type="button" onClick={handleGenerateMom} className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
-                  <FileText className="h-4 w-4" /> Generate MOM
+                <button type="button" onClick={handleGenerateMom} disabled={pendingAction === 'generateSiteMom'} className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                  <ButtonContent loading={pendingAction === 'generateSiteMom'} icon={FileText}>Generate MOM</ButtonContent>
                 </button>
-                <button type="button" onClick={handleSendMom} className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl bg-qpms-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700">
-                  <Send className="h-4 w-4" /> Send MOM
+                <button type="button" onClick={handleSendMom} disabled={pendingAction === 'sendSiteMom'} className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl bg-qpms-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700">
+                  <ButtonContent loading={pendingAction === 'sendSiteMom'} icon={Send}>Send MOM</ButtonContent>
                 </button>
-                <button type="button" onClick={handleSubmitCommercialReview} className="focus-ring rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 hover:bg-slate-800 dark:bg-white dark:text-slate-950">
-                  Submit for Commercial Review
+                <button type="button" onClick={handleSubmitCommercialReview} disabled={pendingAction === 'submitReview'} className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 hover:bg-slate-800 dark:bg-white dark:text-slate-950">
+                  <ButtonContent loading={pendingAction === 'submitReview'}>Submit for Commercial Review</ButtonContent>
                 </button>
               </div>
             </aside>
@@ -1123,11 +1156,11 @@ export default function Sites() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="text-sm font-semibold text-slate-500 dark:text-slate-400">{autoSaveLabel}</div>
             <div className="flex flex-wrap justify-end gap-3">
-              <button type="button" onClick={handleSaveDraft} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
-                <Save className="h-4 w-4" /> Save Draft
+              <button type="button" onClick={handleSaveDraft} disabled={pendingAction === 'saveSiteDraft'} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                <ButtonContent loading={pendingAction === 'saveSiteDraft'} icon={Save}>Save Draft</ButtonContent>
               </button>
-              <button type="button" onClick={handleGenerateMom} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
-                <FileText className="h-4 w-4" /> Generate Site Visit MOM
+              <button type="button" onClick={handleGenerateMom} disabled={pendingAction === 'generateSiteMom'} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                <ButtonContent loading={pendingAction === 'generateSiteMom'} icon={FileText}>Generate Site Visit MOM</ButtonContent>
               </button>
               <button type="button" onClick={() => setShowMomPreview((value) => !value)} disabled={!siteMomDraft} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
                 <FileText className="h-4 w-4" /> Preview MOM
@@ -1160,7 +1193,7 @@ export default function Sites() {
         description="Assessment queue for scheduled site visits and commercial readiness."
       />
 
-      <Toast message={successMessage} />
+        <Toast message={toast?.message} type={toast?.type} />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {queueKpis.map((item) => (

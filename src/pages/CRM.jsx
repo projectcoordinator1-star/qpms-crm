@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, Eye, FileText, Mail, Pencil, Plus, Save, Send, Trash2, X } from 'lucide-react';
 import DataTable from '../components/DataTable.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
+import Toast from '../components/Toast.jsx';
 import { useWorkflow } from '../context/workflow-context.js';
 import { useAuth } from '../context/auth-context.js';
 import { bdExecutives, canViewBdTeam } from '../data/mockUsers.js';
@@ -72,9 +73,18 @@ function getPrimaryContact(lead) {
   return contacts.find((contact) => contact.isPrimary) || contacts[0];
 }
 
-function TextField({ label, value, onChange, type = 'text', required = false, multiline = false, disabled = false }) {
+function ButtonContent({ loading, icon: Icon, children }) {
+  return (
+    <>
+      {loading ? <span className="button-spinner" aria-hidden="true" /> : Icon ? <Icon className="h-4 w-4" /> : null}
+      <span>{children}</span>
+    </>
+  );
+}
+
+function TextField({ label, value, onChange, type = 'text', required = false, multiline = false, disabled = false, error = '', inputRef }) {
   const className =
-    'mt-2 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-qpms-300 focus:shadow-[0_0_0_4px_rgba(79,130,251,0.14)] disabled:bg-slate-50 disabled:text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:disabled:bg-slate-900';
+    `mt-2 w-full rounded-xl border bg-white px-3.5 py-3 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-qpms-300 focus:shadow-[0_0_0_4px_rgba(79,130,251,0.14)] disabled:bg-slate-50 disabled:text-slate-500 dark:bg-slate-950 dark:text-slate-200 dark:disabled:bg-slate-900 ${error ? 'border-rose-300 shadow-[0_0_0_3px_rgba(225,29,72,0.10)] dark:border-rose-500/60' : 'border-slate-200 dark:border-slate-800'}`;
 
   return (
     <label className="block">
@@ -86,6 +96,8 @@ function TextField({ label, value, onChange, type = 'text', required = false, mu
           onChange={(event) => onChange(event.target.value)}
           required={required}
           disabled={disabled}
+          ref={inputRef}
+          aria-invalid={Boolean(error)}
         />
       ) : (
         <input
@@ -95,22 +107,26 @@ function TextField({ label, value, onChange, type = 'text', required = false, mu
           onChange={(event) => onChange(event.target.value)}
           required={required}
           disabled={disabled}
+          ref={inputRef}
+          aria-invalid={Boolean(error)}
         />
       )}
+      {error ? <p className="field-error">{error}</p> : null}
     </label>
   );
 }
 
-function SelectField({ label, value, onChange, options, required = false, disabled = false }) {
+function SelectField({ label, value, onChange, options, required = false, disabled = false, error = '' }) {
   return (
     <label className="block">
       <span className="text-sm font-semibold leading-5 text-slate-700 dark:text-slate-300">{label}</span>
       <select
-        className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-qpms-300 focus:shadow-[0_0_0_4px_rgba(79,130,251,0.14)] disabled:bg-slate-50 disabled:text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 dark:disabled:bg-slate-900"
+        className={`mt-2 w-full rounded-xl border bg-white px-3.5 py-3 text-sm font-medium text-slate-800 outline-none transition focus:border-qpms-300 focus:shadow-[0_0_0_4px_rgba(79,130,251,0.14)] disabled:bg-slate-50 disabled:text-slate-500 dark:bg-slate-950 dark:text-slate-200 dark:disabled:bg-slate-900 ${error ? 'border-rose-300 shadow-[0_0_0_3px_rgba(225,29,72,0.10)] dark:border-rose-500/60' : 'border-slate-200 dark:border-slate-800'}`}
         value={value || ''}
         onChange={(event) => onChange(event.target.value)}
         required={required}
         disabled={disabled}
+        aria-invalid={Boolean(error)}
       >
         <option value="">Select {label.toLowerCase()}</option>
         {options.map((option) => (
@@ -119,6 +135,7 @@ function SelectField({ label, value, onChange, options, required = false, disabl
           </option>
         ))}
       </select>
+      {error ? <p className="field-error">{error}</p> : null}
     </label>
   );
 }
@@ -132,7 +149,7 @@ function FormSection({ title, children }) {
   );
 }
 
-function ContactPersonsEditor({ contacts, onChange, disabled = false }) {
+function ContactPersonsEditor({ contacts, onChange, disabled = false, errors = {} }) {
   const normalizedContacts = normalizeContacts(contacts);
 
   function updateContact(contactId, patch) {
@@ -181,10 +198,10 @@ function ContactPersonsEditor({ contacts, onChange, disabled = false }) {
               ) : null}
             </div>
             <div className="grid gap-4 md:grid-cols-2">
-              <TextField label="Contact Person Name" value={contact.name} onChange={(value) => updateContact(contact.id, { name: value })} required disabled={disabled} />
+              <TextField label="Contact Person Name" value={contact.name} onChange={(value) => updateContact(contact.id, { name: value })} required disabled={disabled} error={errors[`${contact.id}.name`]} />
               <TextField label="Designation" value={contact.designation} onChange={(value) => updateContact(contact.id, { designation: value })} disabled={disabled} />
-              <TextField label="Contact Number" type="tel" value={contact.phone} onChange={(value) => updateContact(contact.id, { phone: value })} required disabled={disabled} />
-              <TextField label="Email ID" type="email" value={contact.email} onChange={(value) => updateContact(contact.id, { email: value })} disabled={disabled} />
+              <TextField label="Contact Number" type="tel" value={contact.phone} onChange={(value) => updateContact(contact.id, { phone: value })} required disabled={disabled} error={errors[`${contact.id}.phone`]} />
+              <TextField label="Email ID" type="email" value={contact.email} onChange={(value) => updateContact(contact.id, { email: value })} disabled={disabled} error={errors[`${contact.id}.email`]} />
             </div>
             <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2 dark:bg-slate-900">
               <span className="text-sm font-semibold text-slate-600 dark:text-slate-300">Is Primary Contact?</span>
@@ -252,17 +269,6 @@ function createLeadMomDraft(lead) {
   };
 }
 
-function Toast({ message }) {
-  if (!message) return null;
-
-  return (
-    <div className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-300">
-      <CheckCircle2 className="h-5 w-5" />
-      {message}
-    </div>
-  );
-}
-
 export default function CRM() {
   const { leads, addLead, updateLead, deleteLead, saveLeadMomDraft, sendLeadMom, workflowError } = useWorkflow();
   const { user } = useAuth();
@@ -274,8 +280,13 @@ export default function CRM() {
   const [isMomOpen, setIsMomOpen] = useState(false);
   const [momDraft, setMomDraft] = useState(initialMomDraft);
   const [showMomPreview, setShowMomPreview] = useState(false);
-  const [successMessage, setSuccessMessage] = useState('');
+  const [toast, setToast] = useState(null);
   const [leadPendingDelete, setLeadPendingDelete] = useState(null);
+  const [leadFormErrors, setLeadFormErrors] = useState({});
+  const [pendingAction, setPendingAction] = useState('');
+  const [highlightedLeadId, setHighlightedLeadId] = useState(null);
+  const momSectionRef = useRef(null);
+  const momFirstFieldRef = useRef(null);
   usePageTitle('Lead Management');
 
   const visibleLeads = useMemo(() => {
@@ -325,13 +336,50 @@ export default function CRM() {
     [visibleLeads],
   );
 
-  function showSuccess(message) {
-    setSuccessMessage(message);
-    window.setTimeout(() => setSuccessMessage(''), 2600);
+  useEffect(() => {
+    if (!isFormOpen && !selectedLead && !leadPendingDelete) return undefined;
+    function handleEscape(event) {
+      if (event.key !== 'Escape') return;
+      if (leadPendingDelete) {
+        setLeadPendingDelete(null);
+      } else if (isFormOpen) {
+        closeLeadForm();
+      } else if (selectedLead) {
+        closeLeadDrawer();
+      }
+    }
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isFormOpen, leadPendingDelete, selectedLead]);
+
+  useEffect(() => {
+    if (!isMomOpen) return;
+    window.setTimeout(() => {
+      momSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      momFirstFieldRef.current?.focus();
+    }, 80);
+  }, [isMomOpen]);
+
+  useEffect(() => {
+    if (!highlightedLeadId) return undefined;
+    const row = document.querySelector(`[data-row-id="${window.CSS?.escape ? window.CSS.escape(String(highlightedLeadId)) : highlightedLeadId}"]`);
+    row?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    row?.focus();
+    const timer = window.setTimeout(() => setHighlightedLeadId(null), 2400);
+    return () => window.clearTimeout(timer);
+  }, [highlightedLeadId, visibleLeads]);
+
+  function showToast(message, type = 'success') {
+    setToast({ message, type });
+    window.setTimeout(() => setToast(null), 3000);
   }
 
   function updateLeadForm(key, value) {
     setLeadForm((current) => ({ ...current, [key]: value }));
+    setLeadFormErrors((current) => {
+      if (key !== 'contacts') return { ...current, [key]: '' };
+      return Object.fromEntries(Object.entries(current).filter(([field]) => !field.includes('.')));
+    });
   }
 
   function updateDraftLead(key, value) {
@@ -345,6 +393,22 @@ export default function CRM() {
   function closeLeadForm() {
     setIsFormOpen(false);
     setLeadForm(initialLeadForm);
+    setLeadFormErrors({});
+  }
+
+  function validateLeadForm() {
+    const errors = {};
+    ['company', 'industry', 'location', 'state', 'city', 'source', 'priority'].forEach((key) => {
+      if (!String(leadForm[key] || '').trim()) errors[key] = 'Required';
+    });
+
+    normalizeContacts(leadForm.contacts).forEach((contact) => {
+      if (!contact.name.trim()) errors[`${contact.id}.name`] = 'Contact name is required';
+      if (!contact.phone.trim()) errors[`${contact.id}.phone`] = 'Contact number is required';
+      if (contact.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email)) errors[`${contact.id}.email`] = 'Enter a valid email';
+    });
+
+    return errors;
   }
 
   function openLeadDrawer(lead) {
@@ -367,23 +431,29 @@ export default function CRM() {
   async function handleCreateLead(event) {
     event.preventDefault();
     const contacts = normalizeContacts(leadForm.contacts);
-    if (!contacts.length || contacts.some((contact) => !contact.name.trim() || !contact.phone.trim())) {
-      showSuccess('At least one contact person with name and phone is required');
+    const validationErrors = validateLeadForm();
+    if (Object.keys(validationErrors).length) {
+      setLeadFormErrors(validationErrors);
+      showToast('Please fix the highlighted lead fields', 'warning');
       return;
     }
     try {
-      await addLead({ ...leadForm, contacts }, user);
-      showSuccess('Lead created successfully');
+      setPendingAction('createLead');
+      const createdLead = await addLead({ ...leadForm, contacts }, user);
+      showToast('Lead created successfully', 'success');
       closeLeadForm();
+      setHighlightedLeadId(createdLead.id);
     } catch (error) {
-      showSuccess(`Lead create failed: ${error.message}`);
+      showToast(`Lead create failed: ${error.message}`, 'error');
+    } finally {
+      setPendingAction('');
     }
   }
 
   function saveLeadChanges() {
     updateLead(selectedLeadId, draftLead);
     setIsEditingLead(false);
-    showSuccess('Lead updated successfully');
+    showToast('Lead updated successfully', 'success');
   }
 
   function openMomEditor() {
@@ -393,37 +463,51 @@ export default function CRM() {
     setShowMomPreview(false);
   }
 
-  function handleSaveMomDraft() {
-    saveLeadMomDraft(selectedLeadId, momDraft);
-    showSuccess('Lead MOM draft saved');
+  async function handleSaveMomDraft() {
+    setPendingAction('saveMomDraft');
+    try {
+      showToast('Saving...', 'info');
+      await Promise.resolve(saveLeadMomDraft(selectedLeadId, momDraft));
+      showToast('Saved successfully', 'success');
+    } catch (error) {
+      showToast(`Failed to save: ${error.message}`, 'error');
+    } finally {
+      setPendingAction('');
+    }
   }
 
   async function handleSendMom() {
     if (!momDraft.scheduledVisitDate || !momDraft.scheduledVisitTime) {
-      showSuccess('Add scheduled site visit date and time before sending MOM');
+      showToast('Add scheduled site visit date and time before sending MOM', 'warning');
       return;
     }
 
     try {
+      setPendingAction('sendMom');
       await sendLeadMomEmail(momDraft, selectedLead);
       sendLeadMom(selectedLeadId, momDraft);
       setIsMomOpen(false);
       setShowMomPreview(false);
-      showSuccess('Lead MOM sent and Site Visit scheduled successfully');
+      showToast('Lead MOM sent and Site Visit scheduled successfully', 'success');
     } catch (error) {
-      showSuccess(`Email failed: ${error.response?.data?.message || error.message}`);
+      showToast(`Email failed: ${error.response?.data?.message || error.message}`, 'error');
+    } finally {
+      setPendingAction('');
     }
   }
 
   async function handleConfirmDeleteLead() {
     if (!leadPendingDelete) return;
     try {
+      setPendingAction('deleteLead');
       await deleteLead(leadPendingDelete.id, user);
       if (selectedLeadId === leadPendingDelete.id) closeLeadDrawer();
       setLeadPendingDelete(null);
-      showSuccess('Lead deleted successfully');
+      showToast('Lead deleted successfully', 'success');
     } catch (error) {
-      showSuccess(`Lead delete failed: ${error.message}`);
+      showToast(`Lead delete failed: ${error.message}`, 'error');
+    } finally {
+      setPendingAction('');
     }
   }
 
@@ -443,7 +527,7 @@ export default function CRM() {
         }
       />
 
-      <Toast message={successMessage || workflowError} />
+      <Toast message={toast?.message || workflowError} type={toast?.type || (workflowError ? 'error' : 'success')} />
 
       <section className="grid gap-4 md:grid-cols-4">
         {stats.map(([label, value]) => (
@@ -454,11 +538,11 @@ export default function CRM() {
         ))}
       </section>
 
-      <DataTable columns={leadColumns} rows={visibleLeads} onRowClick={openLeadDrawer} />
+      <DataTable columns={leadColumns} rows={visibleLeads} onRowClick={openLeadDrawer} highlightedRowId={highlightedLeadId} />
 
       {isFormOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 px-4 py-6 backdrop-blur-sm">
-          <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl border border-white/70 bg-white p-5 shadow-[0_30px_100px_rgba(15,23,42,0.28)] dark:border-slate-800 dark:bg-slate-900 sm:p-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-4 py-6 backdrop-blur-sm" onClick={closeLeadForm}>
+          <div className="modal-surface max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl border border-white/70 bg-white p-5 shadow-[0_30px_100px_rgba(15,23,42,0.28)] dark:border-slate-800 dark:bg-slate-900 sm:p-6" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-5 dark:border-slate-800">
               <div>
                 <h2 className="text-2xl font-semibold leading-tight text-slate-950 dark:text-white">Add New Lead</h2>
@@ -476,22 +560,22 @@ export default function CRM() {
               </button>
             </div>
 
-            <form className="mt-6 space-y-5" onSubmit={handleCreateLead}>
+            <form className="mt-6 space-y-5" onSubmit={handleCreateLead} noValidate>
               <FormSection title="Client Details">
-                <TextField label="Client / Company Name" value={leadForm.company} onChange={(value) => updateLeadForm('company', value)} required />
-                <SelectField label="Industry Type" value={leadForm.industry} onChange={(value) => updateLeadForm('industry', value)} options={industryOptions} required />
-                <TextField label="Site Location" value={leadForm.location} onChange={(value) => updateLeadForm('location', value)} required />
-                <SelectField label="State" value={leadForm.state} onChange={(value) => updateLeadForm('state', value)} options={stateOptions} required />
-                <TextField label="City" value={leadForm.city} onChange={(value) => updateLeadForm('city', value)} required />
+                <TextField label="Client / Company Name" value={leadForm.company} onChange={(value) => updateLeadForm('company', value)} required error={leadFormErrors.company} />
+                <SelectField label="Industry Type" value={leadForm.industry} onChange={(value) => updateLeadForm('industry', value)} options={industryOptions} required error={leadFormErrors.industry} />
+                <TextField label="Site Location" value={leadForm.location} onChange={(value) => updateLeadForm('location', value)} required error={leadFormErrors.location} />
+                <SelectField label="State" value={leadForm.state} onChange={(value) => updateLeadForm('state', value)} options={stateOptions} required error={leadFormErrors.state} />
+                <TextField label="City" value={leadForm.city} onChange={(value) => updateLeadForm('city', value)} required error={leadFormErrors.city} />
               </FormSection>
 
               <FormSection title="Contact Details">
-                <ContactPersonsEditor contacts={leadForm.contacts} onChange={(contacts) => updateLeadForm('contacts', contacts)} />
+                <ContactPersonsEditor contacts={leadForm.contacts} onChange={(contacts) => updateLeadForm('contacts', contacts)} errors={leadFormErrors} />
               </FormSection>
 
               <FormSection title="Lead Information">
-                <SelectField label="Lead Source" value={leadForm.source} onChange={(value) => updateLeadForm('source', value)} options={sourceOptions} required />
-                <SelectField label="Lead Priority" value={leadForm.priority} onChange={(value) => updateLeadForm('priority', value)} options={priorityOptions} required />
+                <SelectField label="Lead Source" value={leadForm.source} onChange={(value) => updateLeadForm('source', value)} options={sourceOptions} required error={leadFormErrors.source} />
+                <SelectField label="Lead Priority" value={leadForm.priority} onChange={(value) => updateLeadForm('priority', value)} options={priorityOptions} required error={leadFormErrors.priority} />
                 <div className="md:col-span-2">
                   <TextField label="Remarks" value={leadForm.remarks} onChange={(value) => updateLeadForm('remarks', value)} multiline />
                 </div>
@@ -501,8 +585,8 @@ export default function CRM() {
                 <button type="button" onClick={closeLeadForm} className="focus-ring rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:text-white">
                   Cancel
                 </button>
-                <button type="submit" className="focus-ring rounded-xl bg-qpms-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-qpms-600/20 transition hover:bg-qpms-700">
-                  Create Lead
+                <button type="submit" disabled={pendingAction === 'createLead'} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-qpms-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-qpms-600/20 transition hover:bg-qpms-700">
+                  <ButtonContent loading={pendingAction === 'createLead'}>Create Lead</ButtonContent>
                 </button>
               </div>
             </form>
@@ -511,8 +595,8 @@ export default function CRM() {
       ) : null}
 
       {selectedLead && draftLead ? (
-        <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/35 backdrop-blur-sm">
-          <aside className="h-full w-full max-w-3xl overflow-y-auto border-l border-slate-200 bg-white shadow-[0_30px_100px_rgba(15,23,42,0.28)] dark:border-slate-800 dark:bg-slate-900">
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/50 backdrop-blur-sm" onClick={closeLeadDrawer}>
+          <aside className="modal-surface h-full w-full max-w-3xl overflow-y-auto border-l border-slate-200 bg-white shadow-[0_30px_100px_rgba(15,23,42,0.28)] dark:border-slate-800 dark:bg-slate-900" onClick={(event) => event.stopPropagation()}>
             <div className="sticky top-0 z-10 border-b border-slate-100 bg-white/95 p-5 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/95">
               <div className="flex items-start justify-between gap-4">
                 <div>
@@ -587,13 +671,13 @@ export default function CRM() {
               </section>
 
               {isMomOpen ? (
-                <section className="enterprise-card p-5">
+                <section ref={momSectionRef} className="enterprise-card active-workspace p-5">
                   <div className="flex items-center gap-2">
                     <Mail className="h-5 w-5 text-qpms-600" />
                     <h3 className="text-[17px] font-semibold leading-6 text-slate-950 dark:text-white">Lead MOM Email Editor</h3>
                   </div>
                   <div className="mt-5 grid gap-4">
-                    <TextField label="To" value={momDraft.to} onChange={(value) => updateMomDraft('to', value)} />
+                    <TextField label="To" value={momDraft.to} onChange={(value) => updateMomDraft('to', value)} inputRef={momFirstFieldRef} />
                     <TextField label="Additional Contact Recipients" value={momDraft.additionalRecipients} onChange={(value) => updateMomDraft('additionalRecipients', value)} />
                     <TextField label="CC" value={momDraft.cc} onChange={(value) => updateMomDraft('cc', value)} />
                     <TextField label="Subject" value={momDraft.subject} onChange={(value) => updateMomDraft('subject', value)} />
@@ -640,8 +724,8 @@ export default function CRM() {
                   ) : null}
 
                   <div className="sticky bottom-0 mt-5 flex flex-wrap gap-3 border-t border-slate-100 bg-white/95 pt-4 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
-                    <button type="button" onClick={handleSaveMomDraft} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:text-white">
-                      <Save className="h-4 w-4" /> Save Draft
+                    <button type="button" onClick={handleSaveMomDraft} disabled={pendingAction === 'saveMomDraft'} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:text-white">
+                      <ButtonContent loading={pendingAction === 'saveMomDraft'} icon={Save}>Save Draft</ButtonContent>
                     </button>
                     <button type="button" onClick={() => setShowMomPreview((value) => !value)} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:text-white">
                       <FileText className="h-4 w-4" /> Preview Email
@@ -649,10 +733,10 @@ export default function CRM() {
                     <button
                       type="button"
                       onClick={handleSendMom}
-                      disabled={!momDraft.scheduledVisitDate || !momDraft.scheduledVisitTime}
+                      disabled={!momDraft.scheduledVisitDate || !momDraft.scheduledVisitTime || pendingAction === 'sendMom'}
                       className="focus-ring inline-flex items-center gap-2 rounded-xl bg-qpms-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      <Send className="h-4 w-4" /> Send MOM
+                      <ButtonContent loading={pendingAction === 'sendMom'} icon={Send}>Send MOM</ButtonContent>
                     </button>
                   </div>
                 </section>
@@ -663,8 +747,8 @@ export default function CRM() {
       ) : null}
 
       {leadPendingDelete ? (
-        <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/45 px-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.28)] dark:border-slate-800 dark:bg-slate-900">
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/60 px-4 backdrop-blur-sm" onClick={() => setLeadPendingDelete(null)}>
+          <div className="modal-surface w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.28)] dark:border-slate-800 dark:bg-slate-900" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-start gap-3">
               <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-500/15">
                 <Trash2 className="h-5 w-5" />
@@ -680,8 +764,8 @@ export default function CRM() {
               <button type="button" onClick={() => setLeadPendingDelete(null)} className="focus-ring rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
                 Cancel
               </button>
-              <button type="button" onClick={handleConfirmDeleteLead} className="focus-ring rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-rose-600/20 transition hover:bg-rose-700">
-                Delete Lead
+              <button type="button" onClick={handleConfirmDeleteLead} disabled={pendingAction === 'deleteLead'} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-rose-600/20 transition hover:bg-rose-700">
+                <ButtonContent loading={pendingAction === 'deleteLead'}>Delete Lead</ButtonContent>
               </button>
             </div>
           </div>

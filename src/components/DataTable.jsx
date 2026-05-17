@@ -1,4 +1,4 @@
-export default function DataTable({ columns, rows, embedded = false, onRowClick }) {
+export default function DataTable({ columns, rows, embedded = false, onRowClick, highlightedRowId }) {
   return (
     <div
       className={[
@@ -27,6 +27,7 @@ export default function DataTable({ columns, rows, embedded = false, onRowClick 
             {rows.map((row) => (
               <tr
                 key={row.id}
+                data-row-id={row.id}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
                 onKeyDown={(event) => {
                   if (onRowClick && (event.key === 'Enter' || event.key === ' ')) {
@@ -38,7 +39,7 @@ export default function DataTable({ columns, rows, embedded = false, onRowClick 
                 tabIndex={onRowClick ? 0 : undefined}
                 className={`transition hover:bg-slate-50/80 dark:hover:bg-slate-800/70 ${
                   onRowClick ? 'cursor-pointer focus-visible:bg-slate-50 focus-visible:outline-none dark:focus-visible:bg-slate-800/70' : ''
-                }`}
+                } ${String(highlightedRowId) === String(row.id) ? 'new-row-highlight' : ''}`}
               >
                 {columns.map((column) => (
                   <td
