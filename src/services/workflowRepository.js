@@ -124,6 +124,7 @@ export function dbSiteVisitToApp(row) {
   const assessment = row.site_assessments?.[0];
   const approvals = [...(row.approval_requests || [])].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   const latestApproval = approvals[0] || {};
+  const reviewStatus = approvals.reduce((acc, approval) => ({ ...acc, [approval.approval_stage]: approval.status }), {});
 
   return {
     id: row.id,
@@ -156,6 +157,7 @@ export function dbSiteVisitToApp(row) {
     survey: assessment ? dbAssessmentToSurvey(assessment) : undefined,
     assessmentId: assessment?.id,
     approvals,
+    reviewStatus,
     pendingWith: latestApproval.pending_with || row.pending_with || '',
     approvalStatus: latestApproval.status || '',
     approvalRemarks: latestApproval.remarks || '',
@@ -214,11 +216,14 @@ export function surveyToDbAssessment(survey, visit, status = 'Draft', user) {
       leave_with_wages_days: survey.leaveWithWagesDays,
       nfh_applicable: survey.nfhApplicable,
       travel_accommodation_provided: survey.travelAccommodationProvided,
+      allowances: survey.allowances || {},
     },
     tools_equipment_consumables: {
       equipment: survey.equipment || [],
       chemicals: survey.chemicals || [],
       tools: survey.tools || [],
+      ppe_uniforms: survey.ppeUniforms || [],
+      machinery: survey.machinery || [],
       consumables: survey.consumables,
       rental_machinery: survey.rentalMachinery,
       non_billable_expenses: survey.nonBillableExpenses,
@@ -278,9 +283,12 @@ export function dbAssessmentToSurvey(row) {
     landscaping: row.landscaping_pest_control || {},
     hseCompliance: row.hse_compliance || [],
     manpowerPlan: row.manpower_requirement?.rows || [],
+    allowances: row.manpower_requirement?.allowances || undefined,
     equipment: row.tools_equipment_consumables?.equipment || [],
     chemicals: row.tools_equipment_consumables?.chemicals || [],
     tools: row.tools_equipment_consumables?.tools || [],
+    ppeUniforms: row.tools_equipment_consumables?.ppe_uniforms || [],
+    machinery: row.tools_equipment_consumables?.machinery || [],
     clientKyc: row.client_kyc || {},
     risks: row.risk_assessment?.rows || [],
     penaltyClauses: row.penalty_clauses || {},
@@ -586,16 +594,17 @@ export async function saveSiteMomRemote(siteVisitId, mom, status = 'Draft') {
 
 export async function submitApprovalRemote(visit, assessmentId) {
   assertConfigured();
-  const { error } = await supabase.from('approval_requests').insert({
-    lead_id: visit.leadId,
-    site_visit_id: visit.id,
-    assessment_id: assessmentId,
-    approval_stage: 'Commercial Review',
-    pending_with: 'Commercial Team',
-    status: 'Pending',
-  });
+  const rows = ['Commercial Review', 'Finance Review', 'HR Review'].map((stage) => ({
+      lead_id: visit.leadId,
+      site_visit_id: visit.id,
+      assessment_id: assessmentId,
+      approval_stage: stage,
+      pending_with: `${stage.replace(' Review', '')} Reviewer`,
+      status: 'Pending',
+    }));
+  const { error } = await supabase.from('approval_requests').insert(rows);
   if (error) throw error;
-  await supabase.from('site_visits').update({ current_stage: 'Commercial Review', status: 'Commercial Review', updated_at: new Date().toISOString() }).eq('id', visit.id);
+  await supabase.from('site_visits').update({ current_stage: 'Parallel Review', status: 'Pending Review', updated_at: new Date().toISOString() }).eq('id', visit.id);
 }
 
 export async function recordApprovalDecisionRemote({ visit, stage, status, pendingWith, remarks, user }) {

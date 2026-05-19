@@ -31,6 +31,52 @@ const List<String> leadSources = [
 ];
 
 const List<String> leadPriorities = ['Low', 'Medium', 'High', 'Urgent'];
+const List<String> industryOptions = [
+  'Healthcare',
+  'Airport',
+  'Commercial',
+  'Retail',
+  'Hospitality',
+  'Education',
+  'Industrial',
+  'Corporate Office',
+];
+const List<String> stateOptions = [
+  'Tamil Nadu',
+  'Kerala',
+  'Karnataka',
+  'Telangana',
+  'Andhra Pradesh - 1',
+  'Andhra Pradesh - 2',
+];
+const List<String> leadStatusOptions = [
+  'New Lead',
+  'Lead MOM Sent',
+  'Site Visit Scheduled',
+  'Commercial Review',
+  'Proposal Sent',
+  'Converted',
+  'Lost',
+];
+const List<String> marginTypeOptions = [
+  'Percentage',
+  'Fixed Value',
+  'Not Finalized',
+];
+const List<String> leadServiceScopes = [
+  'Hard Services MEP',
+  'Soft Services Housekeeping',
+  'Security Services',
+  'Waste Management',
+  'Landscaping Irrigation',
+  'Pest Control',
+  'Helpdesk CAFM',
+  'Energy Management',
+  'Sustainability ESG',
+  'Other Services',
+];
+const String leadMomScheduleError =
+    'Please provide either Site Visit Schedule Date & Time or Next Follow-up Date before sending the Minutes of Meeting.';
 
 const List<MockUser> mockUsers = [
   MockUser(
@@ -59,6 +105,48 @@ const List<MockUser> mockUsers = [
     name: 'Karthik Menon',
     email: 'bd2@qpms.co.in',
     role: 'BD Executive',
+    password: '123456',
+  ),
+  MockUser(
+    id: 'commercial-1',
+    name: 'Commercial Reviewer 1',
+    email: 'commercial1@qpms.co.in',
+    role: 'Commercial Reviewer',
+    password: '123456',
+  ),
+  MockUser(
+    id: 'commercial-2',
+    name: 'Commercial Reviewer 2',
+    email: 'commercial2@qpms.co.in',
+    role: 'Commercial Reviewer',
+    password: '123456',
+  ),
+  MockUser(
+    id: 'finance-1',
+    name: 'Finance Reviewer 1',
+    email: 'finance1@qpms.co.in',
+    role: 'Finance Reviewer',
+    password: '123456',
+  ),
+  MockUser(
+    id: 'finance-2',
+    name: 'Finance Reviewer 2',
+    email: 'finance2@qpms.co.in',
+    role: 'Finance Reviewer',
+    password: '123456',
+  ),
+  MockUser(
+    id: 'hr-1',
+    name: 'HR Reviewer 1',
+    email: 'hr1@qpms.co.in',
+    role: 'HR Reviewer',
+    password: '123456',
+  ),
+  MockUser(
+    id: 'hr-2',
+    name: 'HR Reviewer 2',
+    email: 'hr2@qpms.co.in',
+    role: 'HR Reviewer',
     password: '123456',
   ),
   MockUser(
@@ -138,6 +226,7 @@ class _QpmsMobileAppState extends State<QpmsMobileApp> {
       leadPriority: 'High',
       remarks:
           'Initial visit completed. Client asked for a follow-up discussion with operations.',
+      serviceScope: const ['Soft Services Housekeeping', 'Security Services'],
       createdAt: DateTime.now().subtract(const Duration(days: 1)),
     ),
   ];
@@ -300,7 +389,7 @@ class _QpmsMobileAppState extends State<QpmsMobileApp> {
       ),
       home: _currentUser == null
           ? LoginScreen(onLogin: _handleLogin)
-          : FieldOfficerHomeScreen(
+          : CrmMobileHomeScreen(
               leads: _leads,
               onAddLead: _addLead,
               onDeleteLead: _deleteLead,
@@ -327,6 +416,7 @@ class Lead {
     required this.assignedBdEmail,
     required this.leadPriority,
     required this.remarks,
+    required this.serviceScope,
     required this.createdAt,
     this.status = 'New Lead',
     this.scheduledVisitDate,
@@ -351,6 +441,7 @@ class Lead {
   final String assignedBdEmail;
   final String leadPriority;
   final String remarks;
+  final List<String> serviceScope;
   String status;
   final DateTime createdAt;
   DateTime? scheduledVisitDate;
@@ -381,6 +472,7 @@ class Lead {
       'state': state,
       'city': city,
       'lead_priority': leadPriority,
+      'service_scope': serviceScope,
       'remarks': remarks,
       'assigned_bd_executive': assignedBdExecutive,
       'assigned_bd_email': assignedBdEmail,
@@ -405,6 +497,23 @@ class Lead {
         .toList();
   }
 }
+
+class MobileModule {
+  const MobileModule({required this.title, required this.icon});
+
+  final String title;
+  final IconData icon;
+}
+
+const List<MobileModule> mobileModules = [
+  MobileModule(title: 'Dashboard', icon: Icons.dashboard_outlined),
+  MobileModule(title: 'Lead Management', icon: Icons.business_center_outlined),
+  MobileModule(
+    title: 'Site Visit & Estimation',
+    icon: Icons.fact_check_outlined,
+  ),
+  MobileModule(title: 'Settings', icon: Icons.settings_outlined),
+];
 
 class ContactPerson {
   const ContactPerson({
@@ -444,17 +553,20 @@ class ContactPerson {
 
 Route<T> fadeRoute<T>(Widget page) {
   return PageRouteBuilder<T>(
+    transitionDuration: const Duration(milliseconds: 280),
+    reverseTransitionDuration: const Duration(milliseconds: 210),
     pageBuilder: (context, animation, secondaryAnimation) => page,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
       final curved = CurvedAnimation(
         parent: animation,
-        curve: Curves.easeOutCubic,
+        curve: Curves.easeOutQuart,
+        reverseCurve: Curves.easeInCubic,
       );
       return FadeTransition(
         opacity: curved,
         child: SlideTransition(
           position: Tween<Offset>(
-            begin: const Offset(0.03, 0.02),
+            begin: const Offset(0, 0.035),
             end: Offset.zero,
           ).animate(curved),
           child: child,
@@ -551,8 +663,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           children: [
                             const Align(
                               child: PillBadge(
-                                text: 'FIELD OFFICER ACCESS',
-                                icon: Icons.verified_user_outlined,
+                                text: 'QPMS CRM MOBILE',
+                                icon: Icons.business_center_outlined,
                               ),
                             ),
                             const SizedBox(height: 24),
@@ -565,7 +677,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             const SizedBox(height: 10),
                             const Text(
-                              'Sign in to create leads and manage field follow-ups.',
+                              'Sign in to manage leads, MOMs, site visits, reviews, and approvals.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: slate500,
@@ -649,7 +761,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                                 SizedBox(width: 8),
                                 Text(
-                                  'Mock role login enabled',
+                                  'Enterprise CRM mobile access',
                                   style: TextStyle(
                                     color: slate500,
                                     fontWeight: FontWeight.w700,
@@ -673,8 +785,8 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-class FieldOfficerHomeScreen extends StatefulWidget {
-  const FieldOfficerHomeScreen({
+class CrmMobileHomeScreen extends StatefulWidget {
+  const CrmMobileHomeScreen({
     super.key,
     required this.leads,
     required this.onAddLead,
@@ -690,10 +802,10 @@ class FieldOfficerHomeScreen extends StatefulWidget {
   final MockUser user;
 
   @override
-  State<FieldOfficerHomeScreen> createState() => _FieldOfficerHomeScreenState();
+  State<CrmMobileHomeScreen> createState() => _CrmMobileHomeScreenState();
 }
 
-class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
+class _CrmMobileHomeScreenState extends State<CrmMobileHomeScreen> {
   int _selectedIndex = 0;
 
   List<Lead> get _visibleLeads {
@@ -712,6 +824,16 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
       .where((lead) => lead.status == 'Site Visit Scheduled')
       .length;
 
+  List<Lead> get _siteVisitLeads => _visibleLeads
+      .where((lead) => lead.status == 'Site Visit Scheduled')
+      .toList();
+
+  List<Lead> get _momDraftLeads => _visibleLeads
+      .where(
+        (lead) => lead.status == 'New Lead' || lead.status == 'Lead MOM Sent',
+      )
+      .toList();
+
   Future<void> _openAddLead() async {
     await Navigator.of(context).push(
       fadeRoute<void>(
@@ -728,9 +850,7 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
   }
 
   Future<void> _openLeadDetail(Lead lead) async {
-    await Navigator.of(
-      context,
-    ).push(
+    await Navigator.of(context).push(
       fadeRoute<void>(
         LeadDetailScreen(
           lead: lead,
@@ -744,12 +864,141 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
     setState(() {});
   }
 
+  Future<void> _openSiteVisit(Lead lead) async {
+    await Navigator.of(
+      context,
+    ).push(fadeRoute<void>(SiteVisitAssessmentScreen(lead: lead)));
+    setState(() {});
+  }
+
+  Widget _moduleBody(List<Lead> visibleLeads) {
+    switch (_selectedIndex) {
+      case 0:
+        return _dashboardBody(visibleLeads);
+      case 1:
+        return _leadListBody(visibleLeads, 'Lead Management');
+      case 2:
+        return _siteVisitBody();
+      case 3:
+        return _leadListBody(_momDraftLeads, 'MOM Draft');
+      case 4:
+        return const SliverToBoxAdapter(
+          child: ModulePlaceholderCard(
+            title: 'Commercial Review',
+            message:
+                'Commercial review records will appear here after site assessment submission.',
+            icon: Icons.price_check_outlined,
+          ),
+        );
+      case 5:
+        return const SliverToBoxAdapter(
+          child: ModulePlaceholderCard(
+            title: 'Approval Workflow',
+            message:
+                'Approval requests and pending leadership actions will be listed here.',
+            icon: Icons.verified_outlined,
+          ),
+        );
+      case 6:
+        return SliverToBoxAdapter(
+          child: SettingsPanel(userRole: widget.user.role),
+        );
+      default:
+        return _dashboardBody(visibleLeads);
+    }
+  }
+
+  Widget _dashboardBody(List<Lead> visibleLeads) {
+    return SliverList.list(
+      children: [
+        const SectionTitle(title: 'Operational Snapshot'),
+        const SizedBox(height: 12),
+        UpcomingSiteVisitsCard(leads: _siteVisitLeads),
+        const SizedBox(height: 14),
+        SectionTitle(
+          title: 'Recent Leads',
+          actionLabel: 'View all',
+          onAction: () => setState(() => _selectedIndex = 1),
+        ),
+        const SizedBox(height: 12),
+        if (visibleLeads.isEmpty)
+          const EmptyLeadsCard()
+        else
+          ...visibleLeads
+              .take(3)
+              .map(
+                (lead) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: LeadListTile(
+                    lead: lead,
+                    onTap: () => _openLeadDetail(lead),
+                  ),
+                ),
+              ),
+      ],
+    );
+  }
+
+  Widget _leadListBody(List<Lead> leads, String title) {
+    return SliverList.builder(
+      itemCount: leads.isEmpty ? 2 : leads.length + 1,
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: SectionTitle(title: title),
+          );
+        }
+        if (leads.isEmpty) return const EmptyLeadsCard();
+        final lead = leads[index - 1];
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: LeadListTile(lead: lead, onTap: () => _openLeadDetail(lead)),
+        );
+      },
+    );
+  }
+
+  Widget _siteVisitBody() {
+    return SliverList.list(
+      children: [
+        const SectionTitle(title: 'Site Visit & Estimation'),
+        const SizedBox(height: 12),
+        UpcomingSiteVisitsCard(leads: _siteVisitLeads),
+        const SizedBox(height: 14),
+        if (_siteVisitLeads.isEmpty)
+          const ModulePlaceholderCard(
+            title: 'No site visits scheduled',
+            message:
+                'Send a Lead MOM with site visit date and time to move leads into this queue.',
+            icon: Icons.event_busy_outlined,
+          )
+        else
+          ..._siteVisitLeads.map(
+            (lead) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: LeadListTile(
+                lead: lead,
+                onTap: () => _openSiteVisit(lead),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final showOverview = _selectedIndex == 0;
     final visibleLeads = _visibleLeads;
+    final activeModule = mobileModules[_selectedIndex];
 
     return Scaffold(
+      drawer: QpmsNavigationDrawer(
+        selectedIndex: _selectedIndex,
+        user: widget.user,
+        onSelect: (index) => setState(() => _selectedIndex = index),
+        onLogout: widget.onLogout,
+      ),
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -763,73 +1012,16 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
             slivers: [
               SliverToBoxAdapter(
                 child: HomeHeader(
+                  title: activeModule.title,
                   totalLeads: visibleLeads.length,
                   momPending: _momPending,
                   siteVisitPending: _siteVisitPending,
                   user: widget.user,
-                  onLogout: widget.onLogout,
                 ),
               ),
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 92),
-                sliver: showOverview
-                    ? SliverList.list(
-                        children: [
-                          SectionTitle(
-                            title: 'My Leads',
-                            actionLabel: 'View all',
-                            onAction: () => setState(() => _selectedIndex = 1),
-                          ),
-                          const SizedBox(height: 12),
-                          UpcomingSiteVisitsCard(
-                            leads: visibleLeads
-                                .where(
-                                  (lead) =>
-                                      lead.status == 'Site Visit Scheduled',
-                                )
-                                .toList(),
-                          ),
-                          const SizedBox(height: 14),
-                          if (visibleLeads.isEmpty)
-                            const EmptyLeadsCard()
-                          else
-                            ...visibleLeads
-                                .take(3)
-                                .map(
-                                  (lead) => Padding(
-                                    padding: const EdgeInsets.only(bottom: 14),
-                                    child: LeadListTile(
-                                      lead: lead,
-                                      onTap: () => _openLeadDetail(lead),
-                                    ),
-                                  ),
-                                ),
-                        ],
-                      )
-                    : SliverList.builder(
-                        itemCount: visibleLeads.isEmpty
-                            ? 2
-                            : visibleLeads.length + 1,
-                        itemBuilder: (context, index) {
-                          if (index == 0) {
-                            return const Padding(
-                              padding: EdgeInsets.only(bottom: 12),
-                              child: SectionTitle(title: 'My Leads'),
-                            );
-                          }
-                          if (visibleLeads.isEmpty) {
-                            return const EmptyLeadsCard();
-                          }
-                          final lead = visibleLeads[index - 1];
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 14),
-                            child: LeadListTile(
-                              lead: lead,
-                              onTap: () => _openLeadDetail(lead),
-                            ),
-                          );
-                        },
-                      ),
+                padding: const EdgeInsets.fromLTRB(18, 6, 18, 92),
+                sliver: _moduleBody(visibleLeads),
               ),
             ],
           ),
@@ -850,7 +1042,7 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
         height: 68,
         elevation: 10,
         shadowColor: qpms600.withValues(alpha: 0.10),
-        selectedIndex: _selectedIndex,
+        selectedIndex: _selectedIndex > 2 ? 0 : _selectedIndex,
         onDestinationSelected: (index) =>
             setState(() => _selectedIndex = index),
         backgroundColor: Colors.white,
@@ -860,12 +1052,17 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
           NavigationDestination(
             icon: Icon(Icons.dashboard_outlined),
             selectedIcon: Icon(Icons.dashboard),
-            label: 'Home',
+            label: 'Dashboard',
           ),
           NavigationDestination(
             icon: Icon(Icons.list_alt_outlined),
             selectedIcon: Icon(Icons.list_alt),
-            label: 'My Leads',
+            label: 'Leads',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.fact_check_outlined),
+            selectedIcon: Icon(Icons.fact_check),
+            label: 'Sites',
           ),
         ],
       ),
@@ -873,27 +1070,199 @@ class _FieldOfficerHomeScreenState extends State<FieldOfficerHomeScreen> {
   }
 }
 
-class HomeHeader extends StatelessWidget {
-  const HomeHeader({
+class QpmsNavigationDrawer extends StatelessWidget {
+  const QpmsNavigationDrawer({
     super.key,
-    required this.totalLeads,
-    required this.momPending,
-    required this.siteVisitPending,
+    required this.selectedIndex,
     required this.user,
+    required this.onSelect,
     required this.onLogout,
   });
 
-  final int totalLeads;
-  final int momPending;
-  final int siteVisitPending;
+  final int selectedIndex;
   final MockUser user;
+  final ValueChanged<int> onSelect;
   final VoidCallback onLogout;
 
   @override
   Widget build(BuildContext context) {
+    return Drawer(
+      backgroundColor: Colors.white,
+      child: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(18, 18, 18, 12),
+              child: Row(
+                children: [
+                  const QpmsLogoBox(size: 42),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'QPMS CRM Mobile',
+                          style: TextStyle(
+                            color: qpms700,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 17,
+                          ),
+                        ),
+                        Text(
+                          user.role,
+                          style: const TextStyle(
+                            color: slate500,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(10, 12, 10, 12),
+                itemCount: mobileModules.length,
+                itemBuilder: (context, index) {
+                  final module = mobileModules[index];
+                  final selected = selectedIndex == index;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: ListTile(
+                      selected: selected,
+                      selectedTileColor: qpms50,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      leading: Icon(
+                        module.icon,
+                        color: selected ? qpms700 : slate500,
+                      ),
+                      title: Text(
+                        module.title,
+                        style: TextStyle(
+                          color: selected ? qpms700 : slate950,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      onTap: () {
+                        Navigator.of(context).pop();
+                        onSelect(index);
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  onLogout();
+                },
+                icon: const Icon(Icons.logout_rounded),
+                label: const Text('Logout'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFE11D48),
+                  minimumSize: const Size.fromHeight(48),
+                  side: const BorderSide(color: Color(0xFFFECACA)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w900),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ModulePlaceholderCard extends StatelessWidget {
+  const ModulePlaceholderCard({
+    super.key,
+    required this.title,
+    required this.message,
+    required this.icon,
+  });
+
+  final String title;
+  final String message;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return PremiumCard(
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        children: [
+          Icon(icon, color: qpms600, size: 34),
+          const SizedBox(height: 10),
+          Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: slate500,
+              fontWeight: FontWeight.w700,
+              height: 1.4,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class SettingsPanel extends StatelessWidget {
+  const SettingsPanel({super.key, required this.userRole});
+
+  final String userRole;
+
+  @override
+  Widget build(BuildContext context) {
+    return const ModulePlaceholderCard(
+      title: 'Settings',
+      message:
+          'Mobile CRM preferences and account controls are available from the navigation drawer.',
+      icon: Icons.settings_outlined,
+    );
+  }
+}
+
+class HomeHeader extends StatelessWidget {
+  const HomeHeader({
+    super.key,
+    required this.title,
+    required this.totalLeads,
+    required this.momPending,
+    required this.siteVisitPending,
+    required this.user,
+  });
+
+  final String title;
+  final int totalLeads;
+  final int momPending;
+  final int siteVisitPending;
+  final MockUser user;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 16, 16, 14),
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+      margin: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         gradient: const LinearGradient(
@@ -915,79 +1284,53 @@ class HomeHeader extends StatelessWidget {
           Row(
             children: [
               const QpmsLogoBox(size: 42),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'QPMS CRM Mobile',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
               const Spacer(),
-              PopupMenuButton<String>(
-                tooltip: 'Account menu',
-                onSelected: (value) {
-                  if (value == 'logout') onLogout();
-                },
-                itemBuilder: (context) => const [
-                  PopupMenuItem<String>(
-                    value: 'logout',
-                    child: Row(
-                      children: [
-                        Icon(Icons.logout_rounded, color: Color(0xFFE11D48)),
-                        SizedBox(width: 10),
-                        Text('Logout'),
-                      ],
-                    ),
+              Builder(
+                builder: (context) => IconButton.filledTonal(
+                  tooltip: 'Open navigation',
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.white.withValues(alpha: 0.16),
+                    foregroundColor: Colors.white,
                   ),
-                ],
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.16),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        user.role,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 12,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      const Icon(
-                        Icons.keyboard_arrow_down_rounded,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                    ],
-                  ),
+                  icon: const Icon(Icons.menu_rounded),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           Text(
-            'Welcome, ${user.name}',
+            title,
             style: TextStyle(
               color: Colors.white,
-              fontSize: 24,
+              fontSize: 23,
               fontWeight: FontWeight.w900,
               letterSpacing: 0,
             ),
           ),
           const SizedBox(height: 7),
-          const Text(
-            'Collect initial lead details and track handoff progress.',
+          Text(
+            'Welcome, ${user.name}. Manage CRM operations from mobile.',
             style: TextStyle(
               color: Color(0xDDEEF4FF),
               fontWeight: FontWeight.w600,
               height: 1.4,
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 14),
           Row(
             children: [
               Expanded(
@@ -1067,24 +1410,41 @@ class _ContactFormState {
 class _AddLeadScreenState extends State<AddLeadScreen> {
   final _formKey = GlobalKey<FormState>();
   final _clientName = TextEditingController();
-  final _industryType = TextEditingController();
   final _siteLocation = TextEditingController();
-  final _state = TextEditingController();
   final _city = TextEditingController();
   final _remarks = TextEditingController();
   final List<_ContactFormState> _contacts = [
     _ContactFormState(isPrimary: true),
   ];
+  final Set<String> _serviceScope = <String>{};
 
+  String _industryType = industryOptions.first;
+  String _state = stateOptions.first;
   String _leadSource = leadSources.first;
   String _priority = 'Medium';
+  String _assignedBdExecutive = '';
+  String _assignedBdEmail = '';
+  String _status = 'New Lead';
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.user.role == 'BD Executive') {
+      _assignedBdExecutive = widget.user.name;
+      _assignedBdEmail = widget.user.email;
+    } else {
+      final firstBd = mockUsers.firstWhere(
+        (user) => user.role == 'BD Executive',
+      );
+      _assignedBdExecutive = firstBd.name;
+      _assignedBdEmail = firstBd.email;
+    }
+  }
 
   @override
   void dispose() {
     _clientName.dispose();
-    _industryType.dispose();
     _siteLocation.dispose();
-    _state.dispose();
     _city.dispose();
     for (final contact in _contacts) {
       contact.dispose();
@@ -1101,22 +1461,20 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
     final lead = Lead(
       id: 'QPMS-${(widget.leadCount + 1).toString().padLeft(3, '0')}',
       clientName: _clientName.text.trim(),
-      industryType: _industryType.text.trim(),
+      industryType: _industryType,
       leadSource: _leadSource,
       siteLocation: _siteLocation.text.trim(),
-      state: _state.text.trim(),
+      state: _state,
       city: _city.text.trim(),
       contactPersons: _contacts.map((contact) => contact.toContact()).toList(),
       createdByUserId: widget.user.id,
       createdByName: widget.user.name,
-      assignedBdExecutive: widget.user.role == 'BD Executive'
-          ? widget.user.name
-          : 'Ananya Rao',
-      assignedBdEmail: widget.user.role == 'BD Executive'
-          ? widget.user.email
-          : 'bd1@qpms.co.in',
+      assignedBdExecutive: _assignedBdExecutive,
+      assignedBdEmail: _assignedBdEmail,
       leadPriority: _priority,
       remarks: _remarks.text.trim(),
+      serviceScope: _serviceScope.toList(),
+      status: _status,
       createdAt: DateTime.now(),
     );
 
@@ -1127,9 +1485,7 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
         behavior: SnackBarBehavior.floating,
       ),
     );
-    Navigator.of(
-      context,
-    ).pushReplacement(
+    Navigator.of(context).pushReplacement(
       fadeRoute<void>(LeadDetailScreen(lead: lead, onDelete: () {})),
     );
   }
@@ -1155,9 +1511,12 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
                     controller: _clientName,
                     label: 'Client / Company Name',
                   ),
-                  AppTextField(
-                    controller: _industryType,
+                  AppDropdown(
                     label: 'Industry Type',
+                    value: _industryType,
+                    items: industryOptions,
+                    onChanged: (value) =>
+                        setState(() => _industryType = value!),
                   ),
                   AppTextField(
                     controller: _siteLocation,
@@ -1166,7 +1525,12 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: AppTextField(controller: _state, label: 'State'),
+                        child: AppDropdown(
+                          label: 'State',
+                          value: _state,
+                          items: stateOptions,
+                          onChanged: (value) => setState(() => _state = value!),
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -1234,6 +1598,41 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
               ),
             ),
             const SizedBox(height: 18),
+            const SectionTitle(title: 'Service Scope'),
+            const SizedBox(height: 12),
+            PremiumCard(
+              padding: const EdgeInsets.all(16),
+              child: Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: leadServiceScopes.map((scope) {
+                  final selected = _serviceScope.contains(scope);
+                  return FilterChip(
+                    label: Text(scope),
+                    selected: selected,
+                    onSelected: (value) {
+                      setState(() {
+                        if (value) {
+                          _serviceScope.add(scope);
+                        } else {
+                          _serviceScope.remove(scope);
+                        }
+                      });
+                    },
+                    selectedColor: qpms100,
+                    checkmarkColor: qpms600,
+                    labelStyle: TextStyle(
+                      color: selected ? qpms700 : slate950,
+                      fontWeight: FontWeight.w800,
+                    ),
+                    side: BorderSide(
+                      color: selected ? qpms300 : const Color(0xFFE2E8F0),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            const SizedBox(height: 18),
             const SectionTitle(title: 'Lead Information'),
             const SizedBox(height: 12),
             PremiumCard(
@@ -1252,6 +1651,29 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
                     items: leadPriorities,
                     onChanged: (value) => setState(() => _priority = value!),
                   ),
+                  AppDropdown(
+                    label: 'Assigned BD Executive',
+                    value: _assignedBdExecutive,
+                    items: mockUsers
+                        .where((user) => user.role == 'BD Executive')
+                        .map((user) => user.name)
+                        .toList(),
+                    onChanged: (value) {
+                      final selected = mockUsers.firstWhere(
+                        (user) => user.name == value,
+                      );
+                      setState(() {
+                        _assignedBdExecutive = selected.name;
+                        _assignedBdEmail = selected.email;
+                      });
+                    },
+                  ),
+                  AppDropdown(
+                    label: 'Status',
+                    value: _status,
+                    items: leadStatusOptions,
+                    onChanged: (value) => setState(() => _status = value!),
+                  ),
                   AppTextField(
                     controller: _remarks,
                     label: 'Remarks',
@@ -1267,7 +1689,7 @@ class _AddLeadScreenState extends State<AddLeadScreen> {
                         ),
                       ),
                       const Spacer(),
-                      StatusBadge(text: 'New Lead'),
+                      StatusBadge(text: _status),
                     ],
                   ),
                 ],
@@ -1384,7 +1806,11 @@ class _ContactPersonFormCard extends StatelessWidget {
 }
 
 class LeadDetailScreen extends StatelessWidget {
-  const LeadDetailScreen({super.key, required this.lead, required this.onDelete});
+  const LeadDetailScreen({
+    super.key,
+    required this.lead,
+    required this.onDelete,
+  });
 
   final Lead lead;
   final VoidCallback onDelete;
@@ -1449,6 +1875,9 @@ class LeadDetailScreen extends StatelessWidget {
                     'City': lead.city,
                     'Primary Contact': lead.contactPersonName,
                     'Assigned BD Executive': lead.assignedBdExecutive,
+                    'Service Scope': lead.serviceScope.isEmpty
+                        ? 'Not selected'
+                        : lead.serviceScope.join(', '),
                     'Created By': lead.createdByName,
                     'Workflow Stage': lead.status,
                     'Scheduled Visit Date': lead.scheduledVisitDate == null
@@ -1597,11 +2026,10 @@ class LeadMomPreviewScreen extends StatefulWidget {
 class _LeadMomPreviewScreenState extends State<LeadMomPreviewScreen> {
   DateTime? _scheduledDate;
   TimeOfDay? _scheduledTime;
+  DateTime? _nextFollowUpDate;
   late final TextEditingController _siteVisitRemarks;
 
   Lead get lead => widget.lead;
-
-  DateTime get _followUpDate => DateTime.now().add(const Duration(days: 3));
 
   @override
   void initState() {
@@ -1649,6 +2077,30 @@ class _LeadMomPreviewScreenState extends State<LeadMomPreviewScreen> {
     }
   }
 
+  Future<void> _pickFollowUpDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _nextFollowUpDate ?? now.add(const Duration(days: 3)),
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 180)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(
+              context,
+            ).colorScheme.copyWith(primary: qpms600, surface: Colors.white),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() => _nextFollowUpDate = picked);
+    }
+  }
+
   Future<void> _pickTime() async {
     final picked = await showTimePicker(
       context: context,
@@ -1671,31 +2123,42 @@ class _LeadMomPreviewScreenState extends State<LeadMomPreviewScreen> {
   }
 
   void _sendMom() {
-    if (_scheduledDate == null || _scheduledTime == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Select site visit date and time before sending MOM.'),
-        ),
-      );
+    final hasSiteVisitSchedule =
+        _scheduledDate != null && _scheduledTime != null;
+    if (!hasSiteVisitSchedule && _nextFollowUpDate == null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text(leadMomScheduleError)));
       return;
     }
 
-    lead.status = 'Site Visit Scheduled';
+    lead.status = hasSiteVisitSchedule
+        ? 'Site Visit Scheduled'
+        : 'Lead MOM Sent';
     lead.scheduledVisitDate = _scheduledDate;
-    lead.scheduledVisitTime = formatTimeOfDay(_scheduledTime!);
+    lead.scheduledVisitTime = _scheduledTime == null
+        ? null
+        : formatTimeOfDay(_scheduledTime!);
     lead.siteVisitRemarks = _siteVisitRemarks.text.trim();
     lead.siteMomStatus = 'Pending';
     QpmsSupabaseService.sendLeadMomEmail({
       'to': lead.emailId,
-      'cc': 'BD Head, COO',
-      'subject': 'Lead MOM - ${lead.clientName} - QPMS',
+      'cc': 'bdhead@qpms.in, coo@qpms.in',
+      'subject': 'Lead Minutes of Meeting - ${lead.clientName} - QPMS',
       'clientName': lead.clientName,
+      'primaryContact': lead.contactPersonName,
+      'primaryContactEmail': lead.emailId,
+      'location': lead.siteLocation,
+      'assignedBdExecutive': lead.assignedBdExecutive,
+      'assignedBdEmail': lead.assignedBdEmail,
       'discussionSummary':
           'Initial lead discussion completed for ${lead.clientName}.',
-      'serviceScopeDiscussion':
-          'Facility management and site assessment scope discussed.',
-      'actionItems':
-          'Conduct scheduled site visit and capture assessment inputs.',
+      'serviceScope': lead.serviceScope,
+      'scheduledVisitDate': _scheduledDate?.toIso8601String().split('T').first,
+      'scheduledVisitTime': _scheduledTime == null
+          ? null
+          : formatTimeOfDay(_scheduledTime!),
+      'nextFollowUpDate': _nextFollowUpDate?.toIso8601String().split('T').first,
       'siteVisitRemarks': lead.siteVisitRemarks,
     }).catchError((Object error) {
       debugPrint('Lead MOM email failed: $error');
@@ -1707,46 +2170,53 @@ class _LeadMomPreviewScreenState extends State<LeadMomPreviewScreen> {
         sent: true,
         mom: {
           'to_email': lead.emailId,
-          'cc_emails': 'BD Head, COO',
-          'subject': 'Lead MOM - ${lead.clientName} - QPMS',
+          'cc_emails': 'bdhead@qpms.in, coo@qpms.in',
+          'subject': 'Lead Minutes of Meeting - ${lead.clientName} - QPMS',
           'discussion_summary':
               'Initial lead discussion completed for ${lead.clientName}.',
-          'service_scope_discussion':
-              'Facility management and site assessment scope discussed.',
-          'action_items':
-              'Conduct scheduled site visit and capture assessment inputs.',
-          'next_followup_date': _followUpDate
-              .toIso8601String()
+          'service_scope_discussion': lead.serviceScope.join('\n'),
+          'action_items': '',
+          'next_followup_date': _nextFollowUpDate
+              ?.toIso8601String()
               .split('T')
               .first,
-          'scheduled_site_visit_date': _scheduledDate!
-              .toIso8601String()
+          'scheduled_site_visit_date': _scheduledDate
+              ?.toIso8601String()
               .split('T')
               .first,
-          'scheduled_site_visit_time': formatTimeOfDay(_scheduledTime!),
+          'scheduled_site_visit_time': _scheduledTime == null
+              ? null
+              : formatTimeOfDay(_scheduledTime!),
+          'calendar_invite_sent': hasSiteVisitSchedule,
           'site_visit_remarks': lead.siteVisitRemarks,
         },
       );
-      QpmsSupabaseService.createSiteVisit({
-        'lead_id': remoteLeadId,
-        'client_name': lead.clientName,
-        'site_name': lead.siteLocation,
-        'scheduled_visit_date': _scheduledDate!
-            .toIso8601String()
-            .split('T')
-            .first,
-        'scheduled_visit_time': formatTimeOfDay(_scheduledTime!),
-        'assigned_bd_executive': lead.assignedBdExecutive,
-        'assigned_bd_email': lead.assignedBdEmail,
-        'current_stage': 'Pre-Operational Assessment',
-        'status': 'Scheduled',
-        'mom_status': 'Pending',
-      }).then((siteVisitId) => lead.remoteSiteVisitId = siteVisitId);
+      if (hasSiteVisitSchedule) {
+        QpmsSupabaseService.createSiteVisit({
+          'lead_id': remoteLeadId,
+          'client_name': lead.clientName,
+          'site_name': lead.siteLocation,
+          'scheduled_visit_date': _scheduledDate!
+              .toIso8601String()
+              .split('T')
+              .first,
+          'scheduled_visit_time': formatTimeOfDay(_scheduledTime!),
+          'assigned_bd_executive': lead.assignedBdExecutive,
+          'assigned_bd_email': lead.assignedBdEmail,
+          'current_stage': 'Pre-Operational Assessment',
+          'status': 'Scheduled',
+          'mom_status': 'Pending',
+        }).then((siteVisitId) => lead.remoteSiteVisitId = siteVisitId);
+      }
     }
 
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Lead MOM sent and Site Visit scheduled successfully.'),
+      SnackBar(
+        content: Text(
+          hasSiteVisitSchedule
+              ? 'Lead MOM sent and Site Visit scheduled successfully.'
+              : 'Lead MOM sent successfully.',
+        ),
       ),
     );
     Navigator.of(context).maybePop();
@@ -1756,7 +2226,7 @@ class _LeadMomPreviewScreenState extends State<LeadMomPreviewScreen> {
   Widget build(BuildContext context) {
     return AppShell(
       title: 'Lead MOM Preview',
-      subtitle: 'Schedule site visit before sending',
+      subtitle: 'Scheduling / follow-up before sending',
       bottomBar: SafeArea(
         top: false,
         child: Container(
@@ -1797,7 +2267,7 @@ class _LeadMomPreviewScreenState extends State<LeadMomPreviewScreen> {
                   children: [
                     const Expanded(
                       child: Text(
-                        'Minutes of Meeting',
+                        'Lead Minutes of Meeting',
                         style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w900,
@@ -1840,16 +2310,19 @@ class _LeadMomPreviewScreenState extends State<LeadMomPreviewScreen> {
                 MomRow(
                   label: 'Discussion Summary',
                   value:
-                      'Initial lead discussion completed for ${lead.clientName}. Field Officer captured client, contact, location, source, and priority details. Operational requirements will be collected during the scheduled site visit. Notes: ${lead.remarks}',
+                      'Initial lead discussion completed for ${lead.clientName}. Notes: ${lead.remarks}',
                 ),
-                const MomRow(
-                  label: 'Action Items',
-                  value:
-                      '1. Share Lead MOM with client.\n2. Conduct scheduled site visit.\n3. Capture operational requirements during site assessment.',
+                MomRow(
+                  label: 'Service Scope',
+                  value: lead.serviceScope.isEmpty
+                      ? 'Not selected'
+                      : lead.serviceScope.join('\n'),
                 ),
                 MomRow(
                   label: 'Next Follow-up Date',
-                  value: formatDate(_followUpDate),
+                  value: _nextFollowUpDate == null
+                      ? 'Not selected'
+                      : formatDate(_nextFollowUpDate!),
                 ),
                 const MomRow(label: 'Created By', value: 'BD Executive'),
                 const MomRow(label: 'Status', value: 'Draft'),
@@ -1867,7 +2340,7 @@ class _LeadMomPreviewScreenState extends State<LeadMomPreviewScreen> {
                     SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Site Visit Scheduling',
+                        'Scheduling / Follow-up',
                         style: TextStyle(
                           color: slate950,
                           fontSize: 20,
@@ -1880,7 +2353,7 @@ class _LeadMomPreviewScreenState extends State<LeadMomPreviewScreen> {
                 ),
                 const SizedBox(height: 10),
                 const Text(
-                  'This captures the client-agreed visit date and time before the MOM is sent.',
+                  'Provide either a scheduled site visit date & time or a next follow-up date before sending.',
                   style: TextStyle(
                     color: slate500,
                     fontWeight: FontWeight.w700,
@@ -1904,6 +2377,26 @@ class _LeadMomPreviewScreenState extends State<LeadMomPreviewScreen> {
                       ? 'Select time'
                       : formatTimeOfDay(_scheduledTime!),
                   onTap: _pickTime,
+                ),
+                const SizedBox(height: 12),
+                SchedulePickerTile(
+                  icon: Icons.event_repeat_outlined,
+                  label: 'Next Follow-up Date',
+                  value: _nextFollowUpDate == null
+                      ? 'Select date'
+                      : formatDate(_nextFollowUpDate!),
+                  onTap: _pickFollowUpDate,
+                ),
+                const SizedBox(height: 12),
+                StatusBadge(
+                  text: _scheduledDate != null && _scheduledTime != null
+                      ? 'Calendar invite will be attached'
+                      : _nextFollowUpDate != null
+                      ? 'Follow-up date will be included in mail'
+                      : 'Schedule required',
+                  color: _scheduledDate != null && _scheduledTime != null
+                      ? const Color(0xFF10B981)
+                      : const Color(0xFFF59E0B),
                 ),
                 const SizedBox(height: 12),
                 AppTextField(
@@ -1967,6 +2460,7 @@ class _SiteVisitAssessmentScreenState extends State<SiteVisitAssessmentScreen> {
   double _revenue = 0;
   double _expense = 0;
   double _nonBillable = 0;
+  String _marginType = marginTypeOptions.first;
 
   double get _margin => _revenue - _expense - _nonBillable;
   double get _marginPercent => _revenue == 0 ? 0 : (_margin / _revenue) * 100;
@@ -2010,6 +2504,7 @@ class _SiteVisitAssessmentScreenState extends State<SiteVisitAssessmentScreen> {
           'non_billable_items': _nonBillable,
           'monthly_margin': _margin,
           'expected_margin_percentage': _marginPercent,
+          'margin_type': _marginType,
         },
         'approval_mechanism': {
           'coo_approval_required': _revenue > 500000,
@@ -2529,6 +3024,12 @@ class _SiteVisitAssessmentScreenState extends State<SiteVisitAssessmentScreen> {
             ),
           ),
           const SizedBox(height: 12),
+          AppDropdown(
+            label: 'Margin Type',
+            value: _marginType,
+            items: marginTypeOptions,
+            onChanged: (value) => setState(() => _marginType = value!),
+          ),
           NumberAssessmentField(
             label: 'Estimated Revenue',
             onChanged: (value) => setState(() => _revenue = value),
@@ -2879,7 +3380,9 @@ class UpcomingSiteVisitsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final momPending = leads.where((lead) => lead.siteMomStatus == 'Pending').length;
+    final momPending = leads
+        .where((lead) => lead.siteMomStatus == 'Pending')
+        .length;
 
     return PremiumCard(
       padding: const EdgeInsets.all(16),
@@ -2966,50 +3469,52 @@ class UpcomingSiteVisitsCard extends StatelessWidget {
               ),
             )
           else
-            ...leads.take(3).map(
+            ...leads
+                .take(3)
+                .map(
                   (lead) => Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.schedule_rounded,
-                        size: 18,
-                        color: qpms600,
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              lead.clientName,
-                              style: const TextStyle(
-                                color: slate950,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${lead.scheduledVisitDate == null ? 'Date pending' : formatDate(lead.scheduledVisitDate!)} at ${lead.scheduledVisitTime ?? 'time pending'}',
-                              style: const TextStyle(
-                                color: slate500,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.schedule_rounded,
+                          size: 18,
+                          color: qpms600,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                lead.clientName,
+                                style: const TextStyle(
+                                  color: slate950,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${lead.scheduledVisitDate == null ? 'Date pending' : formatDate(lead.scheduledVisitDate!)} at ${lead.scheduledVisitTime ?? 'time pending'}',
+                                style: const TextStyle(
+                                  color: slate500,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
         ],
       ),
     );
@@ -3074,8 +3579,8 @@ class MetricCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(minHeight: 76),
-      padding: const EdgeInsets.all(10),
+      constraints: const BoxConstraints(minHeight: 68),
+      padding: const EdgeInsets.all(9),
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(16),
@@ -3089,7 +3594,7 @@ class MetricCard extends StatelessWidget {
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w900,
-              fontSize: 20,
+              fontSize: 19,
             ),
           ),
           const SizedBox(height: 4),
@@ -3099,7 +3604,7 @@ class MetricCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               color: Color(0xDDEEF4FF),
-              fontSize: 11,
+              fontSize: 10.5,
               fontWeight: FontWeight.w700,
               height: 1.2,
             ),
@@ -3658,7 +4163,7 @@ class QpmsBrandMark extends StatelessWidget {
           'QPMS',
           style: Theme.of(
             context,
-          ).textTheme.titleLarge?.copyWith(color: Colors.white, fontSize: 26),
+          ).textTheme.titleLarge?.copyWith(color: qpms700, fontSize: 26),
         ),
       ],
     );

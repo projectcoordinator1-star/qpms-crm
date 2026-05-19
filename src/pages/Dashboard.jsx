@@ -46,7 +46,7 @@ import {
 } from '../data/qpmsWorkflowData.js';
 import { useAuth } from '../context/auth-context.js';
 import { useWorkflow } from '../context/workflow-context.js';
-import { bdExecutives, canViewBdTeam, isCommercialTeam, isFinanceTeam } from '../data/mockUsers.js';
+import { bdExecutives, canViewBdTeam, isApprovalReviewer, isCommercialTeam, isFinanceTeam, isHrReviewer } from '../data/mockUsers.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 
 const tabs = [
@@ -723,7 +723,7 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
 }
 
 function ApprovalDashboard({ title, description, stage, siteVisits }) {
-  const queue = siteVisits.filter((visit) => (visit.currentStage || visit.status) === stage);
+  const queue = siteVisits.filter((visit) => (visit.reviewStatus?.[stage] || ((visit.currentStage || visit.status) === stage ? 'Pending' : '')) === 'Pending');
   const pending = queue.filter((visit) => !['Approved', 'Rejected', 'Rework Requested'].includes(visit.approvalStatus)).length;
   return (
     <div className="space-y-6">
@@ -784,7 +784,7 @@ export default function Dashboard() {
   const [activeOperationsSection, setActiveOperationsSection] = useState(null);
   usePageTitle('Dashboard');
   const restrictedToPipeline = ['BD Head', 'BD Executive'].includes(user?.role);
-  const canSeeOperations = user?.role === 'Admin';
+  const canSeeOperations = user?.role === 'Admin' || isCommercialTeam(user) || isFinanceTeam(user);
   const effectiveTab = canSeeOperations ? activeTab : 'new-business';
 
   const visibleLeads = useMemo(() => {
@@ -800,15 +800,19 @@ export default function Dashboard() {
   return (
     <div className="space-y-7">
       <PageHeader
-        title={isFinanceTeam(user) ? 'Finance Review Dashboard' : isCommercialTeam(user) ? 'Commercial Review Dashboard' : 'Operations Command Center'}
-        description={isFinanceTeam(user) ? 'Finance-only queue for billing, margin, payment, and risk approval.' : isCommercialTeam(user) ? 'Commercial-only queue for BD submitted assessment review and pricing approval.' : 'Management dashboard for new business pipeline health, site operations, attendance, tickets, tasks, field officers, and SLA visibility.'}
+        title={isHrReviewer(user) ? 'HR Review Dashboard' : isFinanceTeam(user) ? 'Finance Review Dashboard' : isCommercialTeam(user) ? 'Commercial Review Dashboard' : 'Operations Command Center'}
+        description={isHrReviewer(user) ? 'HR-only queue for manpower, wage, reliever, gender, shift, and uniform review.' : isFinanceTeam(user) ? 'Finance review dashboard with access to approval queue and operational KPI dashboards.' : isCommercialTeam(user) ? 'Commercial review dashboard with access to approval queue and operational KPI dashboards.' : 'Management dashboard for new business pipeline health, site operations, attendance, tickets, tasks, field officers, and SLA visibility.'}
         actions={canSeeOperations ? <DashboardTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} /> : null}
       />
 
-      {isCommercialTeam(user) ? (
+      {isHrReviewer(user) ? (
+        <ApprovalDashboard title="HR Review Queue" description="Records submitted for manpower, wage, reliever, gender, shift, and uniform validation." stage="HR Review" siteVisits={siteVisits} />
+      ) : isApprovalReviewer(user) && activeTab === 'new-business' ? (
+        isCommercialTeam(user) ? (
         <ApprovalDashboard title="Commercial Review Queue" description="Records submitted by BD for commercial statement, pricing, and margin approval." stage="Commercial Review" siteVisits={siteVisits} />
-      ) : isFinanceTeam(user) ? (
+        ) : (
         <ApprovalDashboard title="Finance Review Queue" description="Records approved by Commercial for billing, expense, margin, and payment validation." stage="Finance Review" siteVisits={siteVisits} />
+        )
       ) : effectiveTab === 'new-business' || restrictedToPipeline ? (
         <NewBusinessPipeline
           activeDashboardSection={activeDashboardSection}

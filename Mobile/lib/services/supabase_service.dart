@@ -11,7 +11,9 @@ class QpmsSupabaseService {
   static const String _apiBaseUrl = String.fromEnvironment('QPMS_API_URL');
   static String get apiBaseUrl {
     if (_apiBaseUrl.isNotEmpty) return _apiBaseUrl;
-    return Platform.isAndroid ? 'http://10.0.2.2:4000' : 'http://localhost:4000';
+    return Platform.isAndroid
+        ? 'http://10.0.2.2:4000'
+        : 'http://localhost:4000';
   }
 
   static bool get isConfigured => _url.isNotEmpty && _anonKey.isNotEmpty;
@@ -36,11 +38,19 @@ class QpmsSupabaseService {
     final supabase = client;
     if (supabase == null) return null;
 
-    final created = await supabase
-        .from('leads')
-        .insert(lead)
-        .select('id')
-        .single();
+    Map<String, dynamic> created;
+    try {
+      created = await supabase.from('leads').insert(lead).select('id').single();
+    } catch (error) {
+      if (!error.toString().contains('service_scope')) rethrow;
+      final retryLead = Map<String, dynamic>.from(lead)
+        ..remove('service_scope');
+      created = await supabase
+          .from('leads')
+          .insert(retryLead)
+          .select('id')
+          .single();
+    }
     final leadId = created['id'] as String;
 
     if (contacts.isNotEmpty) {

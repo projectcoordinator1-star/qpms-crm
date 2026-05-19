@@ -454,13 +454,19 @@ export function WorkflowProvider({ children }) {
   function submitCommercialReview(siteVisitId) {
     const visit = siteVisits.find((item) => item.id === siteVisitId);
     updateSiteVisit(siteVisitId, (visit) => ({
-      status: 'Commercial Review',
-      currentStage: 'Commercial Review',
-      pendingWith: 'Commercial Team',
+      status: 'Pending Review',
+      currentStage: 'Parallel Review',
+      pendingWith: 'Commercial Reviewer, Finance Reviewer, HR Reviewer',
       approvalStatus: 'Pending',
       approvalRemarks: '',
-      approvalTimeline: buildApprovalTimeline(visit, 'Submitted to Commercial'),
-      activity: ['Submitted for Commercial Review', ...(visit.activity || [])].slice(0, 8),
+      reviewStatus: {
+        ...(visit.reviewStatus || {}),
+        'Commercial Review': 'Pending',
+        'Finance Review': 'Pending',
+        'HR Review': 'Pending',
+      },
+      approvalTimeline: buildApprovalTimeline(visit, 'Submitted to Commercial, Finance, and HR'),
+      activity: ['Submitted to Commercial, Finance, and HR Review', ...(visit.activity || [])].slice(0, 8),
     }));
     if (isRemoteWorkflowEnabled() && visit) {
       submitApprovalRemote(visit, visit.assessmentId).catch((error) => {
@@ -470,47 +476,42 @@ export function WorkflowProvider({ children }) {
     }
   }
 
-  function decideApproval(siteVisitId, decision, remarks, user) {
+  function decideApproval(siteVisitId, decision, remarks, user, reviewStage) {
     const visit = siteVisits.find((item) => item.id === siteVisitId);
     if (!visit) return;
 
-    const stage = visit.currentStage || 'Commercial Review';
+    const stage = reviewStage || visit.currentStage || 'Commercial Review';
     const normalizedDecision = decision === 'rework' ? 'Rework Requested' : decision === 'reject' ? 'Rejected' : 'Approved';
-    const approved = normalizedDecision === 'Approved';
-    const commercialStage = stage === 'Commercial Review';
-    const financeStage = stage === 'Finance Review';
-    const bdTeamStage = stage === 'BD Team Review';
-    const cooStage = stage === 'COO Approval';
-    const nextStage = approved && commercialStage ? 'Finance Review' : approved && financeStage ? 'BD Team Review' : approved && bdTeamStage ? 'COO Approval' : approved && cooStage ? 'Approved' : stage;
-    const pendingWith = approved && commercialStage
-      ? 'Finance Team'
-      : approved && financeStage
-        ? 'BD Head / BD Team'
-        : approved && bdTeamStage
-          ? 'COO'
-          : approved && cooStage
-            ? 'Completed'
-        : normalizedDecision === 'Rework Requested'
-          ? 'BD Executive'
-          : normalizedDecision === 'Rejected'
-            ? 'Workflow Closed'
-            : visit.pendingWith || 'BD Team';
-    const event = approved && commercialStage
-      ? 'Commercial Approved'
-      : approved && financeStage
-        ? 'Finance Approved'
-        : approved && bdTeamStage
-          ? 'BD Team Review'
-          : approved && cooStage
-            ? 'COO Approval'
-        : `${stage} ${normalizedDecision}`;
+    const nextReviewStatus = {
+      'Commercial Review': 'Pending',
+      'Finance Review': 'Pending',
+      'HR Review': 'Pending',
+      ...(visit.reviewStatus || {}),
+      [stage]: normalizedDecision,
+    };
+    const pendingStages = Object.entries(nextReviewStatus)
+      .filter(([, status]) => status === 'Pending')
+      .map(([name]) => name.replace(' Review', ''));
+    const allApproved = ['Commercial Review', 'Finance Review', 'HR Review'].every((name) => nextReviewStatus[name] === 'Approved');
+    const nextStage = allApproved ? 'BD Team Review' : 'Parallel Review';
+    const pendingWith = normalizedDecision === 'Rejected'
+      ? `${stage.replace(' Review', '')} rejected`
+      : normalizedDecision === 'Rework Requested'
+        ? 'BD Executive'
+        : allApproved
+          ? 'BD Head / BD Team'
+          : pendingStages.length
+            ? `Pending at ${pendingStages.join(', ')}`
+            : visit.pendingWith || 'Workflow Review';
+    const event = `${stage} ${normalizedDecision}`;
 
     updateSiteVisit(siteVisitId, (visit) => ({
-      status: normalizedDecision === 'Approved' ? nextStage : normalizedDecision,
+      status: normalizedDecision === 'Rejected' || normalizedDecision === 'Rework Requested' ? normalizedDecision : allApproved ? 'BD Team Review' : 'Pending Review',
       currentStage: nextStage,
       pendingWith,
       approvalStatus: normalizedDecision,
       approvalRemarks: remarks,
+      reviewStatus: nextReviewStatus,
       lastApprovalBy: user?.name || user?.email || '',
       lastApprovalAt: new Date().toISOString(),
       approvalTimeline: buildApprovalTimeline(visit, event),

@@ -44,7 +44,7 @@ export const mockUsers = [
     name: 'Commercial Team 1',
     email: 'commercial1@qpms.co.in',
     password: '123456',
-    role: 'Commercial Team',
+    role: 'Commercial Reviewer',
     access: 'Commercial review queue and approval actions',
   },
   {
@@ -52,7 +52,7 @@ export const mockUsers = [
     name: 'Commercial Team 2',
     email: 'commercial2@qpms.co.in',
     password: '123456',
-    role: 'Commercial Team',
+    role: 'Commercial Reviewer',
     access: 'Commercial review queue and approval actions',
   },
   {
@@ -60,7 +60,7 @@ export const mockUsers = [
     name: 'Finance Team 1',
     email: 'finance1@qpms.co.in',
     password: '123456',
-    role: 'Finance Team',
+    role: 'Finance Reviewer',
     access: 'Finance review queue and approval actions',
   },
   {
@@ -68,21 +68,46 @@ export const mockUsers = [
     name: 'Finance Team 2',
     email: 'finance2@qpms.co.in',
     password: '123456',
-    role: 'Finance Team',
+    role: 'Finance Reviewer',
     access: 'Finance review queue and approval actions',
+  },
+  {
+    id: 'hr-1',
+    name: 'HR Reviewer 1',
+    email: 'hr1@qpms.co.in',
+    password: '123456',
+    role: 'HR Reviewer',
+    access: 'HR manpower and wage review queue',
+  },
+  {
+    id: 'hr-2',
+    name: 'HR Reviewer 2',
+    email: 'hr2@qpms.co.in',
+    password: '123456',
+    role: 'HR Reviewer',
+    access: 'HR manpower and wage review queue',
   },
 ];
 
 export const bdExecutives = mockUsers.filter((user) => user.role === 'BD Executive');
-export const commercialTeamUsers = mockUsers.filter((user) => user.role === 'Commercial Team');
-export const financeTeamUsers = mockUsers.filter((user) => user.role === 'Finance Team');
+export const commercialTeamUsers = mockUsers.filter((user) => user.role === 'Commercial Reviewer');
+export const financeTeamUsers = mockUsers.filter((user) => user.role === 'Finance Reviewer');
+export const hrReviewerUsers = mockUsers.filter((user) => user.role === 'HR Reviewer');
 
 export function isCommercialTeam(user) {
-  return ['Commercial Team', 'Commercial'].includes(user?.role);
+  return ['Commercial Reviewer', 'Commercial Team', 'Commercial'].includes(user?.role);
 }
 
 export function isFinanceTeam(user) {
-  return ['Finance Team', 'Finance'].includes(user?.role);
+  return ['Finance Reviewer', 'Finance Team', 'Finance'].includes(user?.role);
+}
+
+export function isHrReviewer(user) {
+  return user?.role === 'HR Reviewer';
+}
+
+export function isApprovalReviewer(user) {
+  return isCommercialTeam(user) || isFinanceTeam(user) || isHrReviewer(user);
 }
 
 export function canManageLeads(user) {

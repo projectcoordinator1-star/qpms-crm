@@ -26,7 +26,7 @@ import StatusBadge from '../components/StatusBadge.jsx';
 import Toast from '../components/Toast.jsx';
 import { useAuth } from '../context/auth-context.js';
 import { useWorkflow } from '../context/workflow-context.js';
-import { canViewBdTeam } from '../data/mockUsers.js';
+import { canViewBdTeam, isApprovalReviewer, isCommercialTeam, isFinanceTeam, isHrReviewer } from '../data/mockUsers.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { sendSiteVisitMomEmail } from '../services/mailService.js';
 import { logAssessmentAuditRemote } from '../services/workflowRepository.js';
@@ -145,19 +145,25 @@ const defaultSurvey = {
     department,
     designation: department === 'Security' ? 'Security Guard' : department === 'Technical' ? 'Technician' : 'Associate',
     shiftType: 'General',
+    gender: 'Any',
     count: 0,
     relieverRequired: 'No',
     otRequired: 'No',
-    accommodationRequired: 'No',
-    transportationRequired: 'No',
     wageCategory: 'Skilled',
     remarks: '',
   })),
-  equipment: [{ id: 'equipment-1', name: 'Ride-on Scrubber', brand: '', capacity: '', quantity: 1, purchaseType: 'Rental', vendor: '', monthlyCost: 0, remarks: '' }],
-  chemicals: [{ id: 'chemical-1', name: 'Floor Cleaner', brand: '', usageArea: 'Common Areas', quantity: 1, monthlyConsumption: '' }],
-  tools: [{ id: 'tool-1', name: 'Mop Set', quantity: 1, department: 'Housekeeping', remarks: '' }],
+  allowances: {
+    transport: { applicable: 'No', providedBy: 'Client', monthlyCost: 0, vehicleType: '', remarks: '' },
+    food: { applicable: 'No', providedBy: 'Client', perDayCost: 0 },
+    accommodation: { applicable: 'No', providedBy: 'Client', monthlyCost: 0 },
+  },
+  equipment: [{ id: 'equipment-1', name: 'Ride-on Scrubber', scopeResponsibility: 'QPMS Scope', brand: '', capacity: '', quantity: 1, purchaseType: 'Rental', vendor: '', monthlyCost: 0, clientResponsibility: '', qpmsResponsibility: '', remarks: '' }],
+  chemicals: [{ id: 'chemical-1', name: 'Floor Cleaner', scopeResponsibility: 'QPMS Scope', brand: '', usageArea: 'Common Areas', quantity: 1, monthlyConsumption: '', unitCost: 0, monthlyCost: 0, vendor: '', clientResponsibility: '', qpmsResponsibility: '', remarks: '' }],
+  tools: [{ id: 'tool-1', name: 'Mop Set', scopeResponsibility: 'QPMS Scope', quantity: 1, unitCost: 0, monthlyCost: 0, department: 'Housekeeping', vendor: '', clientResponsibility: '', qpmsResponsibility: '', remarks: '' }],
+  ppeUniforms: [{ id: 'ppe-1', name: 'Uniform Set', scopeResponsibility: 'QPMS Scope', quantity: 1, unitCost: 0, monthlyCost: 0, vendor: '', clientResponsibility: '', qpmsResponsibility: '', remarks: '' }],
+  machinery: [{ id: 'machine-1', name: 'Scrubbing Machine', scopeResponsibility: 'QPMS Scope', quantity: 1, unitCost: 0, monthlyCost: 0, vendor: '', clientResponsibility: '', qpmsResponsibility: '', remarks: '' }],
   clientKyc: { gstRegistration: '', pan: '', aadhaar: '', tan: '', kycRemarks: '', documentUploadPlaceholders: '', billingAddress: '', complianceDocs: '' },
-  penaltyClauses: { penaltyClauseAvailable: 'No', penaltyDetails: '', riskImpact: 'Medium', remarks: '' },
+  penaltyClauses: [{ id: 'penalty-1', penaltyClauseAvailable: 'No', penaltyDetails: '', riskImpact: 'Medium', remarks: '' }],
   risks: riskTypes.map((name) => ({ name, level: 'Medium', notes: '', mitigation: '' })),
   commercial: {
     billingComponents: [
@@ -169,6 +175,7 @@ const defaultSurvey = {
       { id: 'expense-2', name: 'Consumables', amount: 0 },
     ],
     nonBillableCost: 0,
+    applicableZone: 'Z1',
   },
   approvalWorkflow: '',
   operationsTeamApproval: 'Pending',
@@ -196,11 +203,15 @@ function mergeSurvey(survey = {}) {
       billingComponents: survey.commercial?.billingComponents || defaultSurvey.commercial.billingComponents,
       expenseComponents: survey.commercial?.expenseComponents || defaultSurvey.commercial.expenseComponents,
     },
+    allowances: { ...defaultSurvey.allowances, ...(survey.allowances || {}) },
     hseCompliance: survey.hseCompliance || defaultSurvey.hseCompliance,
     manpowerPlan: survey.manpowerPlan || defaultSurvey.manpowerPlan,
     equipment: survey.equipment || defaultSurvey.equipment,
     chemicals: survey.chemicals || defaultSurvey.chemicals,
     tools: survey.tools || defaultSurvey.tools,
+    ppeUniforms: survey.ppeUniforms || defaultSurvey.ppeUniforms,
+    machinery: survey.machinery || defaultSurvey.machinery,
+    penaltyClauses: Array.isArray(survey.penaltyClauses) ? survey.penaltyClauses : survey.penaltyClauses ? [{ id: 'penalty-legacy', ...survey.penaltyClauses }] : defaultSurvey.penaltyClauses,
     risks: survey.risks || defaultSurvey.risks,
   };
 }
@@ -262,7 +273,7 @@ function buildSiteVisitMom(visit, survey) {
   return {
     to: visit.email || '',
     cc: 'bdhead@qpms.in, commercial@qpms.in, operations@qpms.in',
-    subject: `Site Visit MOM - ${visit.company} - QPMS`,
+    subject: `Site Visit Minutes of Meeting - ${visit.company} - QPMS`,
     summary: `Pre-operational facility assessment completed for ${visit.company} at ${visit.location || visit.city}.`,
     scope: [...Object.keys(survey.ifmScope || {}).filter((key) => survey.ifmScope[key]?.selected), ...selectedHard, ...selectedSoft].join(', ') || 'IFM service scope to be finalized from survey inputs.',
     requirements: `Manpower rows: ${survey.manpowerPlan.length}. Equipment items: ${survey.equipment.length}. Tools: ${survey.tools.length}. Chemicals: ${survey.chemicals.length}.`,
@@ -351,7 +362,7 @@ function VisitMeta({ icon, label, value }) {
   );
 }
 
-function AssessmentQueueCard({ visit, selected, onSelect, onOpenAssessment, onOpenMom }) {
+function AssessmentQueueCard({ visit, onOpenAssessment, onOpenMom }) {
   return (
     <Motion.article
       layout
@@ -359,12 +370,10 @@ function AssessmentQueueCard({ visit, selected, onSelect, onOpenAssessment, onOp
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ y: -2 }}
       transition={{ duration: 0.18, ease: 'easeOut' }}
-      onClick={onSelect}
+      onClick={onOpenAssessment}
       className={[
         'cursor-pointer rounded-2xl border bg-white p-5 shadow-sm transition dark:bg-slate-950/70',
-        selected
-          ? 'border-qpms-300 shadow-[0_20px_55px_rgba(36,68,164,0.18)] ring-2 ring-qpms-100 dark:border-qpms-500/50 dark:ring-qpms-500/20'
-          : 'border-slate-200 hover:border-qpms-200 hover:shadow-lg dark:border-slate-800 dark:hover:border-qpms-500/35',
+        'border-slate-200 hover:border-qpms-200 hover:shadow-lg dark:border-slate-800 dark:hover:border-qpms-500/35',
       ].join(' ')}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -402,69 +411,6 @@ function AssessmentQueueCard({ visit, selected, onSelect, onOpenAssessment, onOp
         </div>
       </div>
     </Motion.article>
-  );
-}
-
-function QueueSidePanel({ visit, mode, momDraft, onOpenAssessment, onOpenMom, onClose }) {
-  if (!visit) return null;
-
-  return (
-    <Motion.aside
-      initial={{ opacity: 0, x: 24 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 24 }}
-      transition={{ duration: 0.2, ease: 'easeOut' }}
-      className="enterprise-card sticky top-24 h-fit max-h-[calc(100vh-8rem)] overflow-y-auto p-5 lg:rounded-2xl"
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-bold uppercase text-qpms-600 dark:text-qpms-300">{mode === 'mom' ? 'MOM Workspace' : 'Selected Lead'}</p>
-          <h2 className="mt-1 text-xl font-semibold leading-7 text-slate-950 dark:text-white">{visit.company}</h2>
-        </div>
-        <button type="button" onClick={onClose} className="focus-ring rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-
-      <div className="mt-5 grid gap-3">
-        <SummaryPill label="Lead ID" value={visit.leadId || visit.id} />
-        <SummaryPill label="Contact" value={[visit.contact, visit.designation].filter(Boolean).join(' - ') || 'Not available'} />
-        <SummaryPill label="Email / Phone" value={[visit.email, visit.phone].filter(Boolean).join(' / ') || 'Not available'} />
-        <SummaryPill label="Schedule" value={`${formatDate(visit.scheduledVisitDate)}${visit.scheduledVisitTime ? `, ${visit.scheduledVisitTime}` : ''}`} />
-        <SummaryPill label="MOM Status" value={visit.momStatus || 'Pending'} />
-      </div>
-
-      {mode === 'mom' ? (
-        <div className="mt-5 rounded-2xl border border-qpms-100 bg-qpms-50/70 p-4 dark:border-qpms-500/20 dark:bg-qpms-500/10">
-          <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-qpms-600 dark:text-qpms-300" />
-            <h3 className="text-sm font-bold text-slate-950 dark:text-white">Site Visit MOM</h3>
-          </div>
-          <p className="mt-3 text-sm font-semibold text-slate-900 dark:text-white">{momDraft?.subject || `Site Visit MOM - ${visit.company}`}</p>
-          <p className="mt-2 line-clamp-5 whitespace-pre-line text-sm leading-6 text-slate-600 dark:text-slate-300">{momDraft?.summary || 'MOM workspace is ready for this scheduled site visit.'}</p>
-        </div>
-      ) : null}
-
-      <div className="mt-5">
-        <h3 className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400">Recent Activity</h3>
-        <div className="mt-3 space-y-2">
-          {(visit.activity || ['Lead MOM sent. Site survey workflow opened.']).slice(0, 4).map((item, index) => (
-            <div key={`${item}-${index}`} className="rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm font-medium text-slate-600 dark:border-slate-800 dark:bg-slate-950/70 dark:text-slate-300">
-              {item}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-5 grid gap-2">
-        <button type="button" onClick={onOpenAssessment} className="focus-ring rounded-xl bg-gradient-to-r from-qpms-700 to-qpms-500 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-qpms-600/20 hover:from-qpms-800 hover:to-qpms-600">
-          Open Assessment
-        </button>
-        <button type="button" onClick={onOpenMom} className="focus-ring rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
-          {visit.siteMom ? 'View Site Visit MOM' : 'Create Site Visit MOM'}
-        </button>
-      </div>
-    </Motion.aside>
   );
 }
 
@@ -621,7 +567,7 @@ function AuditTable({ rows, onChange }) {
   );
 }
 
-function EditableTable({ columns, rows, onChange, onAdd, onRemove, addLabel }) {
+function EditableTable({ columns, rows, onChange, onAdd, onRemove, onDuplicate, addLabel }) {
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
       <div className="overflow-x-auto">
@@ -647,9 +593,16 @@ function EditableTable({ columns, rows, onChange, onAdd, onRemove, addLabel }) {
                   </td>
                 ))}
                 <td className="px-3 py-3">
-                  <button type="button" onClick={() => onRemove(rowIndex)} className="rounded-xl border border-rose-200 p-2 text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:hover:bg-rose-500/10">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  <div className="flex gap-2">
+                    {onDuplicate ? (
+                      <button type="button" onClick={() => onDuplicate(rowIndex)} className="rounded-xl border border-slate-200 p-2 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800" aria-label="Duplicate row">
+                        <Plus className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                    <button type="button" onClick={() => onRemove(rowIndex)} className="rounded-xl border border-rose-200 p-2 text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:hover:bg-rose-500/10">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -703,7 +656,6 @@ export default function Sites() {
   const [photoEvidence, setPhotoEvidence] = useState({});
   const [previewPhoto, setPreviewPhoto] = useState(null);
   const [siteMomDraft, setSiteMomDraft] = useState(null);
-  const [showMomPreview, setShowMomPreview] = useState(false);
   const [toast, setToast] = useState(null);
   const [autoSaveLabel, setAutoSaveLabel] = useState('Draft saved');
   const [draftVisitId, setDraftVisitId] = useState(null);
@@ -711,23 +663,28 @@ export default function Sites() {
   const [sectionAudit, setSectionAudit] = useState({});
   const [editingSection, setEditingSection] = useState('');
   const [pendingEditSection, setPendingEditSection] = useState('');
-  const [selectedQueueVisitId, setSelectedQueueVisitId] = useState('');
-  const [queuePanelMode, setQueuePanelMode] = useState('details');
+  const [momComposerVisit, setMomComposerVisit] = useState(null);
   usePageTitle('Site Visit & Estimation');
 
   const visibleSiteVisits = useMemo(() => {
-    if (canViewBdTeam(user)) return siteVisits;
+    if (canViewBdTeam(user) || isApprovalReviewer(user)) return siteVisits;
     return siteVisits.filter((visit) => visit.assigned_bd_email === user?.email || visit.created_by_user_id === user?.id);
   }, [siteVisits, user]);
 
   const selectedVisit = visibleSiteVisits.find((visit) => String(visit.id) === String(routeVisitId));
-  const selectedQueueVisit = visibleSiteVisits.find((visit) => String(visit.id) === String(selectedQueueVisitId));
   const selectedStage = normalizeStage(selectedVisit?.currentStage || 'Pre-Operational Assessment');
-  const activeSection = surveySections[activeSectionIndex];
+  const roleVisibleSections = useMemo(() => {
+    if (isHrReviewer(user)) return ['Manpower Requirement'];
+    return surveySections;
+  }, [user]);
+  const activeSection = roleVisibleSections[activeSectionIndex] || roleVisibleSections[0];
+  const roleCanEditActiveSection = !isApprovalReviewer(user)
+    || ((isCommercialTeam(user) || isFinanceTeam(user)) && ['Commercial Statement', 'Risk Assessment', 'Approval Mechanism'].includes(activeSection))
+    || (isHrReviewer(user) && activeSection === 'Manpower Requirement');
   const activeSectionAudit = sectionAudit[activeSection];
   const isSectionSaved = Boolean(activeSectionAudit);
   const isEditingActiveSection = editingSection === activeSection;
-  const isActiveSectionLocked = isSectionSaved && !isEditingActiveSection;
+  const isActiveSectionLocked = (isSectionSaved && !isEditingActiveSection) || !roleCanEditActiveSection;
 
   const filteredVisits = useMemo(() => {
     const value = query.trim().toLowerCase();
@@ -758,7 +715,7 @@ export default function Sites() {
       },
       {
         label: 'Commercial Review Ready',
-        value: visibleSiteVisits.filter((visit) => visit.currentStage === 'Commercial Review' || visit.status === 'Commercial Review').length,
+        value: visibleSiteVisits.filter((visit) => ['Commercial Review', 'Parallel Review'].includes(visit.currentStage) || ['Commercial Review', 'Pending Review'].includes(visit.status)).length,
         tone: 'border-violet-100 bg-violet-50/80 text-violet-700 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-200',
       },
     ],
@@ -828,15 +785,9 @@ export default function Sites() {
     navigate(`/site-visit/${visit.id}`);
   }
 
-  function selectQueueVisit(visit) {
-    setSelectedQueueVisitId(visit.id);
-    setQueuePanelMode('details');
-  }
-
   function openQueueMomWorkspace(visit) {
-    setSelectedQueueVisitId(visit.id);
-    setQueuePanelMode('mom');
     setSiteMomDraft(visit.siteMom || buildSiteVisitMom(visit, mergeSurvey(visit.survey)));
+    setMomComposerVisit(visit);
   }
 
   function updateSurveyDraft(key, value) {
@@ -862,10 +813,22 @@ export default function Sites() {
     setSurveyDraft((current) => ({ ...current, [section]: [...current[section], { ...row, id: `${section}-${Date.now()}` }] }));
   }
 
-  function removeRow(section, index) {
-    markChanged();
-    setSurveyDraft((current) => ({ ...current, [section]: current[section].filter((_, itemIndex) => itemIndex !== index) }));
-  }
+function removeRow(section, index) {
+  markChanged();
+  setSurveyDraft((current) => ({ ...current, [section]: current[section].filter((_, itemIndex) => itemIndex !== index) }));
+}
+
+function duplicateRow(section, index) {
+  markChanged();
+  setSurveyDraft((current) => ({
+    ...current,
+    [section]: [
+      ...current[section].slice(0, index + 1),
+      { ...current[section][index], id: `${section}-${Date.now()}` },
+      ...current[section].slice(index + 1),
+    ],
+  }));
+}
 
   async function addPhotos(slot, files) {
     const nextPhotos = files.map((file) => ({ id: `${slot}-${file.name}-${Date.now()}-${Math.random()}`, name: file.name, url: URL.createObjectURL(file) }));
@@ -935,7 +898,7 @@ export default function Sites() {
       const nextMom = buildSiteVisitMom(selectedVisit, surveyDraft);
       setSiteMomDraft(nextMom);
       await Promise.resolve(saveSiteVisitMom(selectedVisit.id, nextMom));
-      setShowMomPreview(true);
+      setMomComposerVisit(selectedVisit);
       setAutoSaveLabel('Saved successfully');
       showToast('Site Visit MOM generated', 'success');
     } catch (error) {
@@ -947,12 +910,15 @@ export default function Sites() {
   }
 
   async function handleSendMom() {
-    const nextMom = siteMomDraft || buildSiteVisitMom(selectedVisit, surveyDraft);
+    const targetVisit = momComposerVisit || selectedVisit;
+    const nextMom = siteMomDraft || buildSiteVisitMom(targetVisit, surveyDraft || mergeSurvey(targetVisit?.survey));
+    if (!targetVisit) return;
     try {
       setPendingAction('sendSiteMom');
-      await sendSiteVisitMomEmail(nextMom, selectedVisit);
-      sendSiteVisitMom(selectedVisit.id, nextMom);
+      await sendSiteVisitMomEmail(nextMom, targetVisit);
+      sendSiteVisitMom(targetVisit.id, nextMom);
       setSiteMomDraft({ ...nextMom, sent: true });
+      setMomComposerVisit(null);
       showToast('Site Visit MOM sent successfully', 'success');
     } catch (error) {
       showToast(`Email failed: ${error.response?.data?.message || error.message}`, 'error');
@@ -975,12 +941,12 @@ export default function Sites() {
         user,
         oldValue: sectionSnapshot(activeSection, selectedVisit.survey),
         newValue: sectionSnapshot(activeSection, surveyDraft),
-        remarks: 'Assessment submitted for Commercial Review.',
+        remarks: 'Assessment submitted for Commercial, Finance, and HR Review.',
       });
       rememberSectionAudit('Submitted for Commercial Review');
       setEditingSection('');
       setAutoSaveLabel('Submitted');
-      showToast('Submitted for Commercial Review', 'success');
+      showToast('Submitted to Commercial, Finance, and HR Review', 'success');
     } catch (error) {
       setAutoSaveLabel('Failed to save');
       showToast(`Failed to submit: ${error.message}`, 'error');
@@ -1066,21 +1032,55 @@ export default function Sites() {
               columns={[
                 { key: 'department', label: 'Department', type: 'select', options: manpowerDepartments },
                 { key: 'designation', label: 'Designation' },
-                { key: 'shiftType', label: 'Shift Type', type: 'select', options: ['General', 'Day', 'Night', 'Rotational'] },
+                { key: 'shiftType', label: 'Shift Type', type: 'select', options: ['General', 'Day', 'Night', 'A-Shift', 'B-Shift', 'C-Shift', 'Rotational'] },
+                { key: 'gender', label: 'Gender', type: 'select', options: ['Male', 'Female', 'Any'] },
                 { key: 'count', label: 'Count', type: 'number' },
                 { key: 'relieverRequired', label: 'Reliever?', type: 'select', options: ['Yes', 'No'] },
                 { key: 'otRequired', label: 'OT?', type: 'select', options: ['Yes', 'No'] },
-                { key: 'accommodationRequired', label: 'Accommodation?', type: 'select', options: ['Yes', 'No'] },
-                { key: 'transportationRequired', label: 'Transportation?', type: 'select', options: ['Yes', 'No'] },
                 { key: 'wageCategory', label: 'Wage Category', type: 'select', options: ['Unskilled', 'Semi-skilled', 'Skilled', 'Highly Skilled'] },
                 { key: 'remarks', label: 'Remarks' },
               ]}
               rows={surveyDraft.manpowerPlan}
               onChange={(index, patch) => updateArray('manpowerPlan', index, patch)}
               onAdd={() => addRow('manpowerPlan', defaultSurvey.manpowerPlan[0])}
+              onDuplicate={(index) => duplicateRow('manpowerPlan', index)}
               onRemove={(index) => removeRow('manpowerPlan', index)}
               addLabel="Add manpower row"
             />
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+              <h3 className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400">Allowances / Client Support</h3>
+              <div className="mt-5 grid gap-4 lg:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+                  <SelectField label="Transport Allowance Applicable?" value={surveyDraft.allowances.transport.applicable} onChange={(value) => updateNested('allowances', { ...surveyDraft.allowances, transport: { ...surveyDraft.allowances.transport, applicable: value } })} options={['No', 'Yes']} />
+                  {surveyDraft.allowances.transport.applicable === 'Yes' ? (
+                    <div className="mt-4 grid gap-3">
+                      <SelectField label="Provided By" value={surveyDraft.allowances.transport.providedBy} onChange={(value) => updateNested('allowances', { ...surveyDraft.allowances, transport: { ...surveyDraft.allowances.transport, providedBy: value } })} options={['Client', 'Contract', 'Own']} />
+                      <TextField label="Per Month Cost" type="number" value={surveyDraft.allowances.transport.monthlyCost} onChange={(value) => updateNested('allowances', { ...surveyDraft.allowances, transport: { ...surveyDraft.allowances.transport, monthlyCost: value } })} />
+                      <TextField label="Vehicle Type" value={surveyDraft.allowances.transport.vehicleType} onChange={(value) => updateNested('allowances', { ...surveyDraft.allowances, transport: { ...surveyDraft.allowances.transport, vehicleType: value } })} />
+                      <TextField label="Remarks" value={surveyDraft.allowances.transport.remarks} onChange={(value) => updateNested('allowances', { ...surveyDraft.allowances, transport: { ...surveyDraft.allowances.transport, remarks: value } })} />
+                    </div>
+                  ) : null}
+                </div>
+                <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+                  <SelectField label="Food Allowance Applicable?" value={surveyDraft.allowances.food.applicable} onChange={(value) => updateNested('allowances', { ...surveyDraft.allowances, food: { ...surveyDraft.allowances.food, applicable: value } })} options={['No', 'Yes']} />
+                  {surveyDraft.allowances.food.applicable === 'Yes' ? (
+                    <div className="mt-4 grid gap-3">
+                      <TextField label="Per Day Cost" type="number" value={surveyDraft.allowances.food.perDayCost} onChange={(value) => updateNested('allowances', { ...surveyDraft.allowances, food: { ...surveyDraft.allowances.food, perDayCost: value } })} />
+                      <SelectField label="Provided By" value={surveyDraft.allowances.food.providedBy} onChange={(value) => updateNested('allowances', { ...surveyDraft.allowances, food: { ...surveyDraft.allowances.food, providedBy: value } })} options={['Client', 'Contract', 'Own']} />
+                    </div>
+                  ) : null}
+                </div>
+                <div className="rounded-2xl border border-slate-200 p-4 dark:border-slate-800">
+                  <SelectField label="Accommodation Applicable?" value={surveyDraft.allowances.accommodation.applicable} onChange={(value) => updateNested('allowances', { ...surveyDraft.allowances, accommodation: { ...surveyDraft.allowances.accommodation, applicable: value } })} options={['No', 'Yes']} />
+                  {surveyDraft.allowances.accommodation.applicable === 'Yes' ? (
+                    <div className="mt-4 grid gap-3">
+                      <TextField label="Per Month Cost" type="number" value={surveyDraft.allowances.accommodation.monthlyCost} onChange={(value) => updateNested('allowances', { ...surveyDraft.allowances, accommodation: { ...surveyDraft.allowances.accommodation, monthlyCost: value } })} />
+                      <SelectField label="Provided By" value={surveyDraft.allowances.accommodation.providedBy} onChange={(value) => updateNested('allowances', { ...surveyDraft.allowances, accommodation: { ...surveyDraft.allowances.accommodation, providedBy: value } })} options={['Client', 'Contract', 'Own']} />
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </section>
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {['minimumWagesType', 'applicableZone', 'wageComputationNotes', 'relieverCostRequired', 'budgetedTakeHomeFeasibility', 'localWorkforceAvailability', 'transportationImpact', 'bonusPaymentType', 'leaveWithWagesDays', 'nfhApplicable', 'travelAccommodationProvided'].map((key) => (
@@ -1096,54 +1096,97 @@ export default function Sites() {
             <EditableTable
               columns={[
                 { key: 'name', label: 'Equipment Name' },
+                { key: 'scopeResponsibility', label: 'Scope Responsibility', type: 'select', options: ['Client Scope', 'QPMS Scope', 'Shared Scope'] },
                 { key: 'brand', label: 'Brand' },
                 { key: 'capacity', label: 'Capacity' },
                 { key: 'quantity', label: 'Quantity', type: 'number' },
-                { key: 'purchaseType', label: 'Purchase / Rental', type: 'select', options: ['Purchase', 'Rental'] },
-                { key: 'vendor', label: 'Vendor' },
+                { key: 'unitCost', label: 'Unit Cost', type: 'number' },
                 { key: 'monthlyCost', label: 'Monthly Cost', type: 'number' },
+                { key: 'vendor', label: 'Vendor / Source' },
+                { key: 'clientResponsibility', label: 'Client Responsibility' },
+                { key: 'qpmsResponsibility', label: 'QPMS Responsibility' },
                 { key: 'remarks', label: 'Remarks' },
               ]}
               rows={surveyDraft.equipment}
               onChange={(index, patch) => updateArray('equipment', index, patch)}
               onAdd={() => addRow('equipment', defaultSurvey.equipment[0])}
+              onDuplicate={(index) => duplicateRow('equipment', index)}
               onRemove={(index) => removeRow('equipment', index)}
-              addLabel="Add equipment"
+              addLabel="Add equipment item"
             />
             <EditableTable
               columns={[
-                { key: 'name', label: 'Chemical Name' },
-                { key: 'brand', label: 'Brand' },
-                { key: 'usageArea', label: 'Usage Area' },
+                { key: 'name', label: 'Consumable Name' },
+                { key: 'scopeResponsibility', label: 'Scope Responsibility', type: 'select', options: ['Client Scope', 'QPMS Scope', 'Shared Scope'] },
                 { key: 'quantity', label: 'Quantity', type: 'number' },
+                { key: 'unitCost', label: 'Unit Cost', type: 'number' },
+                { key: 'monthlyCost', label: 'Monthly Cost', type: 'number' },
+                { key: 'vendor', label: 'Vendor / Source' },
+                { key: 'clientResponsibility', label: 'Client Responsibility' },
+                { key: 'qpmsResponsibility', label: 'QPMS Responsibility' },
                 { key: 'monthlyConsumption', label: 'Monthly Consumption' },
               ]}
               rows={surveyDraft.chemicals}
               onChange={(index, patch) => updateArray('chemicals', index, patch)}
               onAdd={() => addRow('chemicals', defaultSurvey.chemicals[0])}
+              onDuplicate={(index) => duplicateRow('chemicals', index)}
               onRemove={(index) => removeRow('chemicals', index)}
-              addLabel="Add chemical"
+              addLabel="Add consumable"
             />
             <EditableTable
               columns={[
                 { key: 'name', label: 'Tool Name' },
+                { key: 'scopeResponsibility', label: 'Scope Responsibility', type: 'select', options: ['Client Scope', 'QPMS Scope', 'Shared Scope'] },
                 { key: 'quantity', label: 'Quantity', type: 'number' },
+                { key: 'unitCost', label: 'Unit Cost', type: 'number' },
+                { key: 'monthlyCost', label: 'Monthly Cost', type: 'number' },
+                { key: 'vendor', label: 'Vendor / Source' },
                 { key: 'department', label: 'Department', type: 'select', options: manpowerDepartments },
+                { key: 'clientResponsibility', label: 'Client Responsibility' },
+                { key: 'qpmsResponsibility', label: 'QPMS Responsibility' },
                 { key: 'remarks', label: 'Remarks' },
               ]}
               rows={surveyDraft.tools}
               onChange={(index, patch) => updateArray('tools', index, patch)}
               onAdd={() => addRow('tools', defaultSurvey.tools[0])}
+              onDuplicate={(index) => duplicateRow('tools', index)}
               onRemove={(index) => removeRow('tools', index)}
               addLabel="Add tool"
             />
-            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
-              <div className="grid gap-4 md:grid-cols-2">
-                {['consumables', 'rentalMachinery', 'nonBillableExpenses', 'uniformsShoesAccessories'].map((key) => (
-                  <TextField key={key} label={fieldLabel(key)} value={surveyDraft[key]} onChange={(value) => updateSurveyDraft(key, value)} multiline />
-                ))}
-              </div>
-            </section>
+            <EditableTable
+              columns={[
+                { key: 'name', label: 'PPE / Uniform Item' },
+                { key: 'scopeResponsibility', label: 'Scope Responsibility', type: 'select', options: ['Client Scope', 'QPMS Scope', 'Shared Scope'] },
+                { key: 'quantity', label: 'Quantity', type: 'number' },
+                { key: 'unitCost', label: 'Unit Cost', type: 'number' },
+                { key: 'monthlyCost', label: 'Monthly Cost', type: 'number' },
+                { key: 'vendor', label: 'Vendor / Source' },
+                { key: 'remarks', label: 'Remarks' },
+              ]}
+              rows={surveyDraft.ppeUniforms}
+              onChange={(index, patch) => updateArray('ppeUniforms', index, patch)}
+              onAdd={() => addRow('ppeUniforms', defaultSurvey.ppeUniforms[0])}
+              onDuplicate={(index) => duplicateRow('ppeUniforms', index)}
+              onRemove={(index) => removeRow('ppeUniforms', index)}
+              addLabel="Add PPE / uniform"
+            />
+            <EditableTable
+              columns={[
+                { key: 'name', label: 'Machinery Item' },
+                { key: 'scopeResponsibility', label: 'Scope Responsibility', type: 'select', options: ['Client Scope', 'QPMS Scope', 'Shared Scope'] },
+                { key: 'quantity', label: 'Quantity', type: 'number' },
+                { key: 'unitCost', label: 'Unit Cost', type: 'number' },
+                { key: 'monthlyCost', label: 'Monthly Cost', type: 'number' },
+                { key: 'vendor', label: 'Vendor / Source' },
+                { key: 'remarks', label: 'Remarks' },
+              ]}
+              rows={surveyDraft.machinery}
+              onChange={(index, patch) => updateArray('machinery', index, patch)}
+              onAdd={() => addRow('machinery', defaultSurvey.machinery[0])}
+              onDuplicate={(index) => duplicateRow('machinery', index)}
+              onRemove={(index) => removeRow('machinery', index)}
+              addLabel="Add machinery"
+            />
           </div>
         );
       case 'Client KYC':
@@ -1171,14 +1214,31 @@ export default function Sites() {
         );
       case 'Penalty Clauses':
         return (
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
-            <div className="grid gap-4 md:grid-cols-2">
-              <SelectField label="Penalty Clause Available" value={surveyDraft.penaltyClauses.penaltyClauseAvailable} onChange={(value) => updateNested('penaltyClauses', { ...surveyDraft.penaltyClauses, penaltyClauseAvailable: value })} options={['Yes', 'No']} />
-              <SelectField label="Risk Impact" value={surveyDraft.penaltyClauses.riskImpact} onChange={(value) => updateNested('penaltyClauses', { ...surveyDraft.penaltyClauses, riskImpact: value })} options={['Low', 'Medium', 'High', 'Critical']} />
-              <TextField label="Penalty Details" value={surveyDraft.penaltyClauses.penaltyDetails} onChange={(value) => updateNested('penaltyClauses', { ...surveyDraft.penaltyClauses, penaltyDetails: value })} multiline />
-              <TextField label="Remarks" value={surveyDraft.penaltyClauses.remarks} onChange={(value) => updateNested('penaltyClauses', { ...surveyDraft.penaltyClauses, remarks: value })} multiline />
-            </div>
-          </section>
+          <div className="space-y-4">
+            {surveyDraft.penaltyClauses.map((clause, index) => (
+              <section key={clause.id} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400">Penalty Clause {index + 1}</h3>
+                  <button type="button" onClick={() => removeRow('penaltyClauses', index)} className="rounded-xl border border-rose-200 p-2 text-rose-600 hover:bg-rose-50 dark:border-rose-500/30 dark:hover:bg-rose-500/10">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <SelectField label="Penalty Clause Available" value={clause.penaltyClauseAvailable} onChange={(value) => updateArray('penaltyClauses', index, { penaltyClauseAvailable: value })} options={['Yes', 'No']} />
+                  <SelectField label="Risk Impact" value={clause.riskImpact} onChange={(value) => updateArray('penaltyClauses', index, { riskImpact: value })} options={['Low', 'Medium', 'High', 'Critical']} />
+                  {clause.penaltyClauseAvailable === 'Yes' ? (
+                    <>
+                      <TextField label="Penalty Details" value={clause.penaltyDetails} onChange={(value) => updateArray('penaltyClauses', index, { penaltyDetails: value })} multiline />
+                      <TextField label="Remarks" value={clause.remarks} onChange={(value) => updateArray('penaltyClauses', index, { remarks: value })} multiline />
+                    </>
+                  ) : null}
+                </div>
+              </section>
+            ))}
+            <button type="button" onClick={() => addRow('penaltyClauses', defaultSurvey.penaltyClauses[0])} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+              <Plus className="h-4 w-4" /> Add Penalty Clause
+            </button>
+          </div>
         );
       case 'Commercial Statement': {
         const totals = getCommercialTotals(surveyDraft);
@@ -1212,7 +1272,10 @@ export default function Sites() {
               addLabel="Add expense component"
             />
             <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
-              <TextField label="Non-Billable Cost" type="number" value={surveyDraft.commercial.nonBillableCost} onChange={(value) => updateNested('commercial', { ...surveyDraft.commercial, nonBillableCost: value })} />
+              <div className="grid gap-4 md:grid-cols-2">
+                <SelectField label="Applicable Zone" value={surveyDraft.commercial.applicableZone} onChange={(value) => updateNested('commercial', { ...surveyDraft.commercial, applicableZone: value })} options={['Z1', 'Z2', 'Z3']} />
+                <TextField label="Non-Billable Cost" type="number" value={surveyDraft.commercial.nonBillableCost} onChange={(value) => updateNested('commercial', { ...surveyDraft.commercial, nonBillableCost: value })} />
+              </div>
               <div className="mt-5 grid gap-4 md:grid-cols-3">
                 <SummaryPill label="Expense Components" value={currency(totals.expenses)} />
                 <SummaryPill label="Non-Billable Cost" value={currency(totals.nonBillable)} />
@@ -1253,7 +1316,6 @@ export default function Sites() {
     setPhotoEvidence({});
     setSiteMomDraft(selectedVisit.siteMom || null);
     setActiveSectionIndex(0);
-    setShowMomPreview(false);
     setAutoSaveLabel('Draft saved');
     setSectionAudit(selectedVisit.assessmentId || selectedVisit.assessmentStatus === 'Draft'
       ? Object.fromEntries(surveySections.map((section) => [section, {
@@ -1315,17 +1377,27 @@ export default function Sites() {
           </div>
         </section>
 
-        <div className={`grid gap-6 ${siteMomDraft ? 'xl:grid-cols-[292px_minmax(0,1fr)_320px]' : 'xl:grid-cols-[292px_minmax(0,1fr)]'}`}>
+        <section className="enterprise-card p-4">
+          <div className="grid gap-3 md:grid-cols-5">
+            <SummaryPill label="Client Name" value={selectedVisit.company} />
+            <SummaryPill label="Site Visit Status" value={selectedVisit.status || 'Draft'} />
+            <SummaryPill label="MOM Status" value={selectedVisit.momStatus || 'Pending'} />
+            <SummaryPill label="Last Saved" value={autoSaveLabel} />
+            <SummaryPill label="Pending With" value={selectedVisit.pendingWith || 'BD Executive'} />
+          </div>
+        </section>
+
+        <div className="grid gap-6 xl:grid-cols-[292px_minmax(0,1fr)]">
           <section className="enterprise-card sticky top-24 h-fit p-5">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400">Sections</h3>
-              <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500 dark:bg-slate-800">{activeSectionIndex + 1}/{surveySections.length}</span>
+              <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500 dark:bg-slate-800">{activeSectionIndex + 1}/{roleVisibleSections.length}</span>
             </div>
             <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-              <div className="h-full rounded-full bg-qpms-600 transition-all" style={{ width: `${((activeSectionIndex + 1) / surveySections.length) * 100}%` }} />
+              <div className="h-full rounded-full bg-qpms-600 transition-all" style={{ width: `${((activeSectionIndex + 1) / roleVisibleSections.length) * 100}%` }} />
             </div>
             <div className="mt-5 max-h-[68vh] space-y-1.5 overflow-y-auto pr-2">
-              {surveySections.map((section, index) => (
+              {roleVisibleSections.map((section, index) => (
                 <button
                   type="button"
                   key={section}
@@ -1369,7 +1441,7 @@ export default function Sites() {
                 </div>
               </div>
               <div className="mt-4 flex flex-wrap justify-end gap-2">
-                {isActiveSectionLocked ? (
+                {isActiveSectionLocked && roleCanEditActiveSection ? (
                   <button type="button" onClick={beginEditSection} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
                     <Edit3 className="h-4 w-4" /> Edit Section
                   </button>
@@ -1390,59 +1462,7 @@ export default function Sites() {
               {renderActiveSection()}
             </fieldset>
 
-            {siteMomDraft ? (
-              <section className="enterprise-card p-6">
-                <div className="flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-qpms-600" />
-                  <h3 className="text-[17px] font-semibold leading-6 text-slate-950 dark:text-white">Site Visit MOM Editor</h3>
-                </div>
-                <div className="mt-6 grid gap-5">
-                  <TextField label="To" value={siteMomDraft.to} onChange={(value) => updateMomDraft('to', value)} />
-                  <TextField label="CC" value={siteMomDraft.cc} onChange={(value) => updateMomDraft('cc', value)} />
-                  <TextField label="Subject" value={siteMomDraft.subject} onChange={(value) => updateMomDraft('subject', value)} />
-                  <TextField label="Summary" value={siteMomDraft.summary} onChange={(value) => updateMomDraft('summary', value)} multiline />
-                  <TextField label="Scope" value={siteMomDraft.scope} onChange={(value) => updateMomDraft('scope', value)} multiline />
-                  <TextField label="Requirements" value={siteMomDraft.requirements} onChange={(value) => updateMomDraft('requirements', value)} multiline />
-                  <TextField label="Commercial Notes" value={siteMomDraft.commercialNotes} onChange={(value) => updateMomDraft('commercialNotes', value)} multiline />
-                  <TextField label="Next Action" value={siteMomDraft.nextAction} onChange={(value) => updateMomDraft('nextAction', value)} />
-                </div>
-                {showMomPreview ? (
-                  <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700 dark:border-slate-800 dark:bg-slate-950/55 dark:text-slate-300">
-                    <p className="font-bold text-slate-950 dark:text-white">{siteMomDraft.subject}</p>
-                    <p className="mt-3 whitespace-pre-line">{siteMomDraft.summary}</p>
-                    <p className="mt-3 whitespace-pre-line">{siteMomDraft.scope}</p>
-                    <p className="mt-3 whitespace-pre-line">{siteMomDraft.requirements}</p>
-                    <p className="mt-3 whitespace-pre-line">{siteMomDraft.commercialNotes}</p>
-                    <p className="mt-3">Next action: {siteMomDraft.nextAction}</p>
-                  </div>
-                ) : null}
-              </section>
-            ) : null}
           </main>
-
-          {siteMomDraft ? (
-            <aside className="enterprise-card sticky top-24 h-fit p-6">
-              <h3 className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400">Workflow Summary</h3>
-              <div className="mt-4 space-y-3">
-                <SummaryPill label="Client Name" value={selectedVisit.company} />
-                <SummaryPill label="Site Visit Status" value={selectedVisit.status || 'Draft'} />
-                <SummaryPill label="MOM Draft Status" value={selectedVisit.momStatus || 'Created'} />
-                <SummaryPill label="Last Saved" value={autoSaveLabel} />
-                <SummaryPill label="Approval Status" value={selectedVisit.currentStage === 'Commercial Review' ? 'Pending Review' : 'Draft'} />
-              </div>
-              <div className="mt-5 grid gap-3">
-                <button type="button" onClick={handleGenerateMom} disabled={pendingAction === 'generateSiteMom'} className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
-                  <ButtonContent loading={pendingAction === 'generateSiteMom'} icon={FileText}>Generate MOM</ButtonContent>
-                </button>
-                <button type="button" onClick={handleSendMom} disabled={pendingAction === 'sendSiteMom'} className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl bg-qpms-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700">
-                  <ButtonContent loading={pendingAction === 'sendSiteMom'} icon={Send}>Send MOM</ButtonContent>
-                </button>
-                <button type="button" onClick={handleSubmitCommercialReview} disabled={pendingAction === 'submitReview'} className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 hover:bg-slate-800 dark:bg-white dark:text-slate-950">
-                  <ButtonContent loading={pendingAction === 'submitReview'}>Submit for Commercial Review</ButtonContent>
-                </button>
-              </div>
-            </aside>
-          ) : null}
         </div>
 
         <div className="sticky bottom-0 z-20 rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-[0_-14px_40px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/95">
@@ -1455,12 +1475,60 @@ export default function Sites() {
               <button type="button" onClick={handleGenerateMom} disabled={pendingAction === 'generateSiteMom'} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
                 <ButtonContent loading={pendingAction === 'generateSiteMom'} icon={FileText}>Generate Site Visit MOM</ButtonContent>
               </button>
-              <button type="button" onClick={() => setShowMomPreview((value) => !value)} disabled={!siteMomDraft} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
-                <FileText className="h-4 w-4" /> Preview MOM
+              <button type="button" onClick={() => setMomComposerVisit(selectedVisit)} disabled={!siteMomDraft} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                <FileText className="h-4 w-4" /> Open MOM Composer
+              </button>
+              <button type="button" onClick={handleSubmitCommercialReview} disabled={pendingAction === 'submitReview'} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 hover:bg-slate-800 dark:bg-white dark:text-slate-950">
+                <ButtonContent loading={pendingAction === 'submitReview'}>Submit for Reviews</ButtonContent>
               </button>
             </div>
           </div>
         </div>
+
+        {momComposerVisit && siteMomDraft ? (
+          <div className="fixed inset-0 z-[66] flex items-center justify-center bg-slate-950/60 px-4 py-6 backdrop-blur-sm" onClick={() => setMomComposerVisit(null)}>
+            <Motion.section initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl border border-white/70 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900" onClick={(event) => event.stopPropagation()}>
+              <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4 dark:border-slate-800">
+                <div>
+                  <p className="text-xs font-bold uppercase text-qpms-600 dark:text-qpms-300">Enterprise Email Composer</p>
+                  <h3 className="mt-1 text-xl font-semibold text-slate-950 dark:text-white">Site Visit Minutes of Meeting</h3>
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{momComposerVisit.company}</p>
+                </div>
+                <button type="button" onClick={() => setMomComposerVisit(null)} className="focus-ring rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                <TextField label="To" value={siteMomDraft.to} onChange={(value) => updateMomDraft('to', value)} />
+                <TextField label="CC" value={siteMomDraft.cc} onChange={(value) => updateMomDraft('cc', value)} />
+                <div className="md:col-span-2">
+                  <TextField label="Subject" value={siteMomDraft.subject} onChange={(value) => updateMomDraft('subject', value)} />
+                </div>
+                <TextField label="Summary" value={siteMomDraft.summary} onChange={(value) => updateMomDraft('summary', value)} multiline />
+                <TextField label="Scope" value={siteMomDraft.scope} onChange={(value) => updateMomDraft('scope', value)} multiline />
+                <TextField label="Requirements" value={siteMomDraft.requirements} onChange={(value) => updateMomDraft('requirements', value)} multiline />
+                <TextField label="Commercial Notes" value={siteMomDraft.commercialNotes} onChange={(value) => updateMomDraft('commercialNotes', value)} multiline />
+              </div>
+              <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700 dark:border-slate-800 dark:bg-slate-950/55 dark:text-slate-300">
+                <p className="font-bold text-slate-950 dark:text-white">MOM Preview</p>
+                <p className="mt-3 font-semibold">{siteMomDraft.subject}</p>
+                <p className="mt-3 whitespace-pre-line">{siteMomDraft.summary}</p>
+                <p className="mt-3 whitespace-pre-line">{siteMomDraft.scope}</p>
+                <p className="mt-3 whitespace-pre-line">{siteMomDraft.requirements}</p>
+                <p className="mt-3 whitespace-pre-line">{siteMomDraft.commercialNotes}</p>
+              </div>
+              <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white p-4 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
+                Attachments: site visit MOM email only. Add files in backend mail workflow when required.
+              </div>
+              <div className="mt-6 flex flex-wrap justify-end gap-3">
+                <button type="button" onClick={() => setMomComposerVisit(null)} className="focus-ring rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">Cancel</button>
+                <button type="button" onClick={handleSendMom} disabled={pendingAction === 'sendSiteMom'} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-qpms-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700">
+                  <ButtonContent loading={pendingAction === 'sendSiteMom'} icon={Send}>Send MOM</ButtonContent>
+                </button>
+              </div>
+            </Motion.section>
+          </div>
+        ) : null}
 
         {pendingEditSection ? (
           <div className="fixed inset-0 z-[65] flex items-center justify-center bg-slate-950/60 px-4 backdrop-blur-sm">
@@ -1514,14 +1582,14 @@ export default function Sites() {
         ))}
       </section>
 
-      <section className={`grid gap-6 ${selectedQueueVisit ? 'xl:grid-cols-[minmax(0,1fr)_390px]' : 'xl:grid-cols-1'}`}>
+      <section className="grid gap-6">
         <div className="enterprise-card p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-xs font-bold uppercase text-qpms-600 dark:text-qpms-300">Assessment Queue</p>
               <h2 className="mt-1 text-xl font-semibold leading-7 text-slate-950 dark:text-white">Scheduled Visits / Assessment List</h2>
               <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
-                Left side shows queued assessments. Select a card to open lead details or the MOM workspace on the right.
+                Select a card to open the full assessment page. Use the MOM button to open the email composer modal.
               </p>
             </div>
             <div className="relative w-full lg:w-80">
@@ -1557,8 +1625,6 @@ export default function Sites() {
                     <AssessmentQueueCard
                       key={visit.id}
                       visit={visit}
-                      selected={String(selectedQueueVisitId) === String(visit.id)}
-                      onSelect={() => selectQueueVisit(visit)}
                       onOpenAssessment={() => openVisitPage(visit)}
                       onOpenMom={() => openQueueMomWorkspace(visit)}
                     />
@@ -1575,20 +1641,49 @@ export default function Sites() {
           </div>
         </div>
 
-        <AnimatePresence>
-          {selectedQueueVisit ? (
-            <QueueSidePanel
-              key={selectedQueueVisit.id}
-              visit={selectedQueueVisit}
-              mode={queuePanelMode}
-              momDraft={queuePanelMode === 'mom' ? siteMomDraft : selectedQueueVisit.siteMom}
-              onOpenAssessment={() => openVisitPage(selectedQueueVisit)}
-              onOpenMom={() => openQueueMomWorkspace(selectedQueueVisit)}
-              onClose={() => setSelectedQueueVisitId('')}
-            />
-          ) : null}
-        </AnimatePresence>
       </section>
+
+      {momComposerVisit && siteMomDraft ? (
+        <div className="fixed inset-0 z-[66] flex items-center justify-center bg-slate-950/60 px-4 py-6 backdrop-blur-sm" onClick={() => setMomComposerVisit(null)}>
+          <Motion.section initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl border border-white/70 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4 dark:border-slate-800">
+              <div>
+                <p className="text-xs font-bold uppercase text-qpms-600 dark:text-qpms-300">Enterprise Email Composer</p>
+                <h3 className="mt-1 text-xl font-semibold text-slate-950 dark:text-white">Site Visit Minutes of Meeting</h3>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{momComposerVisit.company}</p>
+              </div>
+              <button type="button" onClick={() => setMomComposerVisit(null)} className="focus-ring rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <TextField label="To" value={siteMomDraft.to} onChange={(value) => updateMomDraft('to', value)} />
+              <TextField label="CC" value={siteMomDraft.cc} onChange={(value) => updateMomDraft('cc', value)} />
+              <div className="md:col-span-2">
+                <TextField label="Subject" value={siteMomDraft.subject} onChange={(value) => updateMomDraft('subject', value)} />
+              </div>
+              <TextField label="Summary" value={siteMomDraft.summary} onChange={(value) => updateMomDraft('summary', value)} multiline />
+              <TextField label="Scope" value={siteMomDraft.scope} onChange={(value) => updateMomDraft('scope', value)} multiline />
+              <TextField label="Requirements" value={siteMomDraft.requirements} onChange={(value) => updateMomDraft('requirements', value)} multiline />
+              <TextField label="Commercial Notes" value={siteMomDraft.commercialNotes} onChange={(value) => updateMomDraft('commercialNotes', value)} multiline />
+            </div>
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700 dark:border-slate-800 dark:bg-slate-950/55 dark:text-slate-300">
+              <p className="font-bold text-slate-950 dark:text-white">MOM Preview</p>
+              <p className="mt-3 font-semibold">{siteMomDraft.subject}</p>
+              <p className="mt-3 whitespace-pre-line">{siteMomDraft.summary}</p>
+              <p className="mt-3 whitespace-pre-line">{siteMomDraft.scope}</p>
+              <p className="mt-3 whitespace-pre-line">{siteMomDraft.requirements}</p>
+              <p className="mt-3 whitespace-pre-line">{siteMomDraft.commercialNotes}</p>
+            </div>
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button type="button" onClick={() => setMomComposerVisit(null)} className="focus-ring rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">Cancel</button>
+              <button type="button" onClick={handleSendMom} disabled={pendingAction === 'sendSiteMom'} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-qpms-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700">
+                <ButtonContent loading={pendingAction === 'sendSiteMom'} icon={Send}>Send MOM</ButtonContent>
+              </button>
+            </div>
+          </Motion.section>
+        </div>
+      ) : null}
 
       {previewPhoto ? (
         <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/75 p-5" onClick={() => setPreviewPhoto(null)}>

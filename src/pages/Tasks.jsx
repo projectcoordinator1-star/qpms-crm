@@ -4,7 +4,7 @@ import PageHeader from '../components/PageHeader.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import { useAuth } from '../context/auth-context.js';
 import { useWorkflow } from '../context/workflow-context.js';
-import { isFinanceTeam } from '../data/mockUsers.js';
+import { isFinanceTeam, isHrReviewer } from '../data/mockUsers.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 
 function serviceScope(visit) {
@@ -19,26 +19,27 @@ export default function Tasks() {
   const { siteVisits, decideApproval } = useWorkflow();
   const [remarks, setRemarks] = useState({});
   const financeMode = isFinanceTeam(user);
-  const stage = financeMode ? 'Finance Review' : 'Commercial Review';
-  usePageTitle(financeMode ? 'Finance Review' : 'Commercial Review');
+  const hrMode = isHrReviewer(user);
+  const stage = hrMode ? 'HR Review' : financeMode ? 'Finance Review' : 'Commercial Review';
+  usePageTitle(hrMode ? 'HR Review' : financeMode ? 'Finance Review' : 'Commercial Review');
 
   const queue = useMemo(
-    () => siteVisits.filter((visit) => (visit.currentStage || visit.status) === stage),
+    () => siteVisits.filter((visit) => (visit.reviewStatus?.[stage] || ((visit.currentStage || visit.status) === stage ? 'Pending' : '')) === 'Pending'),
     [siteVisits, stage],
   );
 
   const pendingCount = queue.filter((visit) => !['Approved', 'Rejected', 'Rework Requested'].includes(visit.approvalStatus)).length;
 
   function handleDecision(visit, decision) {
-    decideApproval(visit.id, decision, remarks[visit.id] || '', user);
+    decideApproval(visit.id, decision, remarks[visit.id] || '', user, stage);
     setRemarks((current) => ({ ...current, [visit.id]: '' }));
   }
 
   return (
     <div className="space-y-7">
       <PageHeader
-        title={financeMode ? 'Finance Review' : 'Commercial Review'}
-        description={financeMode ? 'Review approved commercial cases for margin, billing, payment, and risk validation.' : 'Review BD submitted assessments for scope, commercial statement, pricing, and margin readiness.'}
+        title={hrMode ? 'HR Review' : financeMode ? 'Finance Review' : 'Commercial Review'}
+        description={hrMode ? 'Review manpower, wage, reliever, gender, shift, and uniform details without commercial costing access.' : financeMode ? 'Review financial feasibility, billing, margins, payment terms, and commercial risk.' : 'Review BD submitted assessments for scope, commercial statement, pricing, and margin readiness.'}
       />
 
       <section className="grid gap-4 md:grid-cols-3">
@@ -72,16 +73,16 @@ export default function Tasks() {
                   <p><span className="font-semibold text-slate-900 dark:text-white">Submitted:</span> {visit.lastApprovalAt ? new Date(visit.lastApprovalAt).toLocaleDateString() : 'Pending timestamp'}</p>
                   <p><span className="font-semibold text-slate-900 dark:text-white">Pending with:</span> {visit.pendingWith || stage}</p>
                   <p><span className="font-semibold text-slate-900 dark:text-white">Site assessment:</span> {visit.assessmentStatus || 'Drafted'}</p>
-                  <p><span className="font-semibold text-slate-900 dark:text-white">Service scope:</span> {serviceScope(visit)}</p>
-                  <p><span className="font-semibold text-slate-900 dark:text-white">{financeMode ? 'Billing summary' : 'Commercial statement'}:</span> {visit.survey?.commercialStatement || visit.survey?.commercial?.notes || 'Available in assessment record'}</p>
-                  <p><span className="font-semibold text-slate-900 dark:text-white">{financeMode ? 'Margin / risk' : 'Pricing / margin'}:</span> {visit.survey?.marginAgreed || visit.survey?.paymentTerms || 'Pending reviewer validation'}</p>
+                  <p><span className="font-semibold text-slate-900 dark:text-white">{hrMode ? 'Manpower rows' : 'Service scope'}:</span> {hrMode ? `${visit.survey?.manpowerPlan?.length || 0} manpower rows` : serviceScope(visit)}</p>
+                  <p><span className="font-semibold text-slate-900 dark:text-white">{hrMode ? 'Shift / gender review' : financeMode ? 'Billing summary' : 'Commercial statement'}:</span> {hrMode ? 'Visible in manpower assessment' : visit.survey?.commercialStatement || visit.survey?.commercial?.notes || 'Available in assessment record'}</p>
+                  <p><span className="font-semibold text-slate-900 dark:text-white">{hrMode ? 'Uniform / wage review' : financeMode ? 'Margin / risk' : 'Pricing / margin'}:</span> {hrMode ? 'Pending HR validation' : visit.survey?.marginAgreed || visit.survey?.paymentTerms || 'Pending reviewer validation'}</p>
                 </div>
               </div>
               <div className="w-full shrink-0 space-y-3 lg:w-80">
                 <textarea
                   value={remarks[visit.id] || ''}
                   onChange={(event) => setRemarks((current) => ({ ...current, [visit.id]: event.target.value }))}
-                  placeholder={financeMode ? 'Add finance remarks' : 'Add commercial remarks'}
+                  placeholder={hrMode ? 'Add HR remarks' : financeMode ? 'Add finance remarks' : 'Add commercial remarks'}
                   className="focus-ring min-h-24 w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-white"
                 />
                 <div className="grid grid-cols-3 gap-2">

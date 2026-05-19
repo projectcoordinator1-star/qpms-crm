@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/auth-context.js';
-import { canManageLeads, isCommercialTeam, isFinanceTeam } from '../data/mockUsers.js';
+import { canManageLeads, isApprovalReviewer } from '../data/mockUsers.js';
 import Logo from './Logo.jsx';
 
 const navItems = [
@@ -29,8 +29,9 @@ export default function Sidebar({ isOpen, onClose }) {
   const { user } = useAuth();
   const visibleNavItems = navItems.filter((item) => {
     if (user?.role === 'Admin') return true;
+    if (['BD Executive', 'BD Head'].includes(user?.role)) return ['/dashboard', '/crm', '/sites', '/settings'].includes(item.to);
+    if (isApprovalReviewer(user)) return ['/dashboard', '/tasks', '/reports', '/settings'].includes(item.to);
     if (!canManageLeads(user) && item.to === '/crm') return false;
-    if ((isCommercialTeam(user) || isFinanceTeam(user)) && ['/sites', '/tickets', '/employees'].includes(item.to)) return false;
     return true;
   });
 
