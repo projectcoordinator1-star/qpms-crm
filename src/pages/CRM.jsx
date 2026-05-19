@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, Eye, FileText, Mail, Pencil, Plus, Save, Send, Trash2, X } from 'lucide-react';
+import { CalendarCheck2, Check, CheckCircle2, Eye, FileText, Mail, Pencil, Plus, Save, Send, Trash2, X } from 'lucide-react';
 import DataTable from '../components/DataTable.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
@@ -28,6 +28,7 @@ const initialLeadForm = {
     { id: 'contact-1', name: '', designation: '', phone: '', email: '', isPrimary: true },
   ],
   priority: '',
+  serviceScope: [],
   remarks: '',
 };
 
@@ -38,7 +39,7 @@ const initialMomDraft = {
   subject: '',
   discussionSummary: '',
   serviceScopeDiscussion: '',
-  actionItems: '',
+  serviceScope: [],
   nextFollowUpDate: '',
   scheduledVisitDate: '',
   scheduledVisitTime: '',
@@ -53,6 +54,8 @@ const stateOptions = ['Tamil Nadu', 'Kerala', 'Karnataka', 'Telangana', 'Andhra 
 const priorityOptions = ['High', 'Medium', 'Low'];
 const statusOptions = ['Active', 'Pending', 'Escalated', 'Completed'];
 const executiveOptions = ['Unassigned', ...bdExecutives.map((user) => user.name)];
+const serviceScopeOptions = ['Hard Services MEP', 'Soft Services Housekeeping', 'Security Services', 'Waste Management', 'Landscaping Irrigation', 'Pest Control', 'Helpdesk CAFM', 'Energy Management', 'Sustainability ESG', 'Other Services'];
+const schedulingValidationMessage = 'Please provide either Site Visit Schedule Date & Time or Next Follow-up Date before sending the Minutes of Meeting.';
 
 function normalizeContacts(contacts, lead = {}) {
   const fallback = [{ id: `contact-${lead.id || 1}`, name: lead.contact || '', designation: lead.designation || '', phone: lead.phone || '', email: lead.email || '', isPrimary: true }];
@@ -71,6 +74,36 @@ function normalizeContacts(contacts, lead = {}) {
 function getPrimaryContact(lead) {
   const contacts = normalizeContacts(lead.contacts, lead);
   return contacts.find((contact) => contact.isPrimary) || contacts[0];
+}
+
+function normalizeServiceScope(scope) {
+  if (Array.isArray(scope)) return scope.filter(Boolean);
+  if (scope && typeof scope === 'object') {
+    return Object.entries(scope)
+      .filter(([, value]) => value === true || value?.selected)
+      .map(([key]) => key);
+  }
+  return String(scope || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function formatServiceScope(scope) {
+  const items = normalizeServiceScope(scope);
+  return items.length ? items.join('\n') : '';
+}
+
+function leadMomSubject(clientName) {
+  return `Lead Minutes of Meeting - ${clientName || 'Client'} - QPMS`;
+}
+
+function hasCompleteSiteVisitSchedule(mom) {
+  return Boolean(mom?.scheduledVisitDate && mom?.scheduledVisitTime);
+}
+
+function hasSchedulingOrFollowUp(mom) {
+  return hasCompleteSiteVisitSchedule(mom) || Boolean(mom?.nextFollowUpDate);
 }
 
 function ButtonContent({ loading, icon: Icon, children }) {
@@ -146,6 +179,45 @@ function FormSection({ title, children }) {
       <h3 className="text-sm font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">{title}</h3>
       <div className="mt-4 grid gap-4 md:grid-cols-2">{children}</div>
     </section>
+  );
+}
+
+function ServiceScopeSelector({ value, onChange, disabled = false }) {
+  const selected = normalizeServiceScope(value);
+
+  function toggle(item) {
+    if (disabled) return;
+    const next = selected.includes(item)
+      ? selected.filter((current) => current !== item)
+      : [...selected, item];
+    onChange(next);
+  }
+
+  return (
+    <div className="md:col-span-2">
+      <div className="grid gap-3 sm:grid-cols-2">
+        {serviceScopeOptions.map((item) => {
+          const active = selected.includes(item);
+          return (
+            <button
+              key={item}
+              type="button"
+              disabled={disabled}
+              onClick={() => toggle(item)}
+              className={`focus-ring flex min-h-12 items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left text-sm font-bold transition ${
+                active
+                  ? 'border-qpms-300 bg-qpms-50 text-qpms-800 shadow-sm dark:border-qpms-500/40 dark:bg-qpms-500/15 dark:text-qpms-100'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-qpms-200 hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:border-qpms-500/30'
+              } disabled:cursor-not-allowed disabled:opacity-75`}
+              aria-pressed={active}
+            >
+              <span>{item}</span>
+              {active ? <Check className="h-4 w-4 shrink-0" /> : null}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -248,6 +320,7 @@ function ContactPersonsList({ contacts, lead }) {
 
 function createLeadMomDraft(lead) {
   const primaryContact = getPrimaryContact(lead);
+  const serviceScope = normalizeServiceScope(lead.serviceScope || lead.service_scope);
   const otherEmails = normalizeContacts(lead.contacts, lead)
     .filter((contact) => !contact.isPrimary && contact.email)
     .map((contact) => contact.email)
@@ -257,10 +330,10 @@ function createLeadMomDraft(lead) {
     ...initialMomDraft,
     to: primaryContact?.email || '',
     additionalRecipients: otherEmails,
-    subject: `Lead MOM - ${lead.company || 'Client'} - QPMS`,
+    subject: leadMomSubject(lead.company),
     discussionSummary: `Initial discussion completed with ${primaryContact?.name || 'client contact'} for ${lead.company || 'the client'} regarding QPMS facility management support.`,
-    serviceScopeDiscussion: 'Facility management, housekeeping operations, site management, and related operational support were discussed at a high level.',
-    actionItems: '1. Share Lead MOM with client.\n2. Conduct scheduled site visit.\n3. Capture operational requirements during site assessment.',
+    serviceScopeDiscussion: formatServiceScope(serviceScope),
+    serviceScope,
     nextFollowUpDate: lead.followUp === 'Not scheduled' ? '' : lead.followUp || '',
     scheduledVisitDate: lead.scheduledVisitDate || '',
     scheduledVisitTime: lead.scheduledVisitTime || '',
@@ -387,7 +460,11 @@ export default function CRM() {
   }
 
   function updateMomDraft(key, value) {
-    setMomDraft((current) => ({ ...current, [key]: value }));
+    setMomDraft((current) => {
+      const next = { ...current, [key]: value };
+      if (key === 'serviceScope') next.serviceScopeDiscussion = formatServiceScope(value);
+      return next;
+    });
   }
 
   function closeLeadForm() {
@@ -439,7 +516,7 @@ export default function CRM() {
     }
     try {
       setPendingAction('createLead');
-      const createdLead = await addLead({ ...leadForm, contacts }, user);
+      const createdLead = await addLead({ ...leadForm, contacts, serviceScope: normalizeServiceScope(leadForm.serviceScope) }, user);
       showToast('Lead created successfully', 'success');
       closeLeadForm();
       setHighlightedLeadId(createdLead.id);
@@ -457,7 +534,15 @@ export default function CRM() {
   }
 
   function openMomEditor() {
-    const nextDraft = selectedLead?.mom || createLeadMomDraft(draftLead || selectedLead);
+    const sourceLead = draftLead || selectedLead;
+    const nextDraft = selectedLead?.mom
+      ? {
+          ...selectedLead.mom,
+          subject: selectedLead.mom.subject?.startsWith('Lead MOM -') ? leadMomSubject(sourceLead?.company) : selectedLead.mom.subject || leadMomSubject(sourceLead?.company),
+          serviceScope: normalizeServiceScope(selectedLead.mom.serviceScope || sourceLead?.serviceScope || sourceLead?.service_scope),
+          serviceScopeDiscussion: selectedLead.mom.serviceScopeDiscussion || formatServiceScope(sourceLead?.serviceScope || sourceLead?.service_scope),
+        }
+      : createLeadMomDraft(sourceLead);
     setMomDraft(nextDraft);
     setIsMomOpen(true);
     setShowMomPreview(false);
@@ -477,18 +562,18 @@ export default function CRM() {
   }
 
   async function handleSendMom() {
-    if (!momDraft.scheduledVisitDate || !momDraft.scheduledVisitTime) {
-      showToast('Add scheduled site visit date and time before sending MOM', 'warning');
+    if (!hasSchedulingOrFollowUp(momDraft)) {
+      showToast(schedulingValidationMessage, 'warning');
       return;
     }
 
     try {
       setPendingAction('sendMom');
-      await sendLeadMomEmail(momDraft, selectedLead);
-      sendLeadMom(selectedLeadId, momDraft);
+      const result = await sendLeadMomEmail(momDraft, selectedLead);
+      sendLeadMom(selectedLeadId, { ...momDraft, calendarInviteSent: Boolean(result?.calendarInviteSent) });
       setIsMomOpen(false);
       setShowMomPreview(false);
-      showToast('Lead MOM sent and Site Visit scheduled successfully', 'success');
+      showToast(hasCompleteSiteVisitSchedule(momDraft) ? 'Lead Minutes of Meeting sent and site visit scheduled successfully' : 'Lead Minutes of Meeting sent successfully', 'success');
     } catch (error) {
       showToast(`Email failed: ${error.response?.data?.message || error.message}`, 'error');
     } finally {
@@ -581,6 +666,10 @@ export default function CRM() {
                 </div>
               </FormSection>
 
+              <FormSection title="Service Scope">
+                <ServiceScopeSelector value={leadForm.serviceScope} onChange={(value) => updateLeadForm('serviceScope', value)} />
+              </FormSection>
+
               <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 dark:border-slate-800 sm:flex-row sm:justify-end">
                 <button type="button" onClick={closeLeadForm} className="focus-ring rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:text-white">
                   Cancel
@@ -658,6 +747,10 @@ export default function CRM() {
                 </div>
               </FormSection>
 
+              <FormSection title="Service Scope">
+                <ServiceScopeSelector value={draftLead.serviceScope || draftLead.service_scope} onChange={(value) => updateDraftLead('serviceScope', value)} disabled={!isEditingLead} />
+              </FormSection>
+
               <section className="enterprise-card p-5">
                 <h3 className="text-[17px] font-semibold leading-6 text-slate-950 dark:text-white">Activity Timeline</h3>
                 <div className="mt-4 space-y-3">
@@ -682,29 +775,42 @@ export default function CRM() {
                     <TextField label="CC" value={momDraft.cc} onChange={(value) => updateMomDraft('cc', value)} />
                     <TextField label="Subject" value={momDraft.subject} onChange={(value) => updateMomDraft('subject', value)} />
                     <TextField label="Discussion Summary" value={momDraft.discussionSummary} onChange={(value) => updateMomDraft('discussionSummary', value)} multiline />
-                    <TextField label="Service Scope Discussion" value={momDraft.serviceScopeDiscussion} onChange={(value) => updateMomDraft('serviceScopeDiscussion', value)} multiline />
-                    <TextField label="Action Items" value={momDraft.actionItems} onChange={(value) => updateMomDraft('actionItems', value)} multiline />
+                    <div>
+                      <span className="text-sm font-semibold leading-5 text-slate-700 dark:text-slate-300">Service Scope</span>
+                      <div className="mt-2">
+                        <ServiceScopeSelector value={momDraft.serviceScope} onChange={(value) => updateMomDraft('serviceScope', value)} />
+                      </div>
+                    </div>
                     <div className="rounded-2xl border border-qpms-100 bg-qpms-50/70 p-4 dark:border-qpms-500/20 dark:bg-qpms-500/10">
                       <div className="flex items-start gap-3">
                         <div className="grid h-10 w-10 place-items-center rounded-xl bg-white text-qpms-600 shadow-sm dark:bg-slate-950">
-                          <CheckCircle2 className="h-5 w-5" />
+                          <CalendarCheck2 className="h-5 w-5" />
                         </div>
                         <div>
-                          <h4 className="text-sm font-bold text-slate-950 dark:text-white">Site Visit Scheduling</h4>
+                          <h4 className="text-sm font-bold text-slate-950 dark:text-white">Scheduling / Follow-up</h4>
                           <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
-                            Capture the client-agreed site visit schedule before sending the Lead MOM.
+                            Provide either a scheduled site visit date & time or a next follow-up date before sending.
                           </p>
                         </div>
                       </div>
                       <div className="mt-4 grid gap-4 md:grid-cols-2">
-                        <TextField label="Scheduled Site Visit Date" type="date" value={momDraft.scheduledVisitDate} onChange={(value) => updateMomDraft('scheduledVisitDate', value)} required />
-                        <TextField label="Scheduled Site Visit Time" type="time" value={momDraft.scheduledVisitTime} onChange={(value) => updateMomDraft('scheduledVisitTime', value)} required />
+                        <TextField label="Scheduled Site Visit Date" type="date" value={momDraft.scheduledVisitDate} onChange={(value) => updateMomDraft('scheduledVisitDate', value)} />
+                        <TextField label="Scheduled Site Visit Time" type="time" value={momDraft.scheduledVisitTime} onChange={(value) => updateMomDraft('scheduledVisitTime', value)} />
+                        <TextField label="Next Follow-up Date" type="date" value={momDraft.nextFollowUpDate} onChange={(value) => updateMomDraft('nextFollowUpDate', value)} />
                         <div className="md:col-span-2">
                           <TextField label="Site Visit Remarks" value={momDraft.siteVisitRemarks} onChange={(value) => updateMomDraft('siteVisitRemarks', value)} multiline />
                         </div>
                       </div>
+                      {hasCompleteSiteVisitSchedule(momDraft) ? (
+                        <span className="mt-4 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Calendar invite will be attached.
+                        </span>
+                      ) : momDraft.nextFollowUpDate ? (
+                        <span className="mt-4 inline-flex items-center gap-2 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Follow-up date will be included in mail.
+                        </span>
+                      ) : null}
                     </div>
-                    <TextField label="Next Follow-up Date" type="date" value={momDraft.nextFollowUpDate} onChange={(value) => updateMomDraft('nextFollowUpDate', value)} />
                     <TextField label="Remarks" value={momDraft.remarks} onChange={(value) => updateMomDraft('remarks', value)} multiline />
                   </div>
 
@@ -712,13 +818,16 @@ export default function CRM() {
                     <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700 dark:border-slate-800 dark:bg-slate-950/55 dark:text-slate-300">
                       <p className="font-bold text-slate-950 dark:text-white">{momDraft.subject}</p>
                       <p className="mt-3 whitespace-pre-line">{momDraft.discussionSummary}</p>
-                      <p className="mt-3 whitespace-pre-line">{momDraft.serviceScopeDiscussion}</p>
-                      <p className="mt-3 whitespace-pre-line">{momDraft.actionItems}</p>
-                      <p className="mt-3">
-                        Site visit: {momDraft.scheduledVisitDate || 'Date pending'} at {momDraft.scheduledVisitTime || 'time pending'}
-                      </p>
+                      <p className="mt-3 font-bold text-slate-950 dark:text-white">Service Scope:</p>
+                      <p className="whitespace-pre-line">{formatServiceScope(momDraft.serviceScope) || '-'}</p>
+                      {hasCompleteSiteVisitSchedule(momDraft) ? (
+                        <p className="mt-3">
+                          Scheduled Site Visit Date & Time: {momDraft.scheduledVisitDate} at {momDraft.scheduledVisitTime}
+                        </p>
+                      ) : (
+                        <p className="mt-3">Next Follow-up Date: {momDraft.nextFollowUpDate || '-'}</p>
+                      )}
                       <p className="mt-3 whitespace-pre-line">{momDraft.siteVisitRemarks || 'No site visit remarks added.'}</p>
-                      <p className="mt-3">Next follow-up: {momDraft.nextFollowUpDate || 'To be confirmed'}</p>
                       <p className="mt-3 whitespace-pre-line">{momDraft.remarks}</p>
                     </div>
                   ) : null}
@@ -733,7 +842,7 @@ export default function CRM() {
                     <button
                       type="button"
                       onClick={handleSendMom}
-                      disabled={!momDraft.scheduledVisitDate || !momDraft.scheduledVisitTime || pendingAction === 'sendMom'}
+                      disabled={pendingAction === 'sendMom'}
                       className="focus-ring inline-flex items-center gap-2 rounded-xl bg-qpms-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       <ButtonContent loading={pendingAction === 'sendMom'} icon={Send}>Send MOM</ButtonContent>

@@ -15,6 +15,19 @@ function pick(row, keys, fallback = '') {
   return key ? row[key] : fallback;
 }
 
+function normalizeJsonArray(value) {
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (value && typeof value === 'object') {
+    return Object.entries(value)
+      .filter(([, item]) => item === true || item?.selected)
+      .map(([key]) => key);
+  }
+  return String(value || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 export function dbLeadToAppLead(row) {
   const relationContacts = row.lead_contacts || [];
   const directContact = pick(row, ['contact_person_name', 'contact', 'primary_contact_name']);
@@ -55,6 +68,7 @@ export function dbLeadToAppLead(row) {
     state: row.state,
     city: row.city,
     priority: pick(row, ['lead_priority', 'priority']),
+    serviceScope: normalizeJsonArray(row.service_scope),
     remarks: row.remarks,
     assigned_bd_executive: row.assigned_bd_executive,
     assigned_bd_email: row.assigned_bd_email,
@@ -84,6 +98,7 @@ export function appLeadToDbLead(lead) {
     state: lead.state,
     city: lead.city,
     lead_priority: lead.priority,
+    service_scope: normalizeJsonArray(lead.serviceScope || lead.service_scope),
     remarks: lead.remarks,
     assigned_bd_executive: lead.assigned_bd_executive || lead.executive,
     assigned_bd_email: lead.assigned_bd_email,
@@ -272,10 +287,11 @@ function appLeadMomToDb(mom, leadId, status) {
     subject: mom.subject,
     discussion_summary: mom.discussionSummary,
     service_scope_discussion: mom.serviceScopeDiscussion,
-    action_items: mom.actionItems,
+    action_items: mom.actionItems || '',
     next_followup_date: mom.nextFollowUpDate || null,
     scheduled_site_visit_date: mom.scheduledVisitDate || null,
     scheduled_site_visit_time: mom.scheduledVisitTime || null,
+    calendar_invite_sent: Boolean(mom.calendarInviteSent),
     site_visit_remarks: mom.siteVisitRemarks,
     mom_status: status,
     sent_at: status === 'Sent' ? new Date().toISOString() : null,
@@ -290,11 +306,13 @@ function dbLeadMomToApp(row) {
     subject: row.subject,
     discussionSummary: row.discussion_summary,
     serviceScopeDiscussion: row.service_scope_discussion,
+    serviceScope: normalizeJsonArray(row.service_scope || row.service_scope_discussion),
     actionItems: row.action_items,
     nextFollowUpDate: row.next_followup_date || '',
     scheduledVisitDate: row.scheduled_site_visit_date || '',
     scheduledVisitTime: row.scheduled_site_visit_time || '',
     siteVisitRemarks: row.site_visit_remarks || '',
+    calendarInviteSent: Boolean(row.calendar_invite_sent),
     sent: row.mom_status === 'Sent',
     sentAt: row.sent_at,
   };
@@ -410,7 +428,9 @@ export async function createLeadRemote(lead) {
   let { data, error } = await supabase.from('leads').insert(payload).select('*').single();
   if (error && String(error.message || '').toLowerCase().includes('schema cache')) {
     console.warn('[QPMS Supabase] Direct contact columns not available on leads; retrying lead insert without direct contact fields', error);
-    const retry = await supabase.from('leads').insert(basePayload).select('*').single();
+    const retryPayload = { ...basePayload };
+    if (String(error.message || '').includes('service_scope')) delete retryPayload.service_scope;
+    const retry = await supabase.from('leads').insert(retryPayload).select('*').single();
     data = retry.data;
     error = retry.error;
   }
@@ -455,7 +475,14 @@ export async function createLeadRemote(lead) {
 
 export async function updateLeadRemote(leadId, lead) {
   assertConfigured();
-  const { error } = await supabase.from('leads').update(appLeadToDbLead(lead)).eq('id', leadId);
+  const payload = appLeadToDbLead(lead);
+  let { error } = await supabase.from('leads').update(payload).eq('id', leadId);
+  if (error && String(error.message || '').includes('service_scope')) {
+    const retryPayload = { ...payload };
+    delete retryPayload.service_scope;
+    const retry = await supabase.from('leads').update(retryPayload).eq('id', leadId);
+    error = retry.error;
+  }
   if (error) throw error;
 
   if (lead.contacts) {
@@ -492,7 +519,13 @@ export async function deleteLeadRemote(leadId, createdBy) {
 export async function saveLeadMomRemote(leadId, mom, status = 'Draft') {
   assertConfigured();
   const payload = appLeadMomToDb(mom, leadId, status);
-  const { error } = await supabase.from('lead_mom').upsert(payload, { onConflict: 'lead_id' });
+  let { error } = await supabase.from('lead_mom').upsert(payload, { onConflict: 'lead_id' });
+  if (error && String(error.message || '').includes('calendar_invite_sent')) {
+    const retryPayload = { ...payload };
+    delete retryPayload.calendar_invite_sent;
+    const retry = await supabase.from('lead_mom').upsert(retryPayload, { onConflict: 'lead_id' });
+    error = retry.error;
+  }
   if (error) throw error;
   await logActivity({ leadId, type: status === 'Sent' ? 'Lead MOM Sent' : 'Lead MOM Drafted', message: status === 'Sent' ? 'Lead MOM Sent' : 'Lead MOM Drafted' });
 }

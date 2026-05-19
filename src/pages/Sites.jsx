@@ -210,12 +210,12 @@ function mergeSurvey(survey = {}) {
 
 function TextField({ label, value, onChange, multiline = false, type = 'text' }) {
   const fieldClass =
-    'mt-2 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium leading-5 text-slate-800 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-qpms-300 focus:shadow-[0_0_0_4px_rgba(79,130,251,0.14)] dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200';
+    'mt-2.5 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium leading-5 text-slate-800 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-qpms-300 focus:shadow-[0_0_0_4px_rgba(79,130,251,0.14)] dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200';
 
 
   return (
     <label className="block">
-      <span className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400">{label}</span>
+      <span className="text-[11px] font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">{label}</span>
       {multiline ? (
         <textarea className={`${fieldClass} min-h-24 resize-none leading-6`} value={value || ''} onChange={(event) => onChange(event.target.value)} />
       ) : (
@@ -228,9 +228,9 @@ function TextField({ label, value, onChange, multiline = false, type = 'text' })
 function SelectField({ label, value, onChange, options }) {
   return (
     <label className="block">
-      <span className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400">{label}</span>
+      <span className="text-[11px] font-bold uppercase tracking-normal text-slate-500 dark:text-slate-400">{label}</span>
       <select
-        className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-qpms-300 focus:shadow-[0_0_0_4px_rgba(79,130,251,0.14)] dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+        className="mt-2.5 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-qpms-300 focus:shadow-[0_0_0_4px_rgba(79,130,251,0.14)] dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
         value={value || ''}
         onChange={(event) => onChange(event.target.value)}
       >
@@ -291,7 +291,7 @@ function normalizeStage(stage) {
 
 function SummaryPill({ label, value }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/55">
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-3.5 dark:border-slate-800 dark:bg-slate-950/55">
       <p className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400">{label}</p>
       <p className="mt-1 text-sm font-semibold leading-5 text-slate-900 dark:text-white">{value}</p>
     </div>
@@ -306,7 +306,7 @@ function CompactStatusBadge({ label, value, tone = 'slate' }) {
   }[tone];
 
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold shadow-sm ${toneClass}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold shadow-sm ${toneClass}`}>
       <span className="text-slate-500 dark:text-slate-400">{label}:</span>
       <span className="text-current">{value}</span>
     </span>
@@ -324,7 +324,7 @@ function ButtonContent({ loading, icon: Icon, children }) {
 
 function ServiceScopeGrid({ items, values, onChange }) {
   return (
-    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {items.map((item) => {
         const selected = Boolean(values[item]?.selected);
         return (
@@ -333,7 +333,7 @@ function ServiceScopeGrid({ items, values, onChange }) {
             key={item}
             onClick={() => onChange(item, { ...values[item], selected: !selected })}
             className={[
-              'rounded-2xl border p-4 text-left transition hover:-translate-y-0.5',
+              'rounded-2xl border p-5 text-left transition hover:-translate-y-0.5',
               selected
                 ? 'border-qpms-300 bg-qpms-50 shadow-[0_16px_40px_rgba(36,68,164,0.12)] dark:border-qpms-500/40 dark:bg-qpms-500/10'
                 : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950/55',
@@ -364,7 +364,7 @@ function ExpandableServiceGroup({ group, values, onChange }) {
   }
 
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
       <h4 className="text-[15px] font-bold text-slate-950 dark:text-white">{group.title}</h4>
       <div className="mt-4 grid gap-3">
         {group.items.map((item) => {
@@ -398,7 +398,7 @@ function ExpandableServiceGroup({ group, values, onChange }) {
 
 function PhotoEvidenceSection({ photos, onAdd, onRemove, onPreview }) {
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h4 className="text-[17px] font-bold text-slate-950 dark:text-white">Site Photos & Evidence</h4>
@@ -477,7 +477,7 @@ function AuditTable({ rows, onChange }) {
 
 function EditableTable({ columns, rows, onChange, onAdd, onRemove, addLabel }) {
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
       <div className="overflow-x-auto">
         <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
           <thead className="bg-slate-50 dark:bg-slate-900">
@@ -521,7 +521,7 @@ function RiskCards({ risks, onChange }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       {risks.map((risk, index) => (
-        <section key={risk.name} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+        <section key={risk.name} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
           <div className="flex items-center gap-3">
             <div className="grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-500/15">
               <AlertTriangle className="h-5 w-5" />
@@ -765,7 +765,7 @@ export default function Sites() {
       case 'Basic Site Information':
         return (
           <div className="space-y-5">
-            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <TextField label="Site Address" value={surveyDraft.siteAddress} onChange={(value) => updateSurveyDraft('siteAddress', value)} />
                 <TextField label="Site Type" value={surveyDraft.siteType} onChange={(value) => updateSurveyDraft('siteType', value)} />
@@ -792,7 +792,7 @@ export default function Sites() {
         );
       case 'Scope of IFM Services':
         return (
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
             <ServiceScopeGrid
               items={ifmScopeItems}
               values={surveyDraft.ifmScope}
@@ -818,7 +818,7 @@ export default function Sites() {
         );
       case 'Landscaping & Pest Control':
         return (
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
             <ServiceScopeGrid
               items={landscapeItems}
               values={surveyDraft.landscaping}
@@ -850,7 +850,7 @@ export default function Sites() {
               onRemove={(index) => removeRow('manpowerPlan', index)}
               addLabel="Add manpower row"
             />
-            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {['minimumWagesType', 'applicableZone', 'wageComputationNotes', 'relieverCostRequired', 'budgetedTakeHomeFeasibility', 'localWorkforceAvailability', 'transportationImpact', 'bonusPaymentType', 'leaveWithWagesDays', 'nfhApplicable', 'travelAccommodationProvided'].map((key) => (
                   <TextField key={key} label={fieldLabel(key)} value={surveyDraft[key]} onChange={(value) => updateSurveyDraft(key, value)} multiline={key.includes('Notes')} />
@@ -906,7 +906,7 @@ export default function Sites() {
               onRemove={(index) => removeRow('tools', index)}
               addLabel="Add tool"
             />
-            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
               <div className="grid gap-4 md:grid-cols-2">
                 {['consumables', 'rentalMachinery', 'nonBillableExpenses', 'uniformsShoesAccessories'].map((key) => (
                   <TextField key={key} label={fieldLabel(key)} value={surveyDraft[key]} onChange={(value) => updateSurveyDraft(key, value)} multiline />
@@ -917,7 +917,7 @@ export default function Sites() {
         );
       case 'Client KYC':
         return (
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
             <div className="grid gap-4 md:grid-cols-2">
               {Object.entries(surveyDraft.clientKyc).map(([key, value]) => (
                 <TextField key={key} label={fieldLabel(key)} value={value} onChange={(nextValue) => updateNested('clientKyc', { ...surveyDraft.clientKyc, [key]: nextValue })} multiline={key === 'billingAddress' || key === 'complianceDocs'} />
@@ -928,7 +928,7 @@ export default function Sites() {
       case 'Risk Assessment':
         return (
           <div className="space-y-5">
-            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {['clientCreditRating', 'marketAssessment', 'goodPaymaster', 'existingVendorChangeReason', 'mitigationPlan', 'riskRemarks'].map((key) => (
                   <TextField key={key} label={fieldLabel(key)} value={surveyDraft[key]} onChange={(value) => updateSurveyDraft(key, value)} multiline={key.includes('Reason') || key.includes('Plan') || key.includes('Remarks')} />
@@ -940,7 +940,7 @@ export default function Sites() {
         );
       case 'Penalty Clauses':
         return (
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
             <div className="grid gap-4 md:grid-cols-2">
               <SelectField label="Penalty Clause Available" value={surveyDraft.penaltyClauses.penaltyClauseAvailable} onChange={(value) => updateNested('penaltyClauses', { ...surveyDraft.penaltyClauses, penaltyClauseAvailable: value })} options={['Yes', 'No']} />
               <SelectField label="Risk Impact" value={surveyDraft.penaltyClauses.riskImpact} onChange={(value) => updateNested('penaltyClauses', { ...surveyDraft.penaltyClauses, riskImpact: value })} options={['Low', 'Medium', 'High', 'Critical']} />
@@ -980,7 +980,7 @@ export default function Sites() {
               onRemove={(index) => updateNested('commercial', { ...surveyDraft.commercial, expenseComponents: surveyDraft.commercial.expenseComponents.filter((_, itemIndex) => itemIndex !== index) })}
               addLabel="Add expense component"
             />
-            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
               <TextField label="Non-Billable Cost" type="number" value={surveyDraft.commercial.nonBillableCost} onChange={(value) => updateNested('commercial', { ...surveyDraft.commercial, nonBillableCost: value })} />
               <div className="mt-5 grid gap-4 md:grid-cols-3">
                 <SummaryPill label="Expense Components" value={currency(totals.expenses)} />
@@ -993,7 +993,7 @@ export default function Sites() {
       }
       case 'Approval Mechanism':
         return (
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {['operationsTeamApproval', 'hrWageVetting', 'procurementEquipmentTccCosting', 'commercialVetting', 'financeViabilityReview', 'commercialGreenSignal'].map((key) => (
                 <SelectField key={key} label={fieldLabel(key)} value={surveyDraft[key]} onChange={(value) => updateSurveyDraft(key, value)} options={['Pending', 'Approved', 'Rejected', 'Not Required']} />
@@ -1004,7 +1004,7 @@ export default function Sites() {
         );
       case 'Final Remarks & Sign-Off':
         return (
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
             <div className="grid gap-4 md:grid-cols-2">
               <TextField label="Final Remarks" value={surveyDraft.finalRemarks} onChange={(value) => updateSurveyDraft('finalRemarks', value)} multiline />
               <TextField label="Assessor / Sign-Off Name" value={surveyDraft.signOffName} onChange={(value) => updateSurveyDraft('signOffName', value)} />
@@ -1043,11 +1043,11 @@ export default function Sites() {
     }
 
     return (
-      <div className="space-y-6">
+      <div className="space-y-7">
         <PageHeader title={selectedVisit.company} description="Pre-operational facility assessment workspace." />
-      <Toast message={toast?.message} type={toast?.type} />
+        <Toast message={toast?.message} type={toast?.type} />
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
           <CompactStatusBadge label="Client" value={selectedVisit.company} />
           <CompactStatusBadge label="Stage" value={selectedStage} tone="blue" />
           <CompactStatusBadge label="Status" value={selectedVisit.status || 'Draft'} />
@@ -1055,8 +1055,8 @@ export default function Sites() {
           <CompactStatusBadge label="Visit Date" value={formatDate(selectedVisit.scheduledVisitDate)} />
         </div>
 
-        <div className={`grid gap-5 ${siteMomDraft ? 'xl:grid-cols-[260px_minmax(0,1fr)_300px]' : 'xl:grid-cols-[260px_minmax(0,1fr)]'}`}>
-          <section className="enterprise-card sticky top-24 h-fit p-4">
+        <div className={`grid gap-6 ${siteMomDraft ? 'xl:grid-cols-[292px_minmax(0,1fr)_320px]' : 'xl:grid-cols-[292px_minmax(0,1fr)]'}`}>
+          <section className="enterprise-card sticky top-24 h-fit p-5">
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400">Sections</h3>
               <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500 dark:bg-slate-800">{activeSectionIndex + 1}/{surveySections.length}</span>
@@ -1064,14 +1064,14 @@ export default function Sites() {
             <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
               <div className="h-full rounded-full bg-qpms-600 transition-all" style={{ width: `${((activeSectionIndex + 1) / surveySections.length) * 100}%` }} />
             </div>
-            <div className="mt-4 max-h-[68vh] space-y-1 overflow-y-auto pr-1">
+            <div className="mt-5 max-h-[68vh] space-y-1.5 overflow-y-auto pr-2">
               {surveySections.map((section, index) => (
                 <button
                   type="button"
                   key={section}
                   onClick={() => setActiveSectionIndex(index)}
                   className={[
-                    'flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-semibold transition',
+                    'flex w-full items-center gap-2.5 rounded-xl px-3.5 py-3 text-left text-sm font-semibold transition',
                     activeSectionIndex === index
                       ? 'bg-qpms-600 text-white shadow-lg shadow-qpms-600/20'
                       : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
@@ -1084,8 +1084,8 @@ export default function Sites() {
             </div>
           </section>
 
-          <main className="min-w-0 space-y-5">
-            <section className="enterprise-card p-5">
+          <main className="mx-auto min-w-0 max-w-6xl space-y-6">
+            <section className="enterprise-card p-6">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2">
                   <ClipboardCheck className="h-5 w-5 text-qpms-600" />
@@ -1098,12 +1098,12 @@ export default function Sites() {
             {renderActiveSection()}
 
             {siteMomDraft ? (
-              <section className="enterprise-card p-5">
+              <section className="enterprise-card p-6">
                 <div className="flex items-center gap-2">
                   <FileText className="h-5 w-5 text-qpms-600" />
                   <h3 className="text-[17px] font-semibold leading-6 text-slate-950 dark:text-white">Site Visit MOM Editor</h3>
                 </div>
-                <div className="mt-5 grid gap-4">
+                <div className="mt-6 grid gap-5">
                   <TextField label="To" value={siteMomDraft.to} onChange={(value) => updateMomDraft('to', value)} />
                   <TextField label="CC" value={siteMomDraft.cc} onChange={(value) => updateMomDraft('cc', value)} />
                   <TextField label="Subject" value={siteMomDraft.subject} onChange={(value) => updateMomDraft('subject', value)} />
@@ -1128,7 +1128,7 @@ export default function Sites() {
           </main>
 
           {siteMomDraft ? (
-            <aside className="enterprise-card sticky top-24 h-fit p-5">
+            <aside className="enterprise-card sticky top-24 h-fit p-6">
               <h3 className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400">Workflow Summary</h3>
               <div className="mt-4 space-y-3">
                 <SummaryPill label="Client Name" value={selectedVisit.company} />
@@ -1152,10 +1152,10 @@ export default function Sites() {
           ) : null}
         </div>
 
-        <div className="sticky bottom-0 z-20 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-[0_-14px_40px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/95">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="sticky bottom-0 z-20 rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-[0_-14px_40px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/95">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="text-sm font-semibold text-slate-500 dark:text-slate-400">{autoSaveLabel}</div>
-            <div className="flex flex-wrap justify-end gap-3">
+            <div className="flex flex-wrap justify-end gap-3.5">
               <button type="button" onClick={handleSaveDraft} disabled={pendingAction === 'saveSiteDraft'} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
                 <ButtonContent loading={pendingAction === 'saveSiteDraft'} icon={Save}>Save Draft</ButtonContent>
               </button>

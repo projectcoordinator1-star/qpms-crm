@@ -18,6 +18,7 @@ create table if not exists public.leads (
   state text,
   city text,
   lead_priority text,
+  service_scope jsonb not null default '[]'::jsonb,
   remarks text,
   assigned_bd_executive text,
   assigned_bd_email text,
@@ -53,10 +54,20 @@ create table if not exists public.lead_mom (
   scheduled_site_visit_date date,
   scheduled_site_visit_time time,
   site_visit_remarks text,
+  calendar_invite_sent boolean not null default false,
   mom_status text not null default 'Draft',
   sent_at timestamptz,
   created_at timestamptz not null default now()
 );
+
+alter table public.leads
+add column if not exists service_scope jsonb not null default '[]'::jsonb;
+
+alter table public.lead_mom
+add column if not exists scheduled_site_visit_date date,
+add column if not exists scheduled_site_visit_time time,
+add column if not exists next_followup_date date,
+add column if not exists calendar_invite_sent boolean not null default false;
 
 create table if not exists public.site_visits (
   id uuid primary key default gen_random_uuid(),

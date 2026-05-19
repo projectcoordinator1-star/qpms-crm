@@ -5,6 +5,12 @@ export async function sendLeadMomEmail(mom, lead) {
     ...mom,
     clientName: lead?.company,
     company: lead?.company,
+    primaryContact: lead?.contact,
+    primaryContactEmail: lead?.email,
+    serviceScope: mom?.serviceScope || lead?.serviceScope || lead?.service_scope || [],
+    location: lead?.location,
+    assignedBdExecutive: lead?.assigned_bd_executive || lead?.executive,
+    assignedBdEmail: lead?.assigned_bd_email,
   });
   return response.data;
 }

@@ -166,6 +166,10 @@ function buildSiteVisitFromLead(lead) {
   };
 }
 
+function hasCompleteSiteVisitSchedule(mom) {
+  return Boolean(mom?.scheduledVisitDate && mom?.scheduledVisitTime);
+}
+
 function upsertById(items, nextItem) {
   const exists = items.some((item) => item.id === nextItem.id);
   return exists ? items.map((item) => (item.id === nextItem.id ? nextItem : item)) : [nextItem, ...items];
@@ -338,6 +342,7 @@ export function WorkflowProvider({ children }) {
 
   function sendLeadMom(leadId, mom) {
     let createdVisit = null;
+    const shouldCreateSiteVisit = hasCompleteSiteVisitSchedule(mom);
 
     setLeads((currentLeads) =>
       currentLeads.map((lead) => {
@@ -345,24 +350,25 @@ export function WorkflowProvider({ children }) {
 
         const nextLead = {
           ...lead,
-          stage: 'Site Visit Scheduled',
+          stage: shouldCreateSiteVisit ? 'Site Visit Scheduled' : 'Lead MOM Sent',
           scheduledVisitDate: mom.scheduledVisitDate || '',
           scheduledVisitTime: mom.scheduledVisitTime || '',
           siteVisitRemarks: mom.siteVisitRemarks || '',
           mom: { ...mom, sent: true, sentAt: new Date().toISOString() },
           activity: [
-            'Site Visit scheduled with client',
-            'Lead MOM sent to client. Moved to Site Visit & Estimation.',
+            ...(shouldCreateSiteVisit ? ['Site Visit scheduled with client'] : []),
+            shouldCreateSiteVisit ? 'Lead MOM sent to client. Moved to Site Visit & Estimation.' : 'Lead MOM sent to client with follow-up date.',
             ...(lead.activity || []),
           ].slice(0, 8),
         };
-        createdVisit = buildSiteVisitFromLead(nextLead);
+        if (shouldCreateSiteVisit) createdVisit = buildSiteVisitFromLead(nextLead);
         if (isRemoteWorkflowEnabled()) {
-          Promise.all([
+          const remoteTasks = [
             updateLeadRemote(leadId, nextLead),
             saveLeadMomRemote(leadId, mom, 'Sent'),
-            createSiteVisitRemote(nextLead),
-          ])
+          ];
+          if (shouldCreateSiteVisit) remoteTasks.push(createSiteVisitRemote(nextLead));
+          Promise.all(remoteTasks)
             .then(() => refreshWorkflowData())
             .catch((error) => {
               console.warn('Lead MOM/Site Visit Supabase save failed:', error.message);
