@@ -1,23 +1,26 @@
 import { useEffect, useMemo, useState } from 'react';
+import { motion as Motion, AnimatePresence } from 'framer-motion';
 import {
   AlertTriangle,
   ArrowLeft,
+  CalendarClock,
   Camera,
   ClipboardCheck,
   Edit3,
   Eye,
   FileText,
   Lock,
+  MapPin,
   Plus,
   Save,
   Search,
   Send,
   Trash2,
   UploadCloud,
+  UserRound,
   X,
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
-import DataTable from '../components/DataTable.jsx';
 import PageHeader from '../components/PageHeader.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import Toast from '../components/Toast.jsx';
@@ -27,16 +30,6 @@ import { canViewBdTeam } from '../data/mockUsers.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { sendSiteVisitMomEmail } from '../services/mailService.js';
 import { logAssessmentAuditRemote } from '../services/workflowRepository.js';
-
-const siteVisitColumns = [
-  { key: 'company', label: 'Client / Company' },
-  { key: 'siteName', label: 'Site Name', render: (row) => row.siteName || row.location || row.company },
-  { key: 'scheduledVisitDate', label: 'Scheduled Visit Date', render: (row) => formatDate(row.scheduledVisitDate) },
-  { key: 'executive', label: 'Assigned BD Executive' },
-  { key: 'momStatus', label: 'MOM Status', render: (row) => <StatusBadge status={row.momStatus || 'Pending'} /> },
-  { key: 'assessmentStatus', label: 'Assessment Status', render: (row) => <StatusBadge status={row.assessmentStatus || row.status || 'Draft'} /> },
-  { key: 'currentStage', label: 'Current Stage', render: (row) => normalizeStage(row.currentStage || row.status || 'Draft') },
-];
 
 const surveySections = [
   'Basic Site Information',
@@ -345,6 +338,136 @@ function ButtonContent({ loading, icon: Icon, children }) {
   );
 }
 
+function VisitMeta({ icon, label, value }) {
+  const IconComponent = icon;
+  return (
+    <div className="flex min-w-0 items-start gap-2 rounded-2xl bg-slate-50 px-3 py-2.5 dark:bg-slate-900/70">
+      <IconComponent className="mt-0.5 h-4 w-4 shrink-0 text-qpms-600 dark:text-qpms-300" />
+      <div className="min-w-0">
+        <p className="text-[11px] font-bold uppercase text-slate-500 dark:text-slate-400">{label}</p>
+        <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">{value || 'Not available'}</p>
+      </div>
+    </div>
+  );
+}
+
+function AssessmentQueueCard({ visit, selected, onSelect, onOpenAssessment, onOpenMom }) {
+  return (
+    <Motion.article
+      layout
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -2 }}
+      transition={{ duration: 0.18, ease: 'easeOut' }}
+      onClick={onSelect}
+      className={[
+        'cursor-pointer rounded-2xl border bg-white p-5 shadow-sm transition dark:bg-slate-950/70',
+        selected
+          ? 'border-qpms-300 shadow-[0_20px_55px_rgba(36,68,164,0.18)] ring-2 ring-qpms-100 dark:border-qpms-500/50 dark:ring-qpms-500/20'
+          : 'border-slate-200 hover:border-qpms-200 hover:shadow-lg dark:border-slate-800 dark:hover:border-qpms-500/35',
+      ].join(' ')}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="truncate text-lg font-semibold leading-6 text-slate-950 dark:text-white">{visit.company}</h3>
+            {visit.priority ? (
+              <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-500/25">{visit.priority}</span>
+            ) : null}
+          </div>
+          <p className="mt-1 text-xs font-bold uppercase text-slate-500 dark:text-slate-400">{visit.leadId || `Lead ${visit.leadId || visit.lead_id || visit.id}`}</p>
+        </div>
+        <StatusBadge status={visit.status || 'Scheduled'} />
+      </div>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <VisitMeta icon={UserRound} label="Primary contact" value={visit.contact} />
+        <VisitMeta icon={MapPin} label="Location" value={[visit.location, visit.city, visit.state].filter(Boolean).join(', ')} />
+        <VisitMeta icon={CalendarClock} label="Visit schedule" value={`${formatDate(visit.scheduledVisitDate)}${visit.scheduledVisitTime ? `, ${visit.scheduledVisitTime}` : ''}`} />
+        <VisitMeta icon={ClipboardCheck} label="Assigned BD" value={visit.assigned_bd_executive || visit.executive} />
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
+        <div className="flex flex-wrap items-center gap-2">
+          <CompactStatusBadge label="MOM" value={visit.momStatus || 'Pending'} tone="amber" />
+          <CompactStatusBadge label="Stage" value={normalizeStage(visit.currentStage || 'Assessment')} tone="blue" />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={(event) => { event.stopPropagation(); onOpenAssessment(); }} className="focus-ring rounded-xl bg-gradient-to-r from-qpms-700 to-qpms-500 px-3.5 py-2 text-xs font-bold text-white shadow-lg shadow-qpms-600/20 hover:from-qpms-800 hover:to-qpms-600">
+            Open Assessment
+          </button>
+          <button type="button" onClick={(event) => { event.stopPropagation(); onOpenMom(); }} className="focus-ring rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+            {visit.siteMom ? 'View Site Visit MOM' : 'Create Site Visit MOM'}
+          </button>
+        </div>
+      </div>
+    </Motion.article>
+  );
+}
+
+function QueueSidePanel({ visit, mode, momDraft, onOpenAssessment, onOpenMom, onClose }) {
+  if (!visit) return null;
+
+  return (
+    <Motion.aside
+      initial={{ opacity: 0, x: 24 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: 24 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+      className="enterprise-card sticky top-24 h-fit max-h-[calc(100vh-8rem)] overflow-y-auto p-5 lg:rounded-2xl"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase text-qpms-600 dark:text-qpms-300">{mode === 'mom' ? 'MOM Workspace' : 'Selected Lead'}</p>
+          <h2 className="mt-1 text-xl font-semibold leading-7 text-slate-950 dark:text-white">{visit.company}</h2>
+        </div>
+        <button type="button" onClick={onClose} className="focus-ring rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="mt-5 grid gap-3">
+        <SummaryPill label="Lead ID" value={visit.leadId || visit.id} />
+        <SummaryPill label="Contact" value={[visit.contact, visit.designation].filter(Boolean).join(' - ') || 'Not available'} />
+        <SummaryPill label="Email / Phone" value={[visit.email, visit.phone].filter(Boolean).join(' / ') || 'Not available'} />
+        <SummaryPill label="Schedule" value={`${formatDate(visit.scheduledVisitDate)}${visit.scheduledVisitTime ? `, ${visit.scheduledVisitTime}` : ''}`} />
+        <SummaryPill label="MOM Status" value={visit.momStatus || 'Pending'} />
+      </div>
+
+      {mode === 'mom' ? (
+        <div className="mt-5 rounded-2xl border border-qpms-100 bg-qpms-50/70 p-4 dark:border-qpms-500/20 dark:bg-qpms-500/10">
+          <div className="flex items-center gap-2">
+            <FileText className="h-4 w-4 text-qpms-600 dark:text-qpms-300" />
+            <h3 className="text-sm font-bold text-slate-950 dark:text-white">Site Visit MOM</h3>
+          </div>
+          <p className="mt-3 text-sm font-semibold text-slate-900 dark:text-white">{momDraft?.subject || `Site Visit MOM - ${visit.company}`}</p>
+          <p className="mt-2 line-clamp-5 whitespace-pre-line text-sm leading-6 text-slate-600 dark:text-slate-300">{momDraft?.summary || 'MOM workspace is ready for this scheduled site visit.'}</p>
+        </div>
+      ) : null}
+
+      <div className="mt-5">
+        <h3 className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400">Recent Activity</h3>
+        <div className="mt-3 space-y-2">
+          {(visit.activity || ['Lead MOM sent. Site survey workflow opened.']).slice(0, 4).map((item, index) => (
+            <div key={`${item}-${index}`} className="rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm font-medium text-slate-600 dark:border-slate-800 dark:bg-slate-950/70 dark:text-slate-300">
+              {item}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-2">
+        <button type="button" onClick={onOpenAssessment} className="focus-ring rounded-xl bg-gradient-to-r from-qpms-700 to-qpms-500 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-qpms-600/20 hover:from-qpms-800 hover:to-qpms-600">
+          Open Assessment
+        </button>
+        <button type="button" onClick={onOpenMom} className="focus-ring rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+          {visit.siteMom ? 'View Site Visit MOM' : 'Create Site Visit MOM'}
+        </button>
+      </div>
+    </Motion.aside>
+  );
+}
+
 function ServiceScopeGrid({ items, values, onChange }) {
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -588,6 +711,8 @@ export default function Sites() {
   const [sectionAudit, setSectionAudit] = useState({});
   const [editingSection, setEditingSection] = useState('');
   const [pendingEditSection, setPendingEditSection] = useState('');
+  const [selectedQueueVisitId, setSelectedQueueVisitId] = useState('');
+  const [queuePanelMode, setQueuePanelMode] = useState('details');
   usePageTitle('Site Visit & Estimation');
 
   const visibleSiteVisits = useMemo(() => {
@@ -596,6 +721,7 @@ export default function Sites() {
   }, [siteVisits, user]);
 
   const selectedVisit = visibleSiteVisits.find((visit) => String(visit.id) === String(routeVisitId));
+  const selectedQueueVisit = visibleSiteVisits.find((visit) => String(visit.id) === String(selectedQueueVisitId));
   const selectedStage = normalizeStage(selectedVisit?.currentStage || 'Pre-Operational Assessment');
   const activeSection = surveySections[activeSectionIndex];
   const activeSectionAudit = sectionAudit[activeSection];
@@ -700,6 +826,17 @@ export default function Sites() {
 
   function openVisitPage(visit) {
     navigate(`/site-visit/${visit.id}`);
+  }
+
+  function selectQueueVisit(visit) {
+    setSelectedQueueVisitId(visit.id);
+    setQueuePanelMode('details');
+  }
+
+  function openQueueMomWorkspace(visit) {
+    setSelectedQueueVisitId(visit.id);
+    setQueuePanelMode('mom');
+    setSiteMomDraft(visit.siteMom || buildSiteVisitMom(visit, mergeSurvey(visit.survey)));
   }
 
   function updateSurveyDraft(key, value) {
@@ -1377,58 +1514,80 @@ export default function Sites() {
         ))}
       </section>
 
-      <section className="enterprise-card p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h2 className="text-[17px] font-semibold leading-6 text-slate-950 dark:text-white">Assessment Queue</h2>
-            <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
-              Leads appear here after the Lead MOM is sent and the client has scheduled a site visit.
-            </p>
+      <section className={`grid gap-6 ${selectedQueueVisit ? 'xl:grid-cols-[minmax(0,1fr)_390px]' : 'xl:grid-cols-1'}`}>
+        <div className="enterprise-card p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase text-qpms-600 dark:text-qpms-300">Assessment Queue</p>
+              <h2 className="mt-1 text-xl font-semibold leading-7 text-slate-950 dark:text-white">Scheduled Visits / Assessment List</h2>
+              <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
+                Left side shows queued assessments. Select a card to open lead details or the MOM workspace on the right.
+              </p>
+            </div>
+            <div className="relative w-full lg:w-80">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search assessments..."
+                className="focus-ring h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+              />
+            </div>
           </div>
-          <div className="relative w-full lg:w-80">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              type="search"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search assessments..."
-              className="focus-ring h-11 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-            />
+
+          <div className="mt-5">
+            {!visibleSiteVisits.length ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-5 py-12 text-center shadow-sm dark:border-slate-700 dark:bg-slate-950/55">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-qpms-50 text-qpms-600 dark:bg-qpms-500/10 dark:text-qpms-200">
+                  <ClipboardCheck className="h-7 w-7" />
+                </div>
+                <h3 className="mt-4 text-lg font-semibold text-slate-950 dark:text-white">No Site Visit Assessments Yet</h3>
+                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500 dark:text-slate-400">
+                  Leads with scheduled site visits will appear here after Lead MOM submission.
+                </p>
+                <button type="button" onClick={() => navigate('/crm')} className="focus-ring mt-6 rounded-xl bg-gradient-to-r from-qpms-700 to-qpms-500 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-qpms-600/20 hover:from-qpms-800 hover:to-qpms-600">
+                  Go to Lead Management
+                </button>
+              </div>
+            ) : filteredVisits.length ? (
+              <div className="grid gap-4">
+                <AnimatePresence initial={false}>
+                  {filteredVisits.map((visit) => (
+                    <AssessmentQueueCard
+                      key={visit.id}
+                      visit={visit}
+                      selected={String(selectedQueueVisitId) === String(visit.id)}
+                      onSelect={() => selectQueueVisit(visit)}
+                      onOpenAssessment={() => openVisitPage(visit)}
+                      onOpenMom={() => openQueueMomWorkspace(visit)}
+                    />
+                  ))}
+                </AnimatePresence>
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-10 text-center dark:border-slate-700 dark:bg-slate-950/55">
+                <Search className="mx-auto h-8 w-8 text-slate-400" />
+                <p className="mt-3 text-sm font-semibold text-slate-700 dark:text-slate-200">No matching assessments found</p>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Clear the search or try another client, city, status, or executive.</p>
+              </div>
+            )}
           </div>
         </div>
 
-        <div className="mt-5">
-          {filteredVisits.length ? (
-            <DataTable
-              columns={[
-                ...siteVisitColumns,
-                {
-                  key: 'open',
-                  label: '',
-                  render: (row) => (
-                    <button type="button" onClick={(event) => { event.stopPropagation(); openVisitPage(row); }} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-qpms-600 px-3.5 py-2 text-xs font-semibold text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700">
-                      Open Assessment
-                    </button>
-                  ),
-                },
-              ]}
-              rows={filteredVisits}
-              embedded
-              onRowClick={openVisitPage}
+        <AnimatePresence>
+          {selectedQueueVisit ? (
+            <QueueSidePanel
+              key={selectedQueueVisit.id}
+              visit={selectedQueueVisit}
+              mode={queuePanelMode}
+              momDraft={queuePanelMode === 'mom' ? siteMomDraft : selectedQueueVisit.siteMom}
+              onOpenAssessment={() => openVisitPage(selectedQueueVisit)}
+              onOpenMom={() => openQueueMomWorkspace(selectedQueueVisit)}
+              onClose={() => setSelectedQueueVisitId('')}
             />
-          ) : (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-10 text-center dark:border-slate-700 dark:bg-slate-950/55">
-              <ClipboardCheck className="mx-auto h-8 w-8 text-slate-400" />
-              <p className="mt-3 text-sm font-semibold text-slate-700 dark:text-slate-200">No site visits scheduled yet</p>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Send a Lead MOM with scheduled visit details to move leads here.
-              </p>
-              <button type="button" onClick={() => navigate('/crm')} className="focus-ring mt-5 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
-                Go to Lead Management
-              </button>
-            </div>
-          )}
-        </div>
+          ) : null}
+        </AnimatePresence>
       </section>
 
       {previewPhoto ? (
