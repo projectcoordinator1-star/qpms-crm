@@ -122,6 +122,8 @@ export function dbSiteVisitToApp(row) {
   }));
   const primary = contacts.find((contact) => contact.isPrimary) || contacts[0] || {};
   const assessment = row.site_assessments?.[0];
+  const approvals = [...(row.approval_requests || [])].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+  const latestApproval = approvals[0] || {};
 
   return {
     id: row.id,
@@ -153,6 +155,16 @@ export function dbSiteVisitToApp(row) {
     createdFrom: 'Supabase',
     survey: assessment ? dbAssessmentToSurvey(assessment) : undefined,
     assessmentId: assessment?.id,
+    approvals,
+    pendingWith: latestApproval.pending_with || row.pending_with || '',
+    approvalStatus: latestApproval.status || '',
+    approvalRemarks: latestApproval.remarks || '',
+    lastApprovalBy: latestApproval.approved_by || '',
+    lastApprovalAt: latestApproval.approved_at || '',
+    approvalTimeline: approvals.map((approval) => ({
+      label: `${approval.approval_stage} ${approval.status}`,
+      at: approval.approved_at || approval.created_at,
+    })),
     siteMom: row.site_mom?.[0] ? dbSiteMomToApp(row.site_mom[0]) : null,
     activity: (row.activity_logs || []).map((log) => log.activity_message || log.message || log.activity_type).filter(Boolean),
   };
@@ -381,7 +393,7 @@ export async function fetchWorkflowData() {
 
   const visitsResponse = await supabase
     .from('site_visits')
-    .select('*, leads(*), site_assessments(*), site_mom(*), activity_logs(*)')
+    .select('*, leads(*), site_assessments(*), site_mom(*), approval_requests(*), activity_logs(*)')
     .order('created_at', { ascending: false });
 
   if (visitsResponse.error) {
@@ -579,11 +591,32 @@ export async function submitApprovalRemote(visit, assessmentId) {
     site_visit_id: visit.id,
     assessment_id: assessmentId,
     approval_stage: 'Commercial Review',
-    pending_with: 'Commercial',
+    pending_with: 'Commercial Team',
     status: 'Pending',
   });
   if (error) throw error;
   await supabase.from('site_visits').update({ current_stage: 'Commercial Review', status: 'Commercial Review', updated_at: new Date().toISOString() }).eq('id', visit.id);
+}
+
+export async function recordApprovalDecisionRemote({ visit, stage, status, pendingWith, remarks, user }) {
+  assertConfigured();
+  const nextStage = pendingWith === 'Finance Team' ? 'Finance Review' : pendingWith === 'BD Head / BD Team' ? 'BD Team Review' : pendingWith === 'COO' ? 'COO Approval' : pendingWith === 'Completed' ? 'Approved' : stage;
+  const { error } = await supabase.from('approval_requests').insert({
+    lead_id: visit.leadId,
+    site_visit_id: visit.id,
+    assessment_id: visit.assessmentId || null,
+    approval_stage: stage,
+    pending_with: pendingWith,
+    status,
+    remarks: remarks || null,
+    approved_by: user?.email || user?.name || null,
+    approved_at: new Date().toISOString(),
+  });
+  if (error) throw error;
+  await supabase
+    .from('site_visits')
+    .update({ current_stage: nextStage, status: status === 'Approved' ? nextStage : status, updated_at: new Date().toISOString() })
+    .eq('id', visit.id);
 }
 
 export async function uploadSiteImageRemote({ visit, assessmentId, category, file, uploadedBy }) {
@@ -615,5 +648,20 @@ export async function logActivity({ leadId, siteVisitId, type, message, createdB
     activity_type: type,
     activity_message: message,
     created_by: createdBy || null,
+  });
+}
+
+export async function logAssessmentAuditRemote({ visit, sectionName, actionType, user, oldValue, newValue, remarks }) {
+  if (!isSupabaseConfigured) return;
+  await supabase.from('assessment_audit_logs').insert({
+    site_visit_id: visit?.id || null,
+    assessment_id: visit?.assessmentId || null,
+    section_name: sectionName,
+    action_type: actionType,
+    edited_by: user?.name || user?.email || null,
+    edited_by_role: user?.role || null,
+    old_value: oldValue || {},
+    new_value: newValue || {},
+    remarks: remarks || null,
   });
 }

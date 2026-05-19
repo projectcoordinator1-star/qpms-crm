@@ -46,7 +46,7 @@ import {
 } from '../data/qpmsWorkflowData.js';
 import { useAuth } from '../context/auth-context.js';
 import { useWorkflow } from '../context/workflow-context.js';
-import { bdExecutives, canViewBdTeam } from '../data/mockUsers.js';
+import { bdExecutives, canViewBdTeam, isCommercialTeam, isFinanceTeam } from '../data/mockUsers.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 
 const tabs = [
@@ -722,6 +722,60 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
   );
 }
 
+function ApprovalDashboard({ title, description, stage, siteVisits }) {
+  const queue = siteVisits.filter((visit) => (visit.currentStage || visit.status) === stage);
+  const pending = queue.filter((visit) => !['Approved', 'Rejected', 'Rework Requested'].includes(visit.approvalStatus)).length;
+  return (
+    <div className="space-y-6">
+      <section className="grid gap-4 md:grid-cols-3">
+        {[
+          ['Pending queue', pending],
+          ['Submitted records', queue.length],
+          ['Stage owner', stage],
+        ].map(([label, value]) => (
+          <div key={label} className="enterprise-card p-5">
+            <p className="text-sm font-medium leading-5 text-slate-500 dark:text-slate-400">{label}</p>
+            <p className="mt-3 text-2xl font-semibold leading-none text-slate-950 dark:text-white">{value}</p>
+          </div>
+        ))}
+      </section>
+      <section className="enterprise-card p-5">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-lg font-semibold text-slate-950 dark:text-white">{title}</h2>
+          <p className="text-sm leading-6 text-slate-500 dark:text-slate-400">{description}</p>
+        </div>
+        <div className="mt-5 overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200 text-left text-sm dark:divide-slate-800">
+            <thead className="text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                {['Client', 'Submitted date', 'Stage', 'Pending with', 'Status', 'Remarks'].map((heading) => (
+                  <th key={heading} className="px-3 py-3 font-bold">{heading}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {queue.length ? queue.map((visit) => (
+                <tr key={visit.id}>
+                  <td className="px-3 py-3 font-semibold text-slate-900 dark:text-white">{visit.company}</td>
+                  <td className="px-3 py-3 text-slate-600 dark:text-slate-300">{visit.lastApprovalAt ? new Date(visit.lastApprovalAt).toLocaleDateString() : 'Pending'}</td>
+                  <td className="px-3 py-3 text-slate-600 dark:text-slate-300">{visit.currentStage}</td>
+                  <td className="px-3 py-3 text-slate-600 dark:text-slate-300">{visit.pendingWith || stage}</td>
+                  <td className="px-3 py-3"><StatusBadge status={visit.approvalStatus || 'Pending'} /></td>
+                  <td className="px-3 py-3 text-slate-600 dark:text-slate-300">{visit.approvalRemarks || 'No shared remarks'}</td>
+                </tr>
+              )) : (
+                <tr>
+                  <td colSpan="6" className="px-3 py-8 text-center text-sm font-semibold text-slate-500">No records are pending.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
   const { leads, siteVisits } = useWorkflow();
@@ -729,6 +783,9 @@ export default function Dashboard() {
   const [activeDashboardSection, setActiveDashboardSection] = useState(null);
   const [activeOperationsSection, setActiveOperationsSection] = useState(null);
   usePageTitle('Dashboard');
+  const restrictedToPipeline = ['BD Head', 'BD Executive'].includes(user?.role);
+  const canSeeOperations = user?.role === 'Admin';
+  const effectiveTab = canSeeOperations ? activeTab : 'new-business';
 
   const visibleLeads = useMemo(() => {
     if (canViewBdTeam(user)) return leads;
@@ -743,12 +800,16 @@ export default function Dashboard() {
   return (
     <div className="space-y-7">
       <PageHeader
-        title="Operations Command Center"
-        description="Management dashboard for new business pipeline health, site operations, attendance, tickets, tasks, field officers, and SLA visibility."
-        actions={<DashboardTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />}
+        title={isFinanceTeam(user) ? 'Finance Review Dashboard' : isCommercialTeam(user) ? 'Commercial Review Dashboard' : 'Operations Command Center'}
+        description={isFinanceTeam(user) ? 'Finance-only queue for billing, margin, payment, and risk approval.' : isCommercialTeam(user) ? 'Commercial-only queue for BD submitted assessment review and pricing approval.' : 'Management dashboard for new business pipeline health, site operations, attendance, tickets, tasks, field officers, and SLA visibility.'}
+        actions={canSeeOperations ? <DashboardTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} /> : null}
       />
 
-      {activeTab === 'new-business' ? (
+      {isCommercialTeam(user) ? (
+        <ApprovalDashboard title="Commercial Review Queue" description="Records submitted by BD for commercial statement, pricing, and margin approval." stage="Commercial Review" siteVisits={siteVisits} />
+      ) : isFinanceTeam(user) ? (
+        <ApprovalDashboard title="Finance Review Queue" description="Records approved by Commercial for billing, expense, margin, and payment validation." stage="Finance Review" siteVisits={siteVisits} />
+      ) : effectiveTab === 'new-business' || restrictedToPipeline ? (
         <NewBusinessPipeline
           activeDashboardSection={activeDashboardSection}
           onSectionChange={setActiveDashboardSection}

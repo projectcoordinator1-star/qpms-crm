@@ -4,7 +4,7 @@ create table if not exists public.profiles (
   id uuid primary key default gen_random_uuid(),
   email text unique not null,
   full_name text not null,
-  role text not null check (role in ('Admin', 'BD Head', 'BD Executive', 'Commercial', 'Finance', 'COO')),
+  role text not null check (role in ('Admin', 'BD Head', 'BD Executive', 'Commercial', 'Commercial Team', 'Finance', 'Finance Team', 'COO')),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -146,9 +146,28 @@ create table if not exists public.approval_requests (
   pending_with text not null,
   status text not null default 'Pending',
   remarks text,
+  approved_by text,
+  approved_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create table if not exists public.assessment_audit_logs (
+  id uuid primary key default gen_random_uuid(),
+  site_visit_id uuid references public.site_visits(id) on delete cascade,
+  assessment_id uuid references public.site_assessments(id) on delete cascade,
+  section_name text not null,
+  action_type text not null,
+  edited_by text,
+  edited_by_role text,
+  edited_at timestamptz not null default now(),
+  old_value jsonb not null default '{}'::jsonb,
+  new_value jsonb not null default '{}'::jsonb,
+  remarks text
+);
+
+alter table public.approval_requests add column if not exists approved_by text;
+alter table public.approval_requests add column if not exists approved_at timestamptz;
 
 create table if not exists public.activity_logs (
   id uuid primary key default gen_random_uuid(),
@@ -173,6 +192,7 @@ alter table public.site_assessments enable row level security;
 alter table public.site_images enable row level security;
 alter table public.site_mom enable row level security;
 alter table public.approval_requests enable row level security;
+alter table public.assessment_audit_logs enable row level security;
 alter table public.activity_logs enable row level security;
 
 drop policy if exists "anon crm read profiles" on public.profiles;
@@ -184,6 +204,7 @@ drop policy if exists "anon crm all site assessments" on public.site_assessments
 drop policy if exists "anon crm all site images" on public.site_images;
 drop policy if exists "anon crm all site mom" on public.site_mom;
 drop policy if exists "anon crm all approvals" on public.approval_requests;
+drop policy if exists "anon crm all assessment audit logs" on public.assessment_audit_logs;
 drop policy if exists "anon crm all activity logs" on public.activity_logs;
 drop policy if exists "anon upload site survey images" on storage.objects;
 drop policy if exists "anon read site survey images" on storage.objects;
@@ -197,6 +218,7 @@ create policy "anon crm all site assessments" on public.site_assessments for all
 create policy "anon crm all site images" on public.site_images for all using (true) with check (true);
 create policy "anon crm all site mom" on public.site_mom for all using (true) with check (true);
 create policy "anon crm all approvals" on public.approval_requests for all using (true) with check (true);
+create policy "anon crm all assessment audit logs" on public.assessment_audit_logs for all using (true) with check (true);
 create policy "anon crm all activity logs" on public.activity_logs for all using (true) with check (true);
 
 create policy "anon upload site survey images"

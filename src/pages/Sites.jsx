@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  ArrowLeft,
   Camera,
   ClipboardCheck,
+  Edit3,
   Eye,
   FileText,
+  Lock,
   Plus,
   Save,
   Search,
@@ -23,6 +26,7 @@ import { useWorkflow } from '../context/workflow-context.js';
 import { canViewBdTeam } from '../data/mockUsers.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { sendSiteVisitMomEmail } from '../services/mailService.js';
+import { logAssessmentAuditRemote } from '../services/workflowRepository.js';
 
 const siteVisitColumns = [
   { key: 'company', label: 'Client / Company' },
@@ -283,6 +287,25 @@ function getCommercialTotals(survey) {
   const margin = revenue - monthlyCost;
   const marginPercent = revenue ? (margin / revenue) * 100 : 0;
   return { revenue, expenses, nonBillable, monthlyCost, margin, marginPercent };
+}
+
+function sectionSnapshot(section, survey) {
+  const map = {
+    'Basic Site Information': ['siteAddress', 'siteType', 'operatingHours', 'clientOccupancy', 'buildingAge', 'takeoverComplexity', 'siteSurveyDate', 'assessedBy', 'siteContactPerson', 'contactNumber', 'contactEmail', 'totalSiteArea', 'contractPeriod', 'marginAgreed', 'marginType', 'paymentTerms'],
+    'Scope of IFM Services': ['ifmScope'],
+    'Hard Services': ['hardServices'],
+    'Soft Services': ['softServices'],
+    'Landscaping & Pest Control': ['landscaping', 'pestControl'],
+    'HSE & Statutory Compliance': ['hseCompliance'],
+    'Manpower Deployment': ['manpower'],
+    'Tools, Equipment & Consumables': ['tools', 'equipment', 'consumables'],
+    'Client KYC & Commercial Inputs': ['clientKyc', 'commercial'],
+    'Risk Assessment': ['riskAssessment'],
+    'Commercial Statement': ['commercialStatement', 'commercial'],
+    'Approval Workflow': ['approvalWorkflow'],
+    'Final Remarks': ['finalRemarks'],
+  };
+  return (map[section] || []).reduce((snapshot, key) => ({ ...snapshot, [key]: survey?.[key] }), {});
 }
 
 function normalizeStage(stage) {
@@ -562,6 +585,9 @@ export default function Sites() {
   const [autoSaveLabel, setAutoSaveLabel] = useState('Draft saved');
   const [draftVisitId, setDraftVisitId] = useState(null);
   const [pendingAction, setPendingAction] = useState('');
+  const [sectionAudit, setSectionAudit] = useState({});
+  const [editingSection, setEditingSection] = useState('');
+  const [pendingEditSection, setPendingEditSection] = useState('');
   usePageTitle('Site Visit & Estimation');
 
   const visibleSiteVisits = useMemo(() => {
@@ -572,6 +598,10 @@ export default function Sites() {
   const selectedVisit = visibleSiteVisits.find((visit) => String(visit.id) === String(routeVisitId));
   const selectedStage = normalizeStage(selectedVisit?.currentStage || 'Pre-Operational Assessment');
   const activeSection = surveySections[activeSectionIndex];
+  const activeSectionAudit = sectionAudit[activeSection];
+  const isSectionSaved = Boolean(activeSectionAudit);
+  const isEditingActiveSection = editingSection === activeSection;
+  const isActiveSectionLocked = isSectionSaved && !isEditingActiveSection;
 
   const filteredVisits = useMemo(() => {
     const value = query.trim().toLowerCase();
@@ -616,6 +646,47 @@ export default function Sites() {
 
   function markChanged() {
     setAutoSaveLabel('Unsaved changes');
+  }
+
+  function rememberSectionAudit(actionType) {
+    setSectionAudit((current) => ({
+      ...current,
+      [activeSection]: {
+        actionType,
+        savedAt: new Date().toISOString(),
+        savedBy: user?.name || user?.email || 'Current user',
+        savedByRole: user?.role || '',
+      },
+    }));
+  }
+
+  function handleBackToQueue() {
+    if (autoSaveLabel === 'Unsaved changes' && !window.confirm('You have unsaved changes. Leave without saving?')) return;
+    navigate('/sites');
+  }
+
+  function beginEditSection() {
+    setPendingEditSection(activeSection);
+  }
+
+  function confirmEditSection() {
+    setEditingSection(pendingEditSection);
+    logAssessmentAuditRemote({
+      visit: selectedVisit,
+      sectionName: pendingEditSection,
+      actionType: 'Section Edited',
+      user,
+      oldValue: sectionSnapshot(pendingEditSection, selectedVisit?.survey),
+      newValue: sectionSnapshot(pendingEditSection, surveyDraft),
+      remarks: 'User unlocked saved section for editing.',
+    });
+    setPendingEditSection('');
+    setAutoSaveLabel('Editing saved section');
+  }
+
+  function cancelEditSection() {
+    setEditingSection('');
+    setAutoSaveLabel('Draft saved');
   }
 
   useEffect(() => {
@@ -696,6 +767,18 @@ export default function Sites() {
     showToast('Saving...', 'info');
     try {
       await Promise.resolve(saveSiteSurvey(selectedVisit.id, surveyDraft, 'Draft', user));
+      const actionType = isSectionSaved ? 'Section Resaved' : 'Section Saved';
+      await logAssessmentAuditRemote({
+        visit: selectedVisit,
+        sectionName: activeSection,
+        actionType,
+        user,
+        oldValue: sectionSnapshot(activeSection, selectedVisit.survey),
+        newValue: sectionSnapshot(activeSection, surveyDraft),
+        remarks: isSectionSaved ? 'Saved section edited and resaved.' : 'Section saved.',
+      });
+      rememberSectionAudit(actionType);
+      setEditingSection('');
       setAutoSaveLabel('Saved successfully');
       showToast('Saved successfully', 'success');
     } catch (error) {
@@ -748,6 +831,17 @@ export default function Sites() {
     try {
       await Promise.resolve(saveSiteSurvey(selectedVisit.id, surveyDraft, 'Submitted', user));
       await Promise.resolve(submitCommercialReview(selectedVisit.id));
+      await logAssessmentAuditRemote({
+        visit: selectedVisit,
+        sectionName: activeSection,
+        actionType: 'Submitted for Commercial Review',
+        user,
+        oldValue: sectionSnapshot(activeSection, selectedVisit.survey),
+        newValue: sectionSnapshot(activeSection, surveyDraft),
+        remarks: 'Assessment submitted for Commercial Review.',
+      });
+      rememberSectionAudit('Submitted for Commercial Review');
+      setEditingSection('');
       setAutoSaveLabel('Submitted');
       showToast('Submitted for Commercial Review', 'success');
     } catch (error) {
@@ -1024,6 +1118,16 @@ export default function Sites() {
     setActiveSectionIndex(0);
     setShowMomPreview(false);
     setAutoSaveLabel('Draft saved');
+    setSectionAudit(selectedVisit.assessmentId || selectedVisit.assessmentStatus === 'Draft'
+      ? Object.fromEntries(surveySections.map((section) => [section, {
+          actionType: 'Section Saved',
+          savedAt: selectedVisit.lastApprovalAt || new Date().toISOString(),
+          savedBy: selectedVisit.created_by_name || selectedVisit.assigned_bd_executive || 'QPMS user',
+          savedByRole: 'BD Executive',
+        }]))
+      : {});
+    setEditingSection('');
+    setPendingEditSection('');
   }
 
   if (routeVisitId) {
@@ -1044,7 +1148,12 @@ export default function Sites() {
 
     return (
       <div className="space-y-7">
-        <PageHeader title={selectedVisit.company} description="Pre-operational facility assessment workspace." />
+        <div className="flex flex-col gap-3">
+          <button type="button" onClick={handleBackToQueue} className="focus-ring inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+            <ArrowLeft className="h-4 w-4" /> Back to Assessment Queue
+          </button>
+          <PageHeader title={selectedVisit.company} description="Pre-operational facility assessment workspace." />
+        </div>
         <Toast message={toast?.message} type={toast?.type} />
 
         <div className="flex flex-wrap items-center gap-2.5">
@@ -1054,6 +1163,20 @@ export default function Sites() {
           <CompactStatusBadge label="MOM" value={selectedVisit.momStatus || 'Pending'} tone="amber" />
           <CompactStatusBadge label="Visit Date" value={formatDate(selectedVisit.scheduledVisitDate)} />
         </div>
+
+        <section className="enterprise-card p-5">
+          <h3 className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400">Approval Timeline</h3>
+          <div className="mt-4 grid gap-2 md:grid-cols-4 xl:grid-cols-7">
+            {['Site Visit MOM Sent', 'Submitted to Commercial', 'Commercial Approved', 'Finance Review Pending', 'Finance Approved', 'BD Team Review', 'COO Approval'].map((label) => {
+              const completed = (selectedVisit.activity || []).some((item) => String(item).includes(label.replace(' Pending', ''))) || (selectedVisit.approvalTimeline || []).some((item) => String(item.label).includes(label.replace(' Pending', '')));
+              return (
+                <div key={label} className={`rounded-2xl border px-3 py-2 text-xs font-bold ${completed ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-200' : 'border-slate-200 bg-white text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400'}`}>
+                  {label}
+                </div>
+              );
+            })}
+          </div>
+        </section>
 
         <div className={`grid gap-6 ${siteMomDraft ? 'xl:grid-cols-[292px_minmax(0,1fr)_320px]' : 'xl:grid-cols-[292px_minmax(0,1fr)]'}`}>
           <section className="enterprise-card sticky top-24 h-fit p-5">
@@ -1091,11 +1214,44 @@ export default function Sites() {
                   <ClipboardCheck className="h-5 w-5 text-qpms-600" />
                   <h3 className="text-lg font-semibold leading-6 text-slate-950 dark:text-white">{activeSection}</h3>
                 </div>
-                <StatusBadge status={autoSaveLabel === 'Unsaved changes' ? 'Draft' : 'Active'} />
+                <div className="flex flex-wrap items-center gap-2">
+                  {isActiveSectionLocked ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-200 dark:ring-emerald-500/25">
+                      <Lock className="h-3.5 w-3.5" /> Locked / Saved
+                    </span>
+                  ) : isEditingActiveSection ? (
+                    <StatusBadge status="Editing Mode" />
+                  ) : (
+                    <StatusBadge status={autoSaveLabel === 'Unsaved changes' ? 'Draft' : 'Active'} />
+                  )}
+                  {isSectionSaved ? (
+                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                      Last saved {new Date(activeSectionAudit.savedAt).toLocaleString()} by {activeSectionAudit.savedBy}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap justify-end gap-2">
+                {isActiveSectionLocked ? (
+                  <button type="button" onClick={beginEditSection} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                    <Edit3 className="h-4 w-4" /> Edit Section
+                  </button>
+                ) : isEditingActiveSection ? (
+                  <>
+                    <button type="button" onClick={handleSaveDraft} disabled={pendingAction === 'saveSiteDraft'} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-qpms-600 px-3.5 py-2 text-sm font-semibold text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700">
+                      <ButtonContent loading={pendingAction === 'saveSiteDraft'} icon={Save}>Save Changes</ButtonContent>
+                    </button>
+                    <button type="button" onClick={cancelEditSection} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                      Cancel Edit
+                    </button>
+                  </>
+                ) : null}
               </div>
             </section>
 
-            {renderActiveSection()}
+            <fieldset disabled={isActiveSectionLocked} className={isActiveSectionLocked ? 'opacity-80' : ''}>
+              {renderActiveSection()}
+            </fieldset>
 
             {siteMomDraft ? (
               <section className="enterprise-card p-6">
@@ -1168,6 +1324,23 @@ export default function Sites() {
             </div>
           </div>
         </div>
+
+        {pendingEditSection ? (
+          <div className="fixed inset-0 z-[65] flex items-center justify-center bg-slate-950/60 px-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-3xl border border-white/70 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+              <h3 className="text-lg font-semibold text-slate-950 dark:text-white">Edit Saved Section?</h3>
+              <p className="mt-3 text-sm leading-6 text-slate-600 dark:text-slate-300">This section is already saved. Any changes will be tracked in the audit log.</p>
+              <div className="mt-6 flex justify-end gap-3">
+                <button type="button" onClick={() => setPendingEditSection('')} className="focus-ring rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                  Cancel
+                </button>
+                <button type="button" onClick={confirmEditSection} className="focus-ring rounded-xl bg-qpms-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700">
+                  Continue Editing
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {previewPhoto ? (
           <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/75 p-5" onClick={() => setPreviewPhoto(null)}>

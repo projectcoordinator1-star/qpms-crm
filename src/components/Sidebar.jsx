@@ -10,6 +10,8 @@ import {
   Workflow,
 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
+import { useAuth } from '../context/auth-context.js';
+import { canManageLeads, isCommercialTeam, isFinanceTeam } from '../data/mockUsers.js';
 import Logo from './Logo.jsx';
 
 const navItems = [
@@ -24,6 +26,14 @@ const navItems = [
 ];
 
 export default function Sidebar({ isOpen, onClose }) {
+  const { user } = useAuth();
+  const visibleNavItems = navItems.filter((item) => {
+    if (user?.role === 'Admin') return true;
+    if (!canManageLeads(user) && item.to === '/crm') return false;
+    if ((isCommercialTeam(user) || isFinanceTeam(user)) && ['/sites', '/tickets', '/employees'].includes(item.to)) return false;
+    return true;
+  });
+
   return (
     <>
       <div
@@ -43,7 +53,7 @@ export default function Sidebar({ isOpen, onClose }) {
         </div>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-5">
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -70,7 +80,7 @@ export default function Sidebar({ isOpen, onClose }) {
             </div>
             <div>
               <p className="text-sm font-bold text-slate-950 dark:text-white">Need help?</p>
-              <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-400">Role-based sidebar visibility can be added here next.</p>
+              <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-400">Navigation is filtered by your current workflow role.</p>
             </div>
           </div>
         </div>

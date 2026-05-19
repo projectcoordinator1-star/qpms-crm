@@ -6,7 +6,7 @@ import StatusBadge from '../components/StatusBadge.jsx';
 import Toast from '../components/Toast.jsx';
 import { useWorkflow } from '../context/workflow-context.js';
 import { useAuth } from '../context/auth-context.js';
-import { bdExecutives, canViewBdTeam } from '../data/mockUsers.js';
+import { bdExecutives, canManageLeads, canViewBdTeam } from '../data/mockUsers.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { sendLeadMomEmail } from '../services/mailService.js';
 
@@ -382,12 +382,9 @@ export default function CRM() {
         key: 'actions',
         label: 'Actions',
         render: (row) => (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-center gap-2">
             <button type="button" onClick={(event) => { event.stopPropagation(); openLeadDrawer(row); }} className="focus-ring rounded-lg border border-slate-200 p-2 text-slate-500 transition hover:text-qpms-700 dark:border-slate-800 dark:text-slate-300" aria-label={`Open ${row.company}`}>
               <Eye className="h-4 w-4" />
-            </button>
-            <button type="button" onClick={(event) => { event.stopPropagation(); openLeadDrawer(row); setIsEditingLead(true); }} className="focus-ring rounded-lg border border-slate-200 p-2 text-slate-500 transition hover:text-slate-950 dark:border-slate-800 dark:text-slate-300" aria-label={`Edit ${row.company}`}>
-              <Pencil className="h-4 w-4" />
             </button>
             <button type="button" onClick={(event) => { event.stopPropagation(); setLeadPendingDelete(row); }} className="focus-ring rounded-lg border border-rose-200 p-2 text-rose-600 transition hover:bg-rose-50 dark:border-rose-500/30 dark:hover:bg-rose-500/10" aria-label={`Delete ${row.company}`}>
               <Trash2 className="h-4 w-4" />
@@ -596,12 +593,23 @@ export default function CRM() {
     }
   }
 
+  if (!canManageLeads(user)) {
+    return (
+      <div className="space-y-7">
+        <PageHeader title="Lead Management" description="Lead creation and lead administration are restricted for your current role." />
+        <section className="enterprise-card p-8 text-center">
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Use your approval dashboard to review records pending with your team.</p>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-7">
       <PageHeader
         title="Lead Management"
         description="Capture initial business leads, manage client details, and create the Lead MOM."
-        actions={
+        actions={canManageLeads(user) ? (
           <button
             type="button"
             onClick={() => setIsFormOpen(true)}
@@ -609,7 +617,7 @@ export default function CRM() {
           >
             New Lead <Plus className="h-4 w-4" />
           </button>
-        }
+        ) : null}
       />
 
       <Toast message={toast?.message || workflowError} type={toast?.type || (workflowError ? 'error' : 'success')} />

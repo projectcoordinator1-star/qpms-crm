@@ -39,9 +39,55 @@ export const mockUsers = [
     role: 'BD Executive',
     access: 'Own leads, MOMs, site visits, and estimations',
   },
+  {
+    id: 'commercial-1',
+    name: 'Commercial Team 1',
+    email: 'commercial1@qpms.co.in',
+    password: '123456',
+    role: 'Commercial Team',
+    access: 'Commercial review queue and approval actions',
+  },
+  {
+    id: 'commercial-2',
+    name: 'Commercial Team 2',
+    email: 'commercial2@qpms.co.in',
+    password: '123456',
+    role: 'Commercial Team',
+    access: 'Commercial review queue and approval actions',
+  },
+  {
+    id: 'finance-1',
+    name: 'Finance Team 1',
+    email: 'finance1@qpms.co.in',
+    password: '123456',
+    role: 'Finance Team',
+    access: 'Finance review queue and approval actions',
+  },
+  {
+    id: 'finance-2',
+    name: 'Finance Team 2',
+    email: 'finance2@qpms.co.in',
+    password: '123456',
+    role: 'Finance Team',
+    access: 'Finance review queue and approval actions',
+  },
 ];
 
 export const bdExecutives = mockUsers.filter((user) => user.role === 'BD Executive');
+export const commercialTeamUsers = mockUsers.filter((user) => user.role === 'Commercial Team');
+export const financeTeamUsers = mockUsers.filter((user) => user.role === 'Finance Team');
+
+export function isCommercialTeam(user) {
+  return ['Commercial Team', 'Commercial'].includes(user?.role);
+}
+
+export function isFinanceTeam(user) {
+  return ['Finance Team', 'Finance'].includes(user?.role);
+}
+
+export function canManageLeads(user) {
+  return ['Admin', 'BD Head', 'BD Executive'].includes(user?.role);
+}
 
 export function canViewBdTeam(user) {
   return ['Admin', 'BD Head'].includes(user?.role);

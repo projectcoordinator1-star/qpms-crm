@@ -11,6 +11,7 @@ import {
   saveSiteAssessmentRemote,
   saveSiteMomRemote,
   submitApprovalRemote,
+  recordApprovalDecisionRemote,
   updateLeadRemote,
   uploadSiteImageRemote,
 } from '../services/workflowRepository.js';
@@ -168,6 +169,16 @@ function buildSiteVisitFromLead(lead) {
 
 function hasCompleteSiteVisitSchedule(mom) {
   return Boolean(mom?.scheduledVisitDate && mom?.scheduledVisitTime);
+}
+
+function buildApprovalTimeline(visit, event) {
+  return [
+    {
+      label: event,
+      at: new Date().toISOString(),
+    },
+    ...(visit.approvalTimeline || []),
+  ].slice(0, 12);
 }
 
 function upsertById(items, nextItem) {
@@ -445,11 +456,77 @@ export function WorkflowProvider({ children }) {
     updateSiteVisit(siteVisitId, (visit) => ({
       status: 'Commercial Review',
       currentStage: 'Commercial Review',
+      pendingWith: 'Commercial Team',
+      approvalStatus: 'Pending',
+      approvalRemarks: '',
+      approvalTimeline: buildApprovalTimeline(visit, 'Submitted to Commercial'),
       activity: ['Submitted for Commercial Review', ...(visit.activity || [])].slice(0, 8),
     }));
     if (isRemoteWorkflowEnabled() && visit) {
       submitApprovalRemote(visit, visit.assessmentId).catch((error) => {
         console.warn('Approval Supabase submit failed:', error.message);
+        setBackendStatus('fallback');
+      });
+    }
+  }
+
+  function decideApproval(siteVisitId, decision, remarks, user) {
+    const visit = siteVisits.find((item) => item.id === siteVisitId);
+    if (!visit) return;
+
+    const stage = visit.currentStage || 'Commercial Review';
+    const normalizedDecision = decision === 'rework' ? 'Rework Requested' : decision === 'reject' ? 'Rejected' : 'Approved';
+    const approved = normalizedDecision === 'Approved';
+    const commercialStage = stage === 'Commercial Review';
+    const financeStage = stage === 'Finance Review';
+    const bdTeamStage = stage === 'BD Team Review';
+    const cooStage = stage === 'COO Approval';
+    const nextStage = approved && commercialStage ? 'Finance Review' : approved && financeStage ? 'BD Team Review' : approved && bdTeamStage ? 'COO Approval' : approved && cooStage ? 'Approved' : stage;
+    const pendingWith = approved && commercialStage
+      ? 'Finance Team'
+      : approved && financeStage
+        ? 'BD Head / BD Team'
+        : approved && bdTeamStage
+          ? 'COO'
+          : approved && cooStage
+            ? 'Completed'
+        : normalizedDecision === 'Rework Requested'
+          ? 'BD Executive'
+          : normalizedDecision === 'Rejected'
+            ? 'Workflow Closed'
+            : visit.pendingWith || 'BD Team';
+    const event = approved && commercialStage
+      ? 'Commercial Approved'
+      : approved && financeStage
+        ? 'Finance Approved'
+        : approved && bdTeamStage
+          ? 'BD Team Review'
+          : approved && cooStage
+            ? 'COO Approval'
+        : `${stage} ${normalizedDecision}`;
+
+    updateSiteVisit(siteVisitId, (visit) => ({
+      status: normalizedDecision === 'Approved' ? nextStage : normalizedDecision,
+      currentStage: nextStage,
+      pendingWith,
+      approvalStatus: normalizedDecision,
+      approvalRemarks: remarks,
+      lastApprovalBy: user?.name || user?.email || '',
+      lastApprovalAt: new Date().toISOString(),
+      approvalTimeline: buildApprovalTimeline(visit, event),
+      activity: [event, ...(visit.activity || [])].slice(0, 8),
+    }));
+
+    if (isRemoteWorkflowEnabled()) {
+      recordApprovalDecisionRemote({
+        visit,
+        stage,
+        status: normalizedDecision,
+        pendingWith,
+        remarks,
+        user,
+      }).catch((error) => {
+        console.warn('Approval Supabase decision failed:', error.message);
         setBackendStatus('fallback');
       });
     }
@@ -483,6 +560,7 @@ export function WorkflowProvider({ children }) {
     saveSiteVisitMom,
     sendSiteVisitMom,
     submitCommercialReview,
+    decideApproval,
     uploadSiteImage,
   };
 
