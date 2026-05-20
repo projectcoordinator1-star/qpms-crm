@@ -677,6 +677,8 @@ export default function Sites() {
   const [editingSection, setEditingSection] = useState('');
   const [pendingEditSection, setPendingEditSection] = useState('');
   const [momComposerVisit, setMomComposerVisit] = useState(null);
+  const [showWorkflowTimeline, setShowWorkflowTimeline] = useState(false);
+  const [sectionsCollapsed, setSectionsCollapsed] = useState(false);
   usePageTitle('Site Visit & Estimation');
 
   const visibleSiteVisits = useMemo(() => {
@@ -1363,6 +1365,8 @@ function duplicateRow(section, index) {
       : {});
     setEditingSection('');
     setPendingEditSection('');
+    setShowWorkflowTimeline(false);
+    setSectionsCollapsed(false);
   }
 
   if (routeVisitId) {
@@ -1382,49 +1386,46 @@ function duplicateRow(section, index) {
     }
 
     return (
-      <div className="space-y-7">
-        <div className="flex flex-col gap-3">
-          <button type="button" onClick={handleBackToQueue} className="focus-ring inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
-            <ArrowLeft className="h-4 w-4" /> Back to Assessment Queue
-          </button>
-          <PageHeader title={selectedVisit.company} description="Pre-operational facility assessment workspace." />
-        </div>
+      <div className="space-y-4">
         <Toast message={toast?.message} type={toast?.type} />
 
-        <div className="flex flex-wrap items-center gap-2.5">
-          <CompactStatusBadge label="Client" value={selectedVisit.company} />
-          <CompactStatusBadge label="Stage" value={selectedStage} tone="blue" />
-          <CompactStatusBadge label="Status" value={selectedVisit.status || 'Draft'} />
-          <CompactStatusBadge label="MOM" value={selectedVisit.momStatus || 'Pending'} tone="amber" />
-          <CompactStatusBadge label="Visit Date" value={formatDate(selectedVisit.scheduledVisitDate)} />
-        </div>
-
-        <section className="enterprise-card p-5">
-          <h3 className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400">Approval Timeline</h3>
-          <div className="mt-4 grid gap-2 md:grid-cols-4 xl:grid-cols-7">
-            {workflowStages.map((label) => {
-              const completed = (selectedVisit.activity || []).some((item) => String(item).includes(label.replace(' Pending', ''))) || (selectedVisit.approvalTimeline || []).some((item) => String(item.label).includes(label.replace(' Pending', '')));
-              return (
-                <div key={label} className={`rounded-2xl border px-3 py-2 text-xs font-bold ${completed ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-200' : 'border-slate-200 bg-white text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400'}`}>
-                  {label}
-                </div>
-              );
-            })}
+        <section className="sticky top-20 z-30 rounded-2xl border border-slate-200/80 bg-white/95 px-3 py-2.5 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/95">
+          <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <button type="button" onClick={handleBackToQueue} className="focus-ring inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-600 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                <ArrowLeft className="h-3.5 w-3.5" /> Queue
+              </button>
+              <span className="max-w-[220px] truncate text-sm font-bold text-slate-950 dark:text-white">{selectedVisit.company}</span>
+              <CompactStatusBadge label="Stage" value={selectedStage} tone="blue" />
+              <CompactStatusBadge label="Pending With" value={selectedVisit.pendingWith || 'BD Executive'} />
+              <StatusBadge status={selectedVisit.status || 'Draft'} />
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{autoSaveLabel}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={activeSectionIndex}
+                onChange={(event) => setActiveSectionIndex(Number(event.target.value))}
+                className="focus-ring h-9 min-w-56 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+              >
+                {roleVisibleSections.map((section, index) => (
+                  <option key={section} value={index}>{section}</option>
+                ))}
+              </select>
+              <button type="button" onClick={() => setSectionsCollapsed(true)} className="focus-ring rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                Collapse All Sections
+              </button>
+              <button type="button" onClick={() => setSectionsCollapsed(false)} className="focus-ring rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                Expand All Sections
+              </button>
+              <button type="button" onClick={() => setShowWorkflowTimeline(true)} className="focus-ring rounded-xl bg-slate-950 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-slate-800 dark:bg-white dark:text-slate-950">
+                View Workflow Timeline
+              </button>
+            </div>
           </div>
         </section>
 
-        <section className="enterprise-card p-4">
-          <div className="grid gap-3 md:grid-cols-5">
-            <SummaryPill label="Client Name" value={selectedVisit.company} />
-            <SummaryPill label="Site Visit Status" value={selectedVisit.status || 'Draft'} />
-            <SummaryPill label="MOM Status" value={selectedVisit.momStatus || 'Pending'} />
-            <SummaryPill label="Last Saved" value={autoSaveLabel} />
-            <SummaryPill label="Pending With" value={selectedVisit.pendingWith || 'BD Executive'} />
-          </div>
-        </section>
-
-        <div className="grid gap-6 xl:grid-cols-[292px_minmax(0,1fr)]">
-          <section className="enterprise-card sticky top-24 h-fit p-5">
+        <div className={`grid gap-4 ${sectionsCollapsed ? 'xl:grid-cols-1' : 'xl:grid-cols-[252px_minmax(0,1fr)]'}`}>
+          <section className={`enterprise-card sticky top-36 h-fit p-4 ${sectionsCollapsed ? 'hidden' : ''}`}>
             <div className="flex items-center justify-between gap-3">
               <h3 className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400">Sections</h3>
               <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500 dark:bg-slate-800">{activeSectionIndex + 1}/{roleVisibleSections.length}</span>
@@ -1432,14 +1433,14 @@ function duplicateRow(section, index) {
             <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
               <div className="h-full rounded-full bg-qpms-600 transition-all" style={{ width: `${((activeSectionIndex + 1) / roleVisibleSections.length) * 100}%` }} />
             </div>
-            <div className="mt-5 max-h-[68vh] space-y-1.5 overflow-y-auto pr-2">
+            <div className="mt-4 max-h-[72vh] space-y-1 overflow-y-auto pr-2">
               {roleVisibleSections.map((section, index) => (
                 <button
                   type="button"
                   key={section}
                   onClick={() => setActiveSectionIndex(index)}
                   className={[
-                    'flex w-full items-center gap-2.5 rounded-xl px-3.5 py-3 text-left text-sm font-semibold transition',
+                    'flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-bold transition',
                     activeSectionIndex === index
                       ? 'bg-qpms-600 text-white shadow-lg shadow-qpms-600/20'
                       : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
@@ -1452,8 +1453,8 @@ function duplicateRow(section, index) {
             </div>
           </section>
 
-          <main className="mx-auto min-w-0 max-w-6xl space-y-6">
-            <section className="enterprise-card p-6">
+          <main className="mx-auto min-w-0 max-w-7xl space-y-4">
+            <section className="enterprise-card p-4">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2">
                   <ClipboardCheck className="h-5 w-5 text-qpms-600" />
@@ -1520,6 +1521,43 @@ function duplicateRow(section, index) {
             </div>
           </div>
         </div>
+
+        {showWorkflowTimeline ? (
+          <div className="fixed inset-0 z-[66] flex items-center justify-center bg-slate-950/60 px-4 py-6 backdrop-blur-sm" onClick={() => setShowWorkflowTimeline(false)}>
+            <Motion.section
+              initial={{ opacity: 0, y: 18, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              className="max-h-[86vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-white/70 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4 dark:border-slate-800">
+                <div>
+                  <p className="text-xs font-bold uppercase text-qpms-600 dark:text-qpms-300">Workflow Timeline</p>
+                  <h3 className="mt-1 text-xl font-semibold text-slate-950 dark:text-white">{selectedVisit.company}</h3>
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Current stage: {selectedStage} • Pending with: {selectedVisit.pendingWith || 'BD Executive'}</p>
+                </div>
+                <button type="button" onClick={() => setShowWorkflowTimeline(false)} className="focus-ring rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="mt-5 space-y-3">
+                {workflowStages.map((label, index) => {
+                  const completed = (selectedVisit.activity || []).some((item) => String(item).includes(label)) || (selectedVisit.approvalTimeline || []).some((item) => String(item.label).includes(label));
+                  const active = selectedStage === label || selectedVisit.currentStage === label;
+                  return (
+                    <div key={label} className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${completed || active ? 'border-qpms-200 bg-qpms-50 text-qpms-800 dark:border-qpms-500/25 dark:bg-qpms-500/10 dark:text-qpms-200' : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300'}`}>
+                      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${completed || active ? 'bg-qpms-600 text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300'}`}>{index + 1}</span>
+                      <div>
+                        <p className="text-sm font-bold">{label}</p>
+                        <p className="text-xs opacity-70">{active ? 'Current workflow stage' : completed ? 'Completed or logged' : 'Pending'}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Motion.section>
+          </div>
+        ) : null}
 
         {momComposerVisit && siteMomDraft ? (
           <div className="fixed inset-0 z-[66] flex items-center justify-center bg-slate-950/60 px-4 py-6 backdrop-blur-sm" onClick={() => setMomComposerVisit(null)}>
