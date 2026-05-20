@@ -594,22 +594,22 @@ export async function saveSiteMomRemote(siteVisitId, mom, status = 'Draft') {
 
 export async function submitApprovalRemote(visit, assessmentId) {
   assertConfigured();
-  const rows = ['Commercial Review', 'Finance Review', 'HR Review'].map((stage) => ({
+  const rows = ['Operations Review', 'Coordinator Costing Review', 'HR Validation', 'Commercial Review', 'Finance Review'].map((stage) => ({
       lead_id: visit.leadId,
       site_visit_id: visit.id,
       assessment_id: assessmentId,
       approval_stage: stage,
-      pending_with: `${stage.replace(' Review', '')} Reviewer`,
+      pending_with: stage === 'Operations Review' ? 'Operations Team' : stage === 'Coordinator Costing Review' ? 'Coordinator' : stage === 'HR Validation' ? 'HR Reviewer' : `${stage.replace(' Review', '')} Reviewer`,
       status: 'Pending',
     }));
   const { error } = await supabase.from('approval_requests').insert(rows);
   if (error) throw error;
-  await supabase.from('site_visits').update({ current_stage: 'Parallel Review', status: 'Pending Review', updated_at: new Date().toISOString() }).eq('id', visit.id);
+  await supabase.from('site_visits').update({ current_stage: 'Operations Review', status: 'Pending Review', updated_at: new Date().toISOString() }).eq('id', visit.id);
 }
 
 export async function recordApprovalDecisionRemote({ visit, stage, status, pendingWith, remarks, user }) {
   assertConfigured();
-  const nextStage = pendingWith === 'Finance Team' ? 'Finance Review' : pendingWith === 'BD Head / BD Team' ? 'BD Team Review' : pendingWith === 'COO' ? 'COO Approval' : pendingWith === 'Completed' ? 'Approved' : stage;
+  const nextStage = pendingWith === 'BD Executive' ? 'Returned to BD' : pendingWith === 'Completed' ? 'Proposal Sent' : stage;
   const { error } = await supabase.from('approval_requests').insert({
     lead_id: visit.leadId,
     site_visit_id: visit.id,

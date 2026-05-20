@@ -30,7 +30,7 @@ export default function Sidebar({ isOpen, onClose }) {
   const visibleNavItems = navItems.filter((item) => {
     if (user?.role === 'Admin') return true;
     if (['BD Executive', 'BD Head'].includes(user?.role)) return ['/dashboard', '/crm', '/sites', '/settings'].includes(item.to);
-    if (isApprovalReviewer(user)) return ['/dashboard', '/tasks', '/reports', '/settings'].includes(item.to);
+    if (isApprovalReviewer(user)) return ['/dashboard', '/tasks', '/reports', '/sites', '/settings'].includes(item.to);
     if (!canManageLeads(user) && item.to === '/crm') return false;
     return true;
   });

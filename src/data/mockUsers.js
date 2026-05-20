@@ -40,6 +40,38 @@ export const mockUsers = [
     access: 'Own leads, MOMs, site visits, and estimations',
   },
   {
+    id: 'operations-1',
+    name: 'Operations Reviewer 1',
+    email: 'operations1@qpms.co.in',
+    password: '123456',
+    role: 'Operations Team',
+    access: 'Operational feasibility and execution readiness review',
+  },
+  {
+    id: 'operations-2',
+    name: 'Operations Reviewer 2',
+    email: 'operations2@qpms.co.in',
+    password: '123456',
+    role: 'Operations Team',
+    access: 'Operational feasibility and execution readiness review',
+  },
+  {
+    id: 'coordinator-1',
+    name: 'Coordinator 1',
+    email: 'coordinator1@qpms.co.in',
+    password: '123456',
+    role: 'Coordinator',
+    access: 'Costing readiness, reliever, and zone review',
+  },
+  {
+    id: 'coordinator-2',
+    name: 'Coordinator 2',
+    email: 'coordinator2@qpms.co.in',
+    password: '123456',
+    role: 'Coordinator',
+    access: 'Costing readiness, reliever, and zone review',
+  },
+  {
     id: 'commercial-1',
     name: 'Commercial Team 1',
     email: 'commercial1@qpms.co.in',
@@ -93,6 +125,8 @@ export const bdExecutives = mockUsers.filter((user) => user.role === 'BD Executi
 export const commercialTeamUsers = mockUsers.filter((user) => user.role === 'Commercial Reviewer');
 export const financeTeamUsers = mockUsers.filter((user) => user.role === 'Finance Reviewer');
 export const hrReviewerUsers = mockUsers.filter((user) => user.role === 'HR Reviewer');
+export const operationsTeamUsers = mockUsers.filter((user) => user.role === 'Operations Team');
+export const coordinatorUsers = mockUsers.filter((user) => user.role === 'Coordinator');
 
 export function isCommercialTeam(user) {
   return ['Commercial Reviewer', 'Commercial Team', 'Commercial'].includes(user?.role);
@@ -106,8 +140,16 @@ export function isHrReviewer(user) {
   return user?.role === 'HR Reviewer';
 }
 
+export function isOperationsTeam(user) {
+  return user?.role === 'Operations Team';
+}
+
+export function isCoordinator(user) {
+  return user?.role === 'Coordinator';
+}
+
 export function isApprovalReviewer(user) {
-  return isCommercialTeam(user) || isFinanceTeam(user) || isHrReviewer(user);
+  return isCommercialTeam(user) || isFinanceTeam(user) || isHrReviewer(user) || isOperationsTeam(user) || isCoordinator(user);
 }
 
 export function canManageLeads(user) {

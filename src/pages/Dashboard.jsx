@@ -46,7 +46,7 @@ import {
 } from '../data/qpmsWorkflowData.js';
 import { useAuth } from '../context/auth-context.js';
 import { useWorkflow } from '../context/workflow-context.js';
-import { bdExecutives, canViewBdTeam, isApprovalReviewer, isCommercialTeam, isFinanceTeam, isHrReviewer } from '../data/mockUsers.js';
+import { bdExecutives, canViewBdTeam, isApprovalReviewer, isCommercialTeam, isCoordinator, isFinanceTeam, isHrReviewer, isOperationsTeam } from '../data/mockUsers.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 
 const tabs = [
@@ -800,13 +800,17 @@ export default function Dashboard() {
   return (
     <div className="space-y-7">
       <PageHeader
-        title={isHrReviewer(user) ? 'HR Review Dashboard' : isFinanceTeam(user) ? 'Finance Review Dashboard' : isCommercialTeam(user) ? 'Commercial Review Dashboard' : 'Operations Command Center'}
-        description={isHrReviewer(user) ? 'HR-only queue for manpower, wage, reliever, gender, shift, and uniform review.' : isFinanceTeam(user) ? 'Finance review dashboard with access to approval queue and operational KPI dashboards.' : isCommercialTeam(user) ? 'Commercial review dashboard with access to approval queue and operational KPI dashboards.' : 'Management dashboard for new business pipeline health, site operations, attendance, tickets, tasks, field officers, and SLA visibility.'}
+        title={isOperationsTeam(user) ? 'Operations Review Dashboard' : isCoordinator(user) ? 'Coordinator Costing Dashboard' : isHrReviewer(user) ? 'HR Review Dashboard' : isFinanceTeam(user) ? 'Finance Review Dashboard' : isCommercialTeam(user) ? 'Commercial Review Dashboard' : 'Operations Command Center'}
+        description={isOperationsTeam(user) ? 'Operations queue for execution feasibility, tools, equipment, consumables, and site readiness.' : isCoordinator(user) ? 'Coordinator queue for manpower consolidation, reliever logic, zone logic, and costing readiness.' : isHrReviewer(user) ? 'HR-only queue for manpower, wage, reliever, gender, shift, and uniform review.' : isFinanceTeam(user) ? 'Finance review dashboard with access to approval queue and operational KPI dashboards.' : isCommercialTeam(user) ? 'Commercial review dashboard with access to approval queue and operational KPI dashboards.' : 'Management dashboard for new business pipeline health, site operations, attendance, tickets, tasks, field officers, and SLA visibility.'}
         actions={canSeeOperations ? <DashboardTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} /> : null}
       />
 
-      {isHrReviewer(user) ? (
-        <ApprovalDashboard title="HR Review Queue" description="Records submitted for manpower, wage, reliever, gender, shift, and uniform validation." stage="HR Review" siteVisits={siteVisits} />
+      {isOperationsTeam(user) ? (
+        <ApprovalDashboard title="Operations Review Queue" description="Records submitted for tools, equipment, consumables, machinery, and site readiness validation." stage="Operations Review" siteVisits={siteVisits} />
+      ) : isCoordinator(user) ? (
+        <ApprovalDashboard title="Coordinator Costing Queue" description="Records pending manpower consolidation, reliever logic, zone logic, and costing readiness." stage="Coordinator Costing Review" siteVisits={siteVisits} />
+      ) : isHrReviewer(user) ? (
+        <ApprovalDashboard title="HR Review Queue" description="Records submitted for manpower, wage, reliever, gender, shift, and uniform validation." stage="HR Validation" siteVisits={siteVisits} />
       ) : isApprovalReviewer(user) && activeTab === 'new-business' ? (
         isCommercialTeam(user) ? (
         <ApprovalDashboard title="Commercial Review Queue" description="Records submitted by BD for commercial statement, pricing, and margin approval." stage="Commercial Review" siteVisits={siteVisits} />

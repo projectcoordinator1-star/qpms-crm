@@ -108,6 +108,20 @@ const List<MockUser> mockUsers = [
     password: '123456',
   ),
   MockUser(
+    id: 'operations-1',
+    name: 'Operations Reviewer 1',
+    email: 'operations1@qpms.co.in',
+    role: 'Operations Team',
+    password: '123456',
+  ),
+  MockUser(
+    id: 'coordinator-1',
+    name: 'Coordinator 1',
+    email: 'coordinator1@qpms.co.in',
+    role: 'Coordinator',
+    password: '123456',
+  ),
+  MockUser(
     id: 'commercial-1',
     name: 'Commercial Reviewer 1',
     email: 'commercial1@qpms.co.in',

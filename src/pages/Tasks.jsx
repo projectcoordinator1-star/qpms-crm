@@ -4,7 +4,7 @@ import PageHeader from '../components/PageHeader.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import { useAuth } from '../context/auth-context.js';
 import { useWorkflow } from '../context/workflow-context.js';
-import { isFinanceTeam, isHrReviewer } from '../data/mockUsers.js';
+import { isCoordinator, isFinanceTeam, isHrReviewer, isOperationsTeam } from '../data/mockUsers.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 
 function serviceScope(visit) {
@@ -20,8 +20,11 @@ export default function Tasks() {
   const [remarks, setRemarks] = useState({});
   const financeMode = isFinanceTeam(user);
   const hrMode = isHrReviewer(user);
-  const stage = hrMode ? 'HR Review' : financeMode ? 'Finance Review' : 'Commercial Review';
-  usePageTitle(hrMode ? 'HR Review' : financeMode ? 'Finance Review' : 'Commercial Review');
+  const operationsMode = isOperationsTeam(user);
+  const coordinatorMode = isCoordinator(user);
+  const stage = operationsMode ? 'Operations Review' : coordinatorMode ? 'Coordinator Costing Review' : hrMode ? 'HR Validation' : financeMode ? 'Finance Review' : 'Commercial Review';
+  const pageTitle = operationsMode ? 'Operations Review' : coordinatorMode ? 'Coordinator Costing Review' : hrMode ? 'HR Review' : financeMode ? 'Finance Review' : 'Commercial Review';
+  usePageTitle(pageTitle);
 
   const queue = useMemo(
     () => siteVisits.filter((visit) => (visit.reviewStatus?.[stage] || ((visit.currentStage || visit.status) === stage ? 'Pending' : '')) === 'Pending'),
@@ -38,8 +41,8 @@ export default function Tasks() {
   return (
     <div className="space-y-7">
       <PageHeader
-        title={hrMode ? 'HR Review' : financeMode ? 'Finance Review' : 'Commercial Review'}
-        description={hrMode ? 'Review manpower, wage, reliever, gender, shift, and uniform details without commercial costing access.' : financeMode ? 'Review financial feasibility, billing, margins, payment terms, and commercial risk.' : 'Review BD submitted assessments for scope, commercial statement, pricing, and margin readiness.'}
+        title={pageTitle}
+        description={operationsMode ? 'Review tools, machinery, consumables, site readiness, and execution feasibility.' : coordinatorMode ? 'Consolidate manpower, reliever logic, zone logic, and costing readiness before HR validation.' : hrMode ? 'Review manpower, wage, reliever, gender, shift, and uniform details without commercial costing access.' : financeMode ? 'Review financial feasibility, billing, margins, payment terms, and commercial risk.' : 'Review BD submitted assessments for pricing, margins, management fee, and commercial statement readiness.'}
       />
 
       <section className="grid gap-4 md:grid-cols-3">
@@ -73,16 +76,16 @@ export default function Tasks() {
                   <p><span className="font-semibold text-slate-900 dark:text-white">Submitted:</span> {visit.lastApprovalAt ? new Date(visit.lastApprovalAt).toLocaleDateString() : 'Pending timestamp'}</p>
                   <p><span className="font-semibold text-slate-900 dark:text-white">Pending with:</span> {visit.pendingWith || stage}</p>
                   <p><span className="font-semibold text-slate-900 dark:text-white">Site assessment:</span> {visit.assessmentStatus || 'Drafted'}</p>
-                  <p><span className="font-semibold text-slate-900 dark:text-white">{hrMode ? 'Manpower rows' : 'Service scope'}:</span> {hrMode ? `${visit.survey?.manpowerPlan?.length || 0} manpower rows` : serviceScope(visit)}</p>
-                  <p><span className="font-semibold text-slate-900 dark:text-white">{hrMode ? 'Shift / gender review' : financeMode ? 'Billing summary' : 'Commercial statement'}:</span> {hrMode ? 'Visible in manpower assessment' : visit.survey?.commercialStatement || visit.survey?.commercial?.notes || 'Available in assessment record'}</p>
-                  <p><span className="font-semibold text-slate-900 dark:text-white">{hrMode ? 'Uniform / wage review' : financeMode ? 'Margin / risk' : 'Pricing / margin'}:</span> {hrMode ? 'Pending HR validation' : visit.survey?.marginAgreed || visit.survey?.paymentTerms || 'Pending reviewer validation'}</p>
+                  <p><span className="font-semibold text-slate-900 dark:text-white">{operationsMode ? 'Execution scope' : hrMode || coordinatorMode ? 'Manpower rows' : 'Service scope'}:</span> {operationsMode ? 'Tools, equipment, consumables, machinery' : hrMode || coordinatorMode ? `${visit.survey?.manpowerPlan?.length || 0} manpower rows` : serviceScope(visit)}</p>
+                  <p><span className="font-semibold text-slate-900 dark:text-white">{operationsMode ? 'Site readiness' : hrMode ? 'Shift / gender review' : financeMode ? 'Billing summary' : 'Commercial statement'}:</span> {operationsMode ? 'Pending operations validation' : hrMode ? 'Visible in manpower assessment' : visit.survey?.commercialStatement || visit.survey?.commercial?.notes || 'Available in assessment record'}</p>
+                  <p><span className="font-semibold text-slate-900 dark:text-white">{operationsMode ? 'Machinery / consumables' : hrMode ? 'Uniform / wage review' : financeMode ? 'Margin / risk' : 'Pricing / margin'}:</span> {operationsMode ? 'Pending feasibility review' : hrMode ? 'Pending HR validation' : visit.survey?.marginAgreed || visit.survey?.paymentTerms || 'Pending reviewer validation'}</p>
                 </div>
               </div>
               <div className="w-full shrink-0 space-y-3 lg:w-80">
                 <textarea
                   value={remarks[visit.id] || ''}
                   onChange={(event) => setRemarks((current) => ({ ...current, [visit.id]: event.target.value }))}
-                  placeholder={hrMode ? 'Add HR remarks' : financeMode ? 'Add finance remarks' : 'Add commercial remarks'}
+                  placeholder={operationsMode ? 'Add operations remarks' : coordinatorMode ? 'Add coordinator remarks' : hrMode ? 'Add HR remarks' : financeMode ? 'Add finance remarks' : 'Add commercial remarks'}
                   className="focus-ring min-h-24 w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-white"
                 />
                 <div className="grid grid-cols-3 gap-2">

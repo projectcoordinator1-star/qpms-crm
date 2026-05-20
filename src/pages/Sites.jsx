@@ -26,10 +26,12 @@ import StatusBadge from '../components/StatusBadge.jsx';
 import Toast from '../components/Toast.jsx';
 import { useAuth } from '../context/auth-context.js';
 import { useWorkflow } from '../context/workflow-context.js';
-import { canViewBdTeam, isApprovalReviewer, isCommercialTeam, isFinanceTeam, isHrReviewer } from '../data/mockUsers.js';
+import { canViewBdTeam, isApprovalReviewer, isCommercialTeam, isCoordinator, isFinanceTeam, isHrReviewer, isOperationsTeam } from '../data/mockUsers.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { sendSiteVisitMomEmail } from '../services/mailService.js';
 import { logAssessmentAuditRemote } from '../services/workflowRepository.js';
+import { calculateManpowerCost } from '../services/costingEngine.js';
+import { buildProposalRows, getProposalTemplateMetadata } from '../services/proposalService.js';
 
 const surveySections = [
   'Basic Site Information',
@@ -46,6 +48,17 @@ const surveySections = [
   'Commercial Statement',
   'Approval Mechanism',
   'Final Remarks & Sign-Off',
+];
+
+const workflowStages = [
+  'Site Visit Started',
+  'Operations Review',
+  'Coordinator Review',
+  'HR Validation',
+  'Commercial Review',
+  'Finance Review',
+  'Returned to BD',
+  'Proposal Sent',
 ];
 
 const photoSlots = [
@@ -675,16 +688,21 @@ export default function Sites() {
   const selectedStage = normalizeStage(selectedVisit?.currentStage || 'Pre-Operational Assessment');
   const roleVisibleSections = useMemo(() => {
     if (isHrReviewer(user)) return ['Manpower Requirement'];
+    if (isOperationsTeam(user)) return ['Tools / Equipment / Consumables', 'Risk Assessment', 'Final Remarks & Sign-Off'];
+    if (isCoordinator(user)) return ['Manpower Requirement', 'Commercial Statement', 'Final Remarks & Sign-Off'];
     return surveySections;
   }, [user]);
   const activeSection = roleVisibleSections[activeSectionIndex] || roleVisibleSections[0];
   const roleCanEditActiveSection = !isApprovalReviewer(user)
     || ((isCommercialTeam(user) || isFinanceTeam(user)) && ['Commercial Statement', 'Risk Assessment', 'Approval Mechanism'].includes(activeSection))
+    || (isOperationsTeam(user) && ['Tools / Equipment / Consumables', 'Risk Assessment', 'Final Remarks & Sign-Off'].includes(activeSection))
+    || (isCoordinator(user) && ['Manpower Requirement', 'Commercial Statement', 'Final Remarks & Sign-Off'].includes(activeSection))
     || (isHrReviewer(user) && activeSection === 'Manpower Requirement');
   const activeSectionAudit = sectionAudit[activeSection];
   const isSectionSaved = Boolean(activeSectionAudit);
   const isEditingActiveSection = editingSection === activeSection;
   const isActiveSectionLocked = (isSectionSaved && !isEditingActiveSection) || !roleCanEditActiveSection;
+  const proposalMetadata = getProposalTemplateMetadata();
 
   const filteredVisits = useMemo(() => {
     const value = query.trim().toLowerCase();
@@ -1242,6 +1260,7 @@ function duplicateRow(section, index) {
         );
       case 'Commercial Statement': {
         const totals = getCommercialTotals(surveyDraft);
+        const proposalRows = buildProposalRows({ survey: surveyDraft });
         return (
           <div className="space-y-5">
             <div className="grid gap-4 md:grid-cols-3">
@@ -1249,6 +1268,14 @@ function duplicateRow(section, index) {
               <SummaryPill label="Monthly Operational Cost" value={currency(totals.monthlyCost)} />
               <SummaryPill label="Expected Margin %" value={`${totals.marginPercent.toFixed(1)}%`} />
             </div>
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+              <h3 className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400">Costing Engine Preview</h3>
+              <div className="mt-4 grid gap-3 md:grid-cols-3">
+                <SummaryPill label="Proposal Rows" value={proposalRows.length} />
+                <SummaryPill label="Template" value={proposalMetadata.supportedExports.join(' / ')} />
+                <SummaryPill label="Source Workbook" value="New Business Proposal Format.xlsx" />
+              </div>
+            </section>
             <EditableTable
               columns={[
                 { key: 'name', label: 'Billing Component' },
@@ -1260,6 +1287,15 @@ function duplicateRow(section, index) {
               onRemove={(index) => updateNested('commercial', { ...surveyDraft.commercial, billingComponents: surveyDraft.commercial.billingComponents.filter((_, itemIndex) => itemIndex !== index) })}
               addLabel="Add billing component"
             />
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
+              <h3 className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400">Manpower Costing Summary</h3>
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {(surveyDraft.manpowerPlan || []).slice(0, 4).map((row) => {
+                  const costing = calculateManpowerCost(row, surveyDraft);
+                  return <SummaryPill key={row.id} label={row.designation || row.department} value={currency(costing.finalBillableValue)} />;
+                })}
+              </div>
+            </section>
             <EditableTable
               columns={[
                 { key: 'name', label: 'Expense Component' },
@@ -1366,7 +1402,7 @@ function duplicateRow(section, index) {
         <section className="enterprise-card p-5">
           <h3 className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400">Approval Timeline</h3>
           <div className="mt-4 grid gap-2 md:grid-cols-4 xl:grid-cols-7">
-            {['Site Visit MOM Sent', 'Submitted to Commercial', 'Commercial Approved', 'Finance Review Pending', 'Finance Approved', 'BD Team Review', 'COO Approval'].map((label) => {
+            {workflowStages.map((label) => {
               const completed = (selectedVisit.activity || []).some((item) => String(item).includes(label.replace(' Pending', ''))) || (selectedVisit.approvalTimeline || []).some((item) => String(item.label).includes(label.replace(' Pending', '')));
               return (
                 <div key={label} className={`rounded-2xl border px-3 py-2 text-xs font-bold ${completed ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-200' : 'border-slate-200 bg-white text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400'}`}>
