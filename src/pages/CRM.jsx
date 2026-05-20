@@ -60,14 +60,21 @@ const schedulingValidationMessage = 'Please provide either Site Visit Schedule D
 function normalizeContacts(contacts, lead = {}) {
   const fallback = [{ id: `contact-${lead.id || 1}`, name: lead.contact || '', designation: lead.designation || '', phone: lead.phone || '', email: lead.email || '', isPrimary: true }];
   const source = Array.isArray(contacts) && contacts.length ? contacts : fallback;
-  const hasPrimary = source.some((contact) => contact.isPrimary);
-  return source.map((contact, index) => ({
+  const deduped = source.reduce((items, contact) => {
+    const key = String(contact.id || contact.email || contact.phone || '').trim().toLowerCase();
+    const fallbackKey = `${String(contact.name || '').trim().toLowerCase()}|${String(contact.designation || '').trim().toLowerCase()}`;
+    const matchKey = key || fallbackKey;
+    if (matchKey && items.some((item) => item.__matchKey === matchKey)) return items;
+    return [...items, { ...contact, __matchKey: matchKey }];
+  }, []);
+  const primaryIndex = Math.max(deduped.findIndex((contact) => contact.isPrimary), 0);
+  return deduped.map((contact, index) => ({
     id: contact.id || `contact-${Date.now()}-${index}`,
     name: contact.name || '',
     designation: contact.designation || '',
     phone: contact.phone || '',
     email: contact.email || '',
-    isPrimary: source.length === 1 ? true : hasPrimary ? Boolean(contact.isPrimary) : index === 0,
+    isPrimary: index === primaryIndex,
   }));
 }
 
@@ -343,7 +350,7 @@ function createLeadMomDraft(lead) {
 }
 
 export default function CRM() {
-  const { leads, addLead, updateLead, deleteLead, saveLeadMomDraft, sendLeadMom, workflowError } = useWorkflow();
+  const { leads, siteVisits, addLead, updateLead, deleteLead, saveLeadMomDraft, sendLeadMom, workflowError } = useWorkflow();
   const { user } = useAuth();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [leadForm, setLeadForm] = useState(initialLeadForm);
@@ -358,14 +365,22 @@ export default function CRM() {
   const [leadFormErrors, setLeadFormErrors] = useState({});
   const [pendingAction, setPendingAction] = useState('');
   const [highlightedLeadId, setHighlightedLeadId] = useState(null);
+  const [leadQueueFilter, setLeadQueueFilter] = useState('active');
   const momSectionRef = useRef(null);
   const momFirstFieldRef = useRef(null);
   usePageTitle('Lead Management');
 
-  const visibleLeads = useMemo(() => {
+  const roleVisibleLeads = useMemo(() => {
     if (canViewBdTeam(user)) return leads;
     return leads.filter((lead) => lead.assigned_bd_email === user?.email || lead.created_by_user_id === user?.id);
   }, [leads, user]);
+
+  const visibleLeads = useMemo(() => {
+    const isConverted = (lead) => ['Converted', 'Converted to Assessment'].includes(lead.status) || ['Converted', 'Site Visit Scheduled'].includes(lead.stage);
+    if (leadQueueFilter === 'converted') return roleVisibleLeads.filter(isConverted);
+    if (leadQueueFilter === 'archived') return roleVisibleLeads.filter((lead) => ['Archived', 'Lost'].includes(lead.status) || lead.stage === 'Lost');
+    return roleVisibleLeads.filter((lead) => !isConverted(lead) && !['Archived', 'Lost'].includes(lead.status) && lead.stage !== 'Lost');
+  }, [leadQueueFilter, roleVisibleLeads]);
 
   const selectedLead = visibleLeads.find((lead) => lead.id === selectedLeadId);
 
@@ -400,10 +415,10 @@ export default function CRM() {
     () => [
       ['Total leads', visibleLeads.length],
       ['New leads', visibleLeads.filter((lead) => lead.stage === 'New Lead').length],
-      ['Site visits scheduled', visibleLeads.filter((lead) => lead.stage === 'Site Visit Scheduled').length],
+      ['Converted leads', roleVisibleLeads.filter((lead) => ['Converted', 'Converted to Assessment'].includes(lead.status) || ['Converted', 'Site Visit Scheduled'].includes(lead.stage)).length],
       ['Active leads', visibleLeads.filter((lead) => lead.status === 'Active').length],
     ],
-    [visibleLeads],
+    [roleVisibleLeads, visibleLeads],
   );
 
   useEffect(() => {
@@ -563,6 +578,10 @@ export default function CRM() {
       showToast(schedulingValidationMessage, 'warning');
       return;
     }
+    if (hasCompleteSiteVisitSchedule(momDraft) && siteVisits.some((visit) => String(visit.leadId) === String(selectedLeadId))) {
+      showToast('Assessment already created for this lead.', 'warning');
+      return;
+    }
 
     try {
       setPendingAction('sendMom');
@@ -570,7 +589,7 @@ export default function CRM() {
       sendLeadMom(selectedLeadId, { ...momDraft, calendarInviteSent: Boolean(result?.calendarInviteSent) });
       setIsMomOpen(false);
       setShowMomPreview(false);
-      showToast(hasCompleteSiteVisitSchedule(momDraft) ? 'Lead Minutes of Meeting sent and site visit scheduled successfully' : 'Lead Minutes of Meeting sent successfully', 'success');
+      showToast(hasCompleteSiteVisitSchedule(momDraft) ? 'Lead moved to Site Visit & Estimation' : 'Lead Minutes of Meeting sent successfully', 'success');
     } catch (error) {
       showToast(`Email failed: ${error.response?.data?.message || error.message}`, 'error');
     } finally {
@@ -621,6 +640,29 @@ export default function CRM() {
       />
 
       <Toast message={toast?.message || workflowError} type={toast?.type || (workflowError ? 'error' : 'success')} />
+
+      <section className="enterprise-card flex flex-wrap items-center justify-between gap-3 p-3">
+        <div>
+          <p className="text-sm font-bold text-slate-950 dark:text-white">Lead queue</p>
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Default view shows only pre-conversion active leads.</p>
+        </div>
+        <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-950">
+          {[
+            ['active', 'Active Leads'],
+            ['converted', 'Converted Leads'],
+            ['archived', 'Archived Leads'],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setLeadQueueFilter(id)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${leadQueueFilter === id ? 'bg-white text-qpms-700 shadow-sm dark:bg-slate-800 dark:text-qpms-200' : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </section>
 
       <section className="grid gap-4 md:grid-cols-4">
         {stats.map(([label, value]) => (

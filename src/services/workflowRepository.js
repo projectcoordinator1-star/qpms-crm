@@ -465,14 +465,21 @@ export async function createLeadRemote(lead) {
   });
 
   if (contacts.length) {
+    const dedupedContacts = contacts.reduce((items, contact) => {
+      const key = String(contact.id || contact.email || contact.phone || '').trim().toLowerCase();
+      const fallbackKey = `${String(contact.name || '').trim().toLowerCase()}|${String(contact.designation || '').trim().toLowerCase()}`;
+      const matchKey = key || fallbackKey;
+      if (matchKey && items.some((item) => item.__matchKey === matchKey)) return items;
+      return [...items, { ...contact, __matchKey: matchKey }];
+    }, []);
     const { error: contactsError } = await supabase.from('lead_contacts').insert(
-      contacts.map((contact) => ({
+      dedupedContacts.map((contact, index) => ({
         lead_id: data.id,
         contact_person_name: contact.name,
         contact_person_designation: contact.designation,
         contact_number: contact.phone,
         email_id: contact.email,
-        is_primary: Boolean(contact.isPrimary),
+        is_primary: index === Math.max(dedupedContacts.findIndex((item) => item.isPrimary), 0),
       })),
     );
     if (contactsError) {
@@ -506,15 +513,23 @@ export async function updateLeadRemote(leadId, lead) {
   if (error) throw error;
 
   if (lead.contacts) {
+    const dedupedContacts = lead.contacts.reduce((items, contact) => {
+      const key = String(contact.id || contact.email || contact.phone || '').trim().toLowerCase();
+      const fallbackKey = `${String(contact.name || '').trim().toLowerCase()}|${String(contact.designation || '').trim().toLowerCase()}`;
+      const matchKey = key || fallbackKey;
+      if (matchKey && items.some((item) => item.__matchKey === matchKey)) return items;
+      return [...items, { ...contact, __matchKey: matchKey }];
+    }, []);
+    console.info('[QPMS Supabase] Upserting lead contacts', { leadId, contactCount: dedupedContacts.length });
     await supabase.from('lead_contacts').delete().eq('lead_id', leadId);
     const { error: contactsError } = await supabase.from('lead_contacts').insert(
-      lead.contacts.map((contact) => ({
+      dedupedContacts.map((contact, index) => ({
         lead_id: leadId,
         contact_person_name: contact.name,
         contact_person_designation: contact.designation,
         contact_number: contact.phone,
         email_id: contact.email,
-        is_primary: Boolean(contact.isPrimary),
+        is_primary: index === Math.max(dedupedContacts.findIndex((item) => item.isPrimary), 0),
       })),
     );
     if (contactsError) throw contactsError;
@@ -552,6 +567,13 @@ export async function saveLeadMomRemote(leadId, mom, status = 'Draft') {
 
 export async function createSiteVisitRemote(lead) {
   assertConfigured();
+  console.info('[QPMS Supabase] Converting lead to site visit', { leadId: lead.id, client: lead.company });
+  const existing = await supabase.from('site_visits').select('id').eq('lead_id', lead.id).maybeSingle();
+  if (existing.error) throw existing.error;
+  if (existing.data?.id) {
+    console.warn('[QPMS Supabase] Duplicate assessment conversion prevented', { leadId: lead.id, siteVisitId: existing.data.id });
+    throw new Error('Assessment already created for this lead.');
+  }
   const { data, error } = await supabase
     .from('site_visits')
     .upsert(
@@ -573,12 +595,19 @@ export async function createSiteVisitRemote(lead) {
     .select('*')
     .single();
   if (error) throw error;
-  await logActivity({ leadId: lead.id, siteVisitId: data.id, type: 'Site Visit Scheduled', message: 'Site Visit scheduled with client' });
+  await supabase.from('leads').update({ lead_stage: 'Converted', status: 'Converted to Assessment', updated_at: new Date().toISOString() }).eq('id', lead.id);
+  await logActivity({ leadId: lead.id, siteVisitId: data.id, type: 'Lead MOM Sent', message: 'Lead MOM Sent' });
+  await logActivity({ leadId: lead.id, siteVisitId: data.id, type: 'Converted to Assessment', message: 'Lead moved to Site Visit & Estimation' });
   return data;
 }
 
 export async function saveSiteAssessmentRemote(visit, survey, status = 'Draft', user) {
   assertConfigured();
+  if (!survey || !Object.keys(survey).length) {
+    console.warn('[QPMS Supabase] Blank assessment save skipped', { siteVisitId: visit.id });
+    return null;
+  }
+  console.info('[QPMS Supabase] Saving assessment', { siteVisitId: visit.id, leadId: visit.leadId, status });
   const payload = surveyToDbAssessment(survey, visit, status, user);
   const { data, error } = await supabase.from('site_assessments').upsert(payload, { onConflict: 'site_visit_id' }).select('*').single();
   if (error) throw error;

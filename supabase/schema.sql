@@ -36,7 +36,8 @@ create table if not exists public.leads (
 
 create table if not exists public.lead_contacts (
   id uuid primary key default gen_random_uuid(),
-  lead_id uuid not null unique references public.leads(id) on delete cascade,
+  lead_id uuid not null references public.leads(id) on delete cascade,
+  assessment_id uuid,
   contact_person_name text not null,
   contact_person_designation text,
   contact_number text,
@@ -44,6 +45,12 @@ create table if not exists public.lead_contacts (
   is_primary boolean not null default false,
   created_at timestamptz not null default now()
 );
+
+alter table public.lead_contacts drop constraint if exists lead_contacts_lead_id_key;
+alter table public.lead_contacts add column if not exists assessment_id uuid;
+create unique index if not exists lead_contacts_one_primary_per_lead on public.lead_contacts(lead_id) where is_primary = true and assessment_id is null;
+create unique index if not exists lead_contacts_unique_email_per_lead on public.lead_contacts(lead_id, lower(email_id)) where email_id is not null;
+create unique index if not exists lead_contacts_unique_phone_per_lead on public.lead_contacts(lead_id, contact_number) where contact_number is not null;
 
 create table if not exists public.lead_mom (
   id uuid primary key default gen_random_uuid(),

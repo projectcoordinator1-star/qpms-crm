@@ -46,16 +46,31 @@ function createFallbackContact(lead) {
 
 function normalizeContacts(contacts, lead = {}) {
   const sourceContacts = Array.isArray(contacts) && contacts.length ? contacts : [createFallbackContact(lead)];
-  const hasPrimary = sourceContacts.some((contact) => contact.isPrimary);
+  const dedupedContacts = sourceContacts.reduce((items, contact) => {
+    const key = String(contact.id || contact.email || contact.phone || contact.contact_number || '').trim().toLowerCase();
+    const fallbackKey = `${String(contact.name || '').trim().toLowerCase()}|${String(contact.designation || '').trim().toLowerCase()}`;
+    const matchKey = key || fallbackKey;
+    if (matchKey && items.some((item) => item.__matchKey === matchKey)) return items;
+    return [...items, { ...contact, __matchKey: matchKey }];
+  }, []);
+  const primaryIndex = Math.max(dedupedContacts.findIndex((contact) => contact.isPrimary), 0);
 
-  return sourceContacts.map((contact, index) => ({
+  return dedupedContacts.map((contact, index) => ({
     id: contact.id || `contact-${Date.now()}-${index}`,
     name: contact.name || '',
     designation: contact.designation || '',
     phone: contact.phone || '',
     email: contact.email || '',
-    isPrimary: sourceContacts.length === 1 ? true : hasPrimary ? Boolean(contact.isPrimary) : index === 0,
+    isPrimary: index === primaryIndex,
   }));
+}
+
+function hasMeaningfulSurveyData(survey = {}) {
+  return Object.values(survey || {}).some((value) => {
+    if (Array.isArray(value)) return value.length > 0;
+    if (value && typeof value === 'object') return Object.keys(value).length > 0;
+    return value !== undefined && value !== null && value !== '';
+  });
 }
 
 function getPrimaryContact(lead) {
@@ -354,6 +369,11 @@ export function WorkflowProvider({ children }) {
   function sendLeadMom(leadId, mom) {
     let createdVisit = null;
     const shouldCreateSiteVisit = hasCompleteSiteVisitSchedule(mom);
+    const existingVisit = siteVisits.find((visit) => String(visit.leadId) === String(leadId));
+    if (shouldCreateSiteVisit && existingVisit) {
+      console.warn('[QPMS Workflow] Duplicate conversion prevented', { leadId, siteVisitId: existingVisit.id });
+      throw new Error('Assessment already created for this lead.');
+    }
 
     setLeads((currentLeads) =>
       currentLeads.map((lead) => {
@@ -361,7 +381,8 @@ export function WorkflowProvider({ children }) {
 
         const nextLead = {
           ...lead,
-          stage: shouldCreateSiteVisit ? 'Site Visit Scheduled' : 'Lead MOM Sent',
+          stage: shouldCreateSiteVisit ? 'Converted' : 'Lead MOM Sent',
+          status: shouldCreateSiteVisit ? 'Converted to Assessment' : 'MOM Sent',
           scheduledVisitDate: mom.scheduledVisitDate || '',
           scheduledVisitTime: mom.scheduledVisitTime || '',
           siteVisitRemarks: mom.siteVisitRemarks || '',
@@ -409,12 +430,18 @@ export function WorkflowProvider({ children }) {
 
   function saveSiteSurvey(siteVisitId, survey, status = 'Draft', user) {
     const visit = siteVisits.find((item) => item.id === siteVisitId);
+    if (!hasMeaningfulSurveyData(survey)) {
+      console.warn('[QPMS Workflow] Blank assessment save skipped', { siteVisitId, status });
+      return;
+    }
+    const mergedSurvey = { ...(visit?.survey || {}), ...survey };
+    console.info('[QPMS Workflow] Saving site assessment', { siteVisitId, status, sectionCount: Object.keys(mergedSurvey || {}).length });
     updateSiteVisit(siteVisitId, (visit) => ({
-      survey: { ...visit.survey, ...survey },
+      survey: { ...visit.survey, ...mergedSurvey },
       activity: ['Site survey draft saved', ...(visit.activity || [])].slice(0, 8),
     }));
     if (isRemoteWorkflowEnabled() && visit) {
-      saveSiteAssessmentRemote(visit, survey, status, user).catch((error) => {
+      saveSiteAssessmentRemote(visit, mergedSurvey, status, user).catch((error) => {
         console.warn('Site assessment Supabase save failed:', error.message);
         setBackendStatus('fallback');
       });

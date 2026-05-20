@@ -1,6 +1,12 @@
 export default function StatusBadge({ status }) {
   const classes = {
     Active: 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/25',
+    New: 'bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-500/15 dark:text-sky-300 dark:ring-sky-500/25',
+    'In Discussion': 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/25',
+    'MOM Pending': 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/25',
+    'MOM Sent': 'bg-qpms-50 text-qpms-700 ring-qpms-200 dark:bg-qpms-500/15 dark:text-qpms-300 dark:ring-qpms-500/25',
+    Converted: 'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-700/55 dark:text-slate-200 dark:ring-slate-600',
+    'Converted to Assessment': 'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-slate-700/55 dark:text-slate-200 dark:ring-slate-600',
     'In Transit': 'bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-500/15 dark:text-sky-300 dark:ring-sky-500/25',
     Pending: 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/25',
     Offline: 'bg-slate-100 text-slate-600 ring-slate-200 dark:bg-slate-700/55 dark:text-slate-300 dark:ring-slate-600',
