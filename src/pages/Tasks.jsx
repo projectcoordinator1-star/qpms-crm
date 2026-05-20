@@ -14,6 +14,14 @@ function serviceScope(visit) {
   return 'Scope available in assessment summary';
 }
 
+const stageWaitingCopy = {
+  'Operations Review': 'Records appear here immediately after BD submits the site assessment for review.',
+  'Coordinator Costing Review': 'Records appear here after Operations approves the assessment.',
+  'HR Validation': 'Records appear here after Coordinator Costing Review is approved.',
+  'Commercial Review': 'Records appear here after Operations, Coordinator, and HR approvals are completed.',
+  'Finance Review': 'Records appear here after Commercial Review is approved.',
+};
+
 export default function Tasks() {
   const { user } = useAuth();
   const { siteVisits, decideApproval } = useWorkflow();
@@ -105,6 +113,7 @@ export default function Tasks() {
         )) : (
           <section className="enterprise-card p-8 text-center">
             <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">No records are pending in {stage}.</p>
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{stageWaitingCopy[stage]}</p>
           </section>
         )}
       </section>

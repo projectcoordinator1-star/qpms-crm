@@ -124,7 +124,10 @@ export function dbSiteVisitToApp(row) {
   const assessment = row.site_assessments?.[0];
   const approvals = [...(row.approval_requests || [])].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   const latestApproval = approvals[0] || {};
-  const reviewStatus = approvals.reduce((acc, approval) => ({ ...acc, [approval.approval_stage]: approval.status }), {});
+  const reviewStatus = approvals.reduce((acc, approval) => {
+    if (!approval.approval_stage || acc[approval.approval_stage]) return acc;
+    return { ...acc, [approval.approval_stage]: approval.status };
+  }, {});
 
   return {
     id: row.id,
@@ -611,7 +614,7 @@ export async function saveSiteAssessmentRemote(visit, survey, status = 'Draft', 
   const payload = surveyToDbAssessment(survey, visit, status, user);
   const { data, error } = await supabase.from('site_assessments').upsert(payload, { onConflict: 'site_visit_id' }).select('*').single();
   if (error) throw error;
-  await logActivity({ leadId: visit.leadId, siteVisitId: visit.id, type: status === 'Submitted' ? 'Submitted for Commercial Review' : 'Site Assessment Saved', message: status === 'Submitted' ? 'Submitted for Commercial Review' : 'Site Assessment Saved', createdBy: user?.email });
+  await logActivity({ leadId: visit.leadId, siteVisitId: visit.id, type: status === 'Submitted' ? 'Submitted for Review Workflow' : 'Site Assessment Saved', message: status === 'Submitted' ? 'Submitted to Operations Review' : 'Site Assessment Saved', createdBy: user?.email });
   return data;
 }
 
@@ -629,7 +632,7 @@ export async function submitApprovalRemote(visit, assessmentId) {
       assessment_id: assessmentId,
       approval_stage: stage,
       pending_with: stage === 'Operations Review' ? 'Operations Team' : stage === 'Coordinator Costing Review' ? 'Coordinator' : stage === 'HR Validation' ? 'HR Reviewer' : `${stage.replace(' Review', '')} Reviewer`,
-      status: 'Pending',
+      status: stage === 'Operations Review' ? 'Pending' : 'Not Started',
     }));
   const { error } = await supabase.from('approval_requests').insert(rows);
   if (error) throw error;
@@ -638,7 +641,19 @@ export async function submitApprovalRemote(visit, assessmentId) {
 
 export async function recordApprovalDecisionRemote({ visit, stage, status, pendingWith, remarks, user }) {
   assertConfigured();
-  const nextStage = pendingWith === 'BD Executive' ? 'Returned to BD' : pendingWith === 'Completed' ? 'Proposal Sent' : stage;
+  const orderedStages = ['Operations Review', 'Coordinator Costing Review', 'HR Validation', 'Commercial Review', 'Finance Review'];
+  const pendingOwnerByStage = {
+    'Operations Review': 'Operations Team',
+    'Coordinator Costing Review': 'Coordinator',
+    'HR Validation': 'HR Reviewer',
+    'Commercial Review': 'Commercial Reviewer',
+    'Finance Review': 'Finance Reviewer',
+  };
+  const nextStageIndex = orderedStages.indexOf(stage) + 1;
+  const nextStage = status === 'Approved' ? orderedStages[nextStageIndex] || 'Returned to BD' : stage;
+  const nextPendingWith = status === 'Approved'
+    ? pendingOwnerByStage[nextStage] || 'BD Executive'
+    : pendingWith;
   const { error } = await supabase.from('approval_requests').insert({
     lead_id: visit.leadId,
     site_visit_id: visit.id,
@@ -651,9 +666,26 @@ export async function recordApprovalDecisionRemote({ visit, stage, status, pendi
     approved_at: new Date().toISOString(),
   });
   if (error) throw error;
+  if (status === 'Approved' && pendingOwnerByStage[nextStage]) {
+    const { error: nextError } = await supabase.from('approval_requests').insert({
+      lead_id: visit.leadId,
+      site_visit_id: visit.id,
+      assessment_id: visit.assessmentId || null,
+      approval_stage: nextStage,
+      pending_with: nextPendingWith,
+      status: 'Pending',
+      remarks: null,
+    });
+    if (nextError) throw nextError;
+  }
   await supabase
     .from('site_visits')
-    .update({ current_stage: nextStage, status: status === 'Approved' ? nextStage : status, updated_at: new Date().toISOString() })
+    .update({
+      current_stage: nextStage,
+      pending_with: nextPendingWith,
+      status: status === 'Approved' ? (nextStage === 'Returned to BD' ? 'Returned to BD' : 'Pending Review') : status,
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', visit.id);
 }
 

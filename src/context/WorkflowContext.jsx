@@ -482,17 +482,17 @@ export function WorkflowProvider({ children }) {
     const visit = siteVisits.find((item) => item.id === siteVisitId);
     updateSiteVisit(siteVisitId, (visit) => ({
       status: 'Pending Review',
-      currentStage: 'Parallel Review',
+      currentStage: 'Operations Review',
       pendingWith: 'Operations Team',
       approvalStatus: 'Pending',
       approvalRemarks: '',
       reviewStatus: {
         ...(visit.reviewStatus || {}),
         'Operations Review': 'Pending',
-        'Coordinator Costing Review': 'Pending',
-        'HR Validation': 'Pending',
-        'Commercial Review': 'Pending',
-        'Finance Review': 'Pending',
+        'Coordinator Costing Review': 'Not Started',
+        'HR Validation': 'Not Started',
+        'Commercial Review': 'Not Started',
+        'Finance Review': 'Not Started',
       },
       approvalTimeline: buildApprovalTimeline(visit, 'Site Visit Started'),
       activity: ['Submitted to Operations Review', ...(visit.activity || [])].slice(0, 8),
@@ -514,13 +514,20 @@ export function WorkflowProvider({ children }) {
     const orderedStages = ['Operations Review', 'Coordinator Costing Review', 'HR Validation', 'Commercial Review', 'Finance Review'];
     const nextReviewStatus = {
       'Operations Review': 'Pending',
-      'Coordinator Costing Review': 'Pending',
-      'HR Validation': 'Pending',
-      'Commercial Review': 'Pending',
-      'Finance Review': 'Pending',
+      'Coordinator Costing Review': 'Not Started',
+      'HR Validation': 'Not Started',
+      'Commercial Review': 'Not Started',
+      'Finance Review': 'Not Started',
       ...(visit.reviewStatus || {}),
       [stage]: normalizedDecision,
     };
+    if (normalizedDecision === 'Approved') {
+      const nextStageIndex = orderedStages.indexOf(stage) + 1;
+      const nextStageName = orderedStages[nextStageIndex];
+      if (nextStageName && nextReviewStatus[nextStageName] === 'Not Started') {
+        nextReviewStatus[nextStageName] = 'Pending';
+      }
+    }
     const nextPendingStage = orderedStages.find((name) => nextReviewStatus[name] === 'Pending');
     const allApproved = orderedStages.every((name) => nextReviewStatus[name] === 'Approved');
     const nextStage = allApproved ? 'Returned to BD' : nextPendingStage;
@@ -546,7 +553,7 @@ export function WorkflowProvider({ children }) {
       status: normalizedDecision === 'Rejected' || normalizedDecision === 'Rework Requested' ? normalizedDecision : allApproved ? 'Returned to BD' : 'Pending Review',
       currentStage: nextStage,
       pendingWith,
-      approvalStatus: normalizedDecision,
+      approvalStatus: normalizedDecision === 'Approved' && !allApproved ? 'Pending' : normalizedDecision,
       approvalRemarks: remarks,
       reviewStatus: nextReviewStatus,
       lastApprovalBy: user?.name || user?.email || '',

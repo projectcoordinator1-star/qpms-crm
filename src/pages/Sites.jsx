@@ -291,7 +291,7 @@ function buildSiteVisitMom(visit, survey) {
     scope: [...Object.keys(survey.ifmScope || {}).filter((key) => survey.ifmScope[key]?.selected), ...selectedHard, ...selectedSoft].join(', ') || 'IFM service scope to be finalized from survey inputs.',
     requirements: `Manpower rows: ${survey.manpowerPlan.length}. Equipment items: ${survey.equipment.length}. Tools: ${survey.tools.length}. Chemicals: ${survey.chemicals.length}.`,
     commercialNotes: `Estimated revenue ${currency(getCommercialTotals(survey).revenue)} with expected margin ${getCommercialTotals(survey).marginPercent.toFixed(1)}%.`,
-    nextAction: 'Submit for Commercial Review',
+    nextAction: 'Submit for Review Workflow',
     sent: false,
   };
 }
@@ -957,16 +957,16 @@ function duplicateRow(section, index) {
       await logAssessmentAuditRemote({
         visit: selectedVisit,
         sectionName: activeSection,
-        actionType: 'Submitted for Commercial Review',
+        actionType: 'Submitted for Review Workflow',
         user,
         oldValue: sectionSnapshot(activeSection, selectedVisit.survey),
         newValue: sectionSnapshot(activeSection, surveyDraft),
-        remarks: 'Assessment submitted for Commercial, Finance, and HR Review.',
+        remarks: 'Assessment submitted to Operations, Coordinator, HR, Commercial, and Finance review workflow.',
       });
-      rememberSectionAudit('Submitted for Commercial Review');
+      rememberSectionAudit('Submitted for Review Workflow');
       setEditingSection('');
       setAutoSaveLabel('Submitted');
-      showToast('Submitted to Commercial, Finance, and HR Review', 'success');
+      showToast('Submitted to Operations Review', 'success');
     } catch (error) {
       setAutoSaveLabel('Failed to save');
       showToast(`Failed to submit: ${error.message}`, 'error');
