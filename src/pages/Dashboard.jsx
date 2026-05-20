@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Search } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock3, Layers3, Search } from 'lucide-react';
 import {
   Area,
   AreaChart,
@@ -46,11 +46,16 @@ import {
 } from '../data/qpmsWorkflowData.js';
 import { useAuth } from '../context/auth-context.js';
 import { useWorkflow } from '../context/workflow-context.js';
-import { bdExecutives, canViewBdTeam, isApprovalReviewer, isCommercialTeam, isCoordinator, isFinanceTeam, isHrReviewer, isOperationsTeam } from '../data/mockUsers.js';
+import { bdExecutives, canViewBdTeam, isCommercialTeam, isCoordinator, isFinanceTeam, isHrReviewer, isOperationsTeam } from '../data/mockUsers.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 
 const tabs = [
   { id: 'new-business', label: 'New Business Pipeline' },
+  { id: 'operations', label: 'Existing Business Operations' },
+];
+
+const reviewTabs = [
+  { id: 'new-business', label: 'Review Command Center' },
   { id: 'operations', label: 'Existing Business Operations' },
 ];
 
@@ -115,8 +120,79 @@ const bdOverviewColumns = [
   { key: 'cooPending', label: 'COO Pending' },
 ];
 
+const workflowStageOwners = {
+  'Operations Review': 'Operations Team',
+  'Coordinator Costing Review': 'Coordinator',
+  'HR Validation': 'HR Reviewer',
+  'Commercial Review': 'Commercial Reviewer',
+  'Finance Review': 'Finance Reviewer',
+};
+
+const reviewerScopeMatrix = {
+  'Operations Review': {
+    editable: 6,
+    viewOnly: 5,
+    hidden: 4,
+    rows: [
+      { area: 'Tools / Equipment', access: 'Editable', count: 18 },
+      { area: 'Operational Feasibility', access: 'Editable', count: 12 },
+      { area: 'Site Readiness', access: 'Editable', count: 9 },
+      { area: 'Commercial Costing', access: 'Hidden', count: 6 },
+      { area: 'HR Costing', access: 'Hidden', count: 5 },
+    ],
+  },
+  'Coordinator Costing Review': {
+    editable: 5,
+    viewOnly: 7,
+    hidden: 3,
+    rows: [
+      { area: 'Manpower Consolidation', access: 'Editable', count: 14 },
+      { area: 'Reliever Logic', access: 'Editable', count: 8 },
+      { area: 'Zone Logic', access: 'Editable', count: 6 },
+      { area: 'Operations Scope', access: 'View Only', count: 11 },
+      { area: 'Finance Approval', access: 'Hidden', count: 3 },
+    ],
+  },
+  'HR Validation': {
+    editable: 5,
+    viewOnly: 4,
+    hidden: 6,
+    rows: [
+      { area: 'Manpower Wages', access: 'Editable', count: 16 },
+      { area: 'Shift / Gender', access: 'Editable', count: 10 },
+      { area: 'Uniform Logic', access: 'Editable', count: 7 },
+      { area: 'Commercial Statement', access: 'Hidden', count: 6 },
+      { area: 'Finance Approval', access: 'Hidden', count: 4 },
+    ],
+  },
+  'Commercial Review': {
+    editable: 4,
+    viewOnly: 10,
+    hidden: 1,
+    rows: [
+      { area: 'Pricing', access: 'Editable', count: 10 },
+      { area: 'Margins', access: 'Editable', count: 8 },
+      { area: 'Management Fee', access: 'Editable', count: 5 },
+      { area: 'Assessment Summary', access: 'View Only', count: 15 },
+      { area: 'Finance Approval', access: 'Hidden', count: 2 },
+    ],
+  },
+  'Finance Review': {
+    editable: 4,
+    viewOnly: 9,
+    hidden: 2,
+    rows: [
+      { area: 'Payment Terms', access: 'Editable', count: 8 },
+      { area: 'Budget Feasibility', access: 'Editable', count: 7 },
+      { area: 'Finance Remarks', access: 'Editable', count: 9 },
+      { area: 'Commercial Costing', access: 'View Only', count: 12 },
+      { area: 'Operations Inputs', access: 'View Only', count: 11 },
+    ],
+  },
+};
+
 function ChartFrame({ children, height = 'h-72' }) {
-  return <div className={`${height} rounded-2xl bg-slate-50 p-3 dark:bg-slate-950/55`}>{children}</div>;
+  return <div className={`${height} min-w-0 overflow-hidden rounded-2xl bg-slate-50 p-3 dark:bg-slate-950/55`}>{children}</div>;
 }
 
 function getDetailColumns(columns) {
@@ -725,20 +801,116 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
 function ApprovalDashboard({ title, description, stage, siteVisits }) {
   const queue = siteVisits.filter((visit) => (visit.reviewStatus?.[stage] || ((visit.currentStage || visit.status) === stage ? 'Pending' : '')) === 'Pending');
   const pending = queue.filter((visit) => !['Approved', 'Rejected', 'Rework Requested'].includes(visit.approvalStatus)).length;
+  const scope = reviewerScopeMatrix[stage] || reviewerScopeMatrix['Commercial Review'];
+  const stageMatrix = Object.keys(workflowStageOwners).map((name) => {
+    const visitsForStage = siteVisits.filter((visit) => visit.reviewStatus?.[name] || visit.currentStage === name);
+    return {
+      stage: name.replace(' Costing', '').replace(' Review', '').replace(' Validation', ''),
+      Pending: visitsForStage.filter((visit) => (visit.reviewStatus?.[name] || (visit.currentStage === name ? 'Pending' : '')) === 'Pending').length,
+      Approved: visitsForStage.filter((visit) => visit.reviewStatus?.[name] === 'Approved').length,
+      Rework: visitsForStage.filter((visit) => visit.reviewStatus?.[name] === 'Rework Requested').length,
+    };
+  });
+  const agingData = [
+    { bucket: '0-2 days', records: Math.max(1, queue.length - 2) },
+    { bucket: '3-5 days', records: queue.length ? 1 : 0 },
+    { bucket: '6+ days', records: queue.length > 2 ? 1 : 0 },
+  ];
+  const scopeData = [
+    { type: 'Editable', value: scope.editable },
+    { type: 'View Only', value: scope.viewOnly },
+    { type: 'Hidden', value: scope.hidden },
+  ];
+  const kpis = [
+    { title: 'Pending Queue', value: pending, change: `Pending with ${workflowStageOwners[stage] || stage}`, icon: Clock3, tone: 'amber' },
+    { title: 'Submitted Records', value: queue.length, change: 'Records in your review scope', icon: Layers3, tone: 'blue' },
+    { title: 'Approved Stages', value: siteVisits.filter((visit) => visit.reviewStatus?.[stage] === 'Approved').length, change: 'Completed by this function', icon: CheckCircle2, tone: 'green' },
+    { title: 'Rework / Risk', value: siteVisits.filter((visit) => ['Rework Requested', 'Rejected'].includes(visit.reviewStatus?.[stage])).length, change: 'Needs BD correction or closure', icon: AlertTriangle, tone: 'red' },
+  ];
+
   return (
     <div className="space-y-6">
-      <section className="grid gap-4 md:grid-cols-3">
-        {[
-          ['Pending queue', pending],
-          ['Submitted records', queue.length],
-          ['Stage owner', stage],
-        ].map(([label, value]) => (
-          <div key={label} className="enterprise-card p-5">
-            <p className="text-sm font-medium leading-5 text-slate-500 dark:text-slate-400">{label}</p>
-            <p className="mt-3 text-2xl font-semibold leading-none text-slate-950 dark:text-white">{value}</p>
-          </div>
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {kpis.map((kpi) => (
+          <KpiCard key={kpi.title} {...kpi} />
         ))}
       </section>
+
+      <section className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
+        <ChartCard title={`${title} Scope Matrix`} description="Editable, view-only, and hidden sections for the current reviewer role.">
+          <ChartFrame>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={scopeData} dataKey="value" nameKey="type" innerRadius={62} outerRadius={92} paddingAngle={3}>
+                  {scopeData.map((entry) => (
+                    <Cell key={entry.type} fill={entry.type === 'Editable' ? '#10b981' : entry.type === 'View Only' ? '#2444a4' : '#94a3b8'} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={tooltipStyle} />
+                <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </ChartFrame>
+        </ChartCard>
+
+        <ChartCard title="Workflow Stage Matrix" description="Cross-stage approval health across the pre-operational workflow.">
+          <ChartFrame>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={stageMatrix} margin={{ left: 4 }}>
+                <CartesianGrid stroke={chartGrid} vertical={false} />
+                <XAxis dataKey="stage" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 11 }} />
+                <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="Pending" stackId="stage" fill="#f59e0b" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="Approved" stackId="stage" fill="#10b981" radius={[8, 8, 0, 0]} />
+                <Bar dataKey="Rework" stackId="stage" fill="#ef4444" radius={[8, 8, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartFrame>
+        </ChartCard>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+        <ChartCard title="Review Aging" description="Queue aging overview for review SLA awareness.">
+          <ChartFrame height="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={agingData}>
+                <CartesianGrid stroke={chartGrid} vertical={false} />
+                <XAxis dataKey="bucket" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+                <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Bar dataKey="records" fill="#4f82fb" radius={[10, 10, 0, 0]} name="Records" />
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartFrame>
+        </ChartCard>
+
+        <ChartCard title="Role Access Coverage" description="Scope areas visible to this function before AWS IAM separation.">
+          <div className="space-y-3">
+            {scope.rows.map((row) => (
+              <div key={row.area} className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/55">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">{row.area}</p>
+                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{row.count} mapped fields / checkpoints</p>
+                </div>
+                <span className={[
+                  'rounded-full px-3 py-1 text-xs font-bold',
+                  row.access === 'Editable'
+                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+                    : row.access === 'Hidden'
+                      ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                      : 'bg-qpms-50 text-qpms-700 dark:bg-qpms-500/15 dark:text-qpms-300',
+                ].join(' ')}
+                >
+                  {row.access}
+                </span>
+              </div>
+            ))}
+          </div>
+        </ChartCard>
+      </section>
+
       <section className="enterprise-card p-5">
         <div className="flex flex-col gap-1">
           <h2 className="text-lg font-semibold text-slate-950 dark:text-white">{title}</h2>
@@ -784,7 +956,48 @@ export default function Dashboard() {
   const [activeOperationsSection, setActiveOperationsSection] = useState(null);
   usePageTitle('Dashboard');
   const restrictedToPipeline = ['BD Head', 'BD Executive'].includes(user?.role);
-  const canSeeOperations = user?.role === 'Admin' || isCommercialTeam(user) || isFinanceTeam(user);
+  const reviewerDashboard = isOperationsTeam(user)
+    ? {
+        title: 'Operations Command Center',
+        description: 'Operations review scope, execution readiness queue, SLA matrix, and existing business visibility.',
+        queueTitle: 'Operations Review Queue',
+        queueDescription: 'Records submitted for tools, equipment, consumables, machinery, and site readiness validation.',
+        stage: 'Operations Review',
+      }
+    : isCoordinator(user)
+      ? {
+          title: 'Coordinator Command Center',
+          description: 'Costing readiness, reliever logic, zone logic, manpower consolidation, and review workload visibility.',
+          queueTitle: 'Coordinator Costing Queue',
+          queueDescription: 'Records pending manpower consolidation, reliever logic, zone logic, and costing readiness.',
+          stage: 'Coordinator Costing Review',
+        }
+      : isHrReviewer(user)
+        ? {
+            title: 'HR Command Center',
+            description: 'HR manpower, wage, shift, gender, uniform, and validation workload dashboard.',
+            queueTitle: 'HR Review Queue',
+            queueDescription: 'Records submitted for manpower, wage, reliever, gender, shift, and uniform validation.',
+            stage: 'HR Validation',
+          }
+        : isCommercialTeam(user)
+          ? {
+              title: 'Commercial Command Center',
+              description: 'Commercial review queue, pricing scope, margin matrix, approval aging, and operations visibility.',
+              queueTitle: 'Commercial Review Queue',
+              queueDescription: 'Records submitted for commercial statement, pricing, management fee, and margin approval.',
+              stage: 'Commercial Review',
+            }
+          : isFinanceTeam(user)
+            ? {
+                title: 'Finance Command Center',
+                description: 'Finance review queue, payment terms, feasibility, risk, SLA aging, and operations visibility.',
+                queueTitle: 'Finance Review Queue',
+                queueDescription: 'Records approved by Commercial for billing, expense, margin, and payment validation.',
+                stage: 'Finance Review',
+              }
+            : null;
+  const canSeeOperations = user?.role === 'Admin' || isCommercialTeam(user) || isFinanceTeam(user) || isOperationsTeam(user);
   const effectiveTab = canSeeOperations ? activeTab : 'new-business';
 
   const visibleLeads = useMemo(() => {
@@ -800,23 +1013,18 @@ export default function Dashboard() {
   return (
     <div className="space-y-7">
       <PageHeader
-        title={isOperationsTeam(user) ? 'Operations Review Dashboard' : isCoordinator(user) ? 'Coordinator Costing Dashboard' : isHrReviewer(user) ? 'HR Review Dashboard' : isFinanceTeam(user) ? 'Finance Review Dashboard' : isCommercialTeam(user) ? 'Commercial Review Dashboard' : 'Operations Command Center'}
-        description={isOperationsTeam(user) ? 'Operations queue for execution feasibility, tools, equipment, consumables, and site readiness.' : isCoordinator(user) ? 'Coordinator queue for manpower consolidation, reliever logic, zone logic, and costing readiness.' : isHrReviewer(user) ? 'HR-only queue for manpower, wage, reliever, gender, shift, and uniform review.' : isFinanceTeam(user) ? 'Finance review dashboard with access to approval queue and operational KPI dashboards.' : isCommercialTeam(user) ? 'Commercial review dashboard with access to approval queue and operational KPI dashboards.' : 'Management dashboard for new business pipeline health, site operations, attendance, tickets, tasks, field officers, and SLA visibility.'}
-        actions={canSeeOperations ? <DashboardTabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} /> : null}
+        title={reviewerDashboard?.title || 'Operations Command Center'}
+        description={reviewerDashboard?.description || 'Management dashboard for new business pipeline health, site operations, attendance, tickets, tasks, field officers, and SLA visibility.'}
+        actions={canSeeOperations ? <DashboardTabs tabs={reviewerDashboard ? reviewTabs : tabs} activeTab={activeTab} onChange={setActiveTab} /> : null}
       />
 
-      {isOperationsTeam(user) ? (
-        <ApprovalDashboard title="Operations Review Queue" description="Records submitted for tools, equipment, consumables, machinery, and site readiness validation." stage="Operations Review" siteVisits={siteVisits} />
-      ) : isCoordinator(user) ? (
-        <ApprovalDashboard title="Coordinator Costing Queue" description="Records pending manpower consolidation, reliever logic, zone logic, and costing readiness." stage="Coordinator Costing Review" siteVisits={siteVisits} />
-      ) : isHrReviewer(user) ? (
-        <ApprovalDashboard title="HR Review Queue" description="Records submitted for manpower, wage, reliever, gender, shift, and uniform validation." stage="HR Validation" siteVisits={siteVisits} />
-      ) : isApprovalReviewer(user) && activeTab === 'new-business' ? (
-        isCommercialTeam(user) ? (
-        <ApprovalDashboard title="Commercial Review Queue" description="Records submitted by BD for commercial statement, pricing, and margin approval." stage="Commercial Review" siteVisits={siteVisits} />
-        ) : (
-        <ApprovalDashboard title="Finance Review Queue" description="Records approved by Commercial for billing, expense, margin, and payment validation." stage="Finance Review" siteVisits={siteVisits} />
-        )
+      {reviewerDashboard && effectiveTab === 'new-business' ? (
+        <ApprovalDashboard
+          title={reviewerDashboard.queueTitle}
+          description={reviewerDashboard.queueDescription}
+          stage={reviewerDashboard.stage}
+          siteVisits={siteVisits}
+        />
       ) : effectiveTab === 'new-business' || restrictedToPipeline ? (
         <NewBusinessPipeline
           activeDashboardSection={activeDashboardSection}
