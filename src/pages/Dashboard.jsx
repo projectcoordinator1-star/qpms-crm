@@ -59,7 +59,6 @@ import {
   recentLeads,
   siteVisitTrend,
   stateOperationsSummary,
-  taskCompletionDistribution,
 } from '../data/qpmsWorkflowData.js';
 import { useAuth } from '../context/auth-context.js';
 import { useWorkflow } from '../context/workflow-context.js';
@@ -80,6 +79,27 @@ const sourceColors = ['#2444a4', '#4f82fb', '#85adff', '#10b981', '#f59e0b', '#e
 const taskColors = ['#10b981', '#f59e0b', '#ef4444'];
 const chartGrid = '#e2e8f0';
 const chartText = '#64748b';
+
+const businessFilterOptions = ['All Businesses', 'Reliance Retail', 'Private Clients', 'DME', 'AP DSH', 'TN Government', 'Osmania Hospitals'];
+const stateFilterOptions = ['All States', 'Tamil Nadu', 'Kerala', 'Karnataka', 'Telangana', 'Andhra Pradesh - 1', 'Andhra Pradesh - 2'];
+
+const businessStateCoverage = {
+  'Reliance Retail': ['Tamil Nadu', 'Kerala', 'Karnataka', 'Telangana'],
+  'Private Clients': ['Tamil Nadu', 'Kerala', 'Karnataka', 'Telangana', 'Andhra Pradesh - 1', 'Andhra Pradesh - 2'],
+  DME: ['Andhra Pradesh - 1', 'Andhra Pradesh - 2', 'Telangana'],
+  'AP DSH': ['Andhra Pradesh - 1', 'Andhra Pradesh - 2'],
+  'TN Government': ['Tamil Nadu'],
+  'Osmania Hospitals': ['Telangana'],
+};
+
+const businessWeights = {
+  'Reliance Retail': 0.34,
+  'Private Clients': 0.24,
+  DME: 0.16,
+  'AP DSH': 0.12,
+  'TN Government': 0.08,
+  'Osmania Hospitals': 0.06,
+};
 
 const tooltipStyle = {
   borderRadius: 14,
@@ -124,6 +144,15 @@ const officerColumns = [
   { key: 'checkIn', label: 'Check-in Time' },
   { key: 'lastActivity', label: 'Last Activity', wrap: true },
   { key: 'assignedSite', label: 'Assigned Site' },
+  { key: 'status', label: 'Status', render: (row) => <StatusBadge status={row.status} /> },
+];
+
+const businessSnapshotColumns = [
+  { key: 'business', label: 'Business Name' },
+  { key: 'attendance', label: 'Attendance' },
+  { key: 'escalations', label: 'Escalations' },
+  { key: 'siteVisits', label: 'Site Visits' },
+  { key: 'slaHealth', label: 'SLA Health' },
   { key: 'status', label: 'Status', render: (row) => <StatusBadge status={row.status} /> },
 ];
 
@@ -319,6 +348,164 @@ function buildCommandCenterData({ user, leads, siteVisits, stage }) {
 
 function ChartFrame({ children, height = 'h-56' }) {
   return <div className={`${height} min-w-0 overflow-hidden rounded-2xl bg-slate-50 p-3 dark:bg-slate-950/55`}>{children}</div>;
+}
+
+function businessAppliesToState(business, state) {
+  if (business === 'All Businesses') return true;
+  return businessStateCoverage[business]?.includes(state);
+}
+
+function scaleOperationRow(row, business) {
+  if (business === 'All Businesses') return row;
+  const weight = businessWeights[business] || 0.18;
+  const statePenalty = row.status === 'Critical' ? 1.12 : row.status === 'Warning' ? 1.06 : 1;
+  const scaled = {
+    ...row,
+    activeSites: Math.max(3, Math.round(row.activeSites * weight)),
+    officers: Math.max(1, Math.round(row.officers * weight)),
+    visits: Math.max(1, Math.round(row.visits * weight)),
+    tickets: Math.max(0, Math.round(row.tickets * weight * statePenalty)),
+    tasks: Math.max(1, Math.round(row.tasks * weight * statePenalty)),
+    sla: Math.max(72, Math.min(99, Math.round(row.sla - (1 - weight) * 4 + (business === 'Reliance Retail' ? 2 : 0)))),
+  };
+  return {
+    ...scaled,
+    attendance: Math.max(72, Math.min(99, Math.round(row.attendance - (1 - weight) * 3 + (business === 'TN Government' ? 2 : 0)))),
+    status: scaled.sla < 86 || scaled.attendance < 84 || scaled.tickets > 8 ? 'Critical' : scaled.sla < 92 || scaled.attendance < 89 ? 'Warning' : 'Healthy',
+  };
+}
+
+function filterOperationSummary(business, state) {
+  return stateOperationsSummary
+    .filter((row) => businessAppliesToState(business, row.state))
+    .filter((row) => state === 'All States' || row.state === state)
+    .map((row) => scaleOperationRow(row, business));
+}
+
+function sumOperationRows(rows, key) {
+  return rows.reduce((total, row) => total + Number(row[key] || 0), 0);
+}
+
+function averageOperationRows(rows, key) {
+  if (!rows.length) return 0;
+  return Math.round(rows.reduce((total, row) => total + Number(row[key] || 0), 0) / rows.length);
+}
+
+function buildOperationsKpis(rows) {
+  const activeSites = sumOperationRows(rows, 'activeSites');
+  const officers = sumOperationRows(rows, 'officers');
+  const attendance = averageOperationRows(rows, 'attendance');
+  const visits = sumOperationRows(rows, 'visits');
+  const tickets = sumOperationRows(rows, 'tickets');
+  const tasks = sumOperationRows(rows, 'tasks');
+  const criticalTickets = rows.filter((row) => row.status === 'Critical').reduce((total, row) => total + row.tickets, 0);
+  const overdue = rows.filter((row) => row.status !== 'Healthy').reduce((total, row) => total + Math.max(1, Math.round(row.tasks * 0.1)), 0);
+  const avgResolutionHours = Math.max(2.1, Math.min(5.8, 2.4 + tickets / Math.max(activeSites, 1) * 4 + overdue / 90));
+
+  const valueById = {
+    activeSites,
+    fieldOfficersActive: officers,
+    attendanceCaptured: `${attendance}%`,
+    siteVisitsCompleted: visits,
+    openTickets: tickets,
+    pendingTasks: tasks,
+    overdueTasks: overdue,
+    avgResolutionTime: `${Math.floor(avgResolutionHours)}h ${Math.round((avgResolutionHours % 1) * 60)}m`,
+  };
+  const changeById = {
+    activeSites: `Across ${rows.length || 0} filtered regions`,
+    fieldOfficersActive: 'Filtered live field coverage',
+    attendanceCaptured: `${Math.max(1200, activeSites * 84).toLocaleString('en-IN')} punches synced`,
+    siteVisitsCompleted: 'Filtered operational visits',
+    openTickets: `${criticalTickets || Math.max(1, Math.round(tickets * 0.16))} high priority`,
+    pendingTasks: 'Filtered action queue',
+    overdueTasks: 'Needs escalation',
+    avgResolutionTime: 'Filtered facility tickets',
+  };
+
+  return existingOperationsKpis.map((kpi) => ({
+    ...kpi,
+    value: String(valueById[kpi.id] ?? kpi.value),
+    change: changeById[kpi.id] || kpi.change,
+  }));
+}
+
+function buildTaskDistribution(rows) {
+  const pending = sumOperationRows(rows, 'tasks');
+  const overdue = rows.filter((row) => row.status !== 'Healthy').reduce((total, row) => total + Math.max(1, Math.round(row.tasks * 0.1)), 0);
+  return [
+    { name: 'Completed', value: Math.max(20, Math.round(sumOperationRows(rows, 'visits') * 2.4)) },
+    { name: 'Pending', value: pending },
+    { name: 'Overdue', value: overdue },
+  ];
+}
+
+function buildSeverityData(rows) {
+  return [
+    { severity: 'High', count: rows.filter((row) => row.status === 'Critical').reduce((total, row) => total + Math.max(1, Math.round(row.tasks * 0.08)), 0) },
+    { severity: 'Medium', count: rows.filter((row) => row.status === 'Warning').reduce((total, row) => total + Math.max(1, Math.round(row.tasks * 0.12)), 0) },
+    { severity: 'Low', count: rows.filter((row) => row.status === 'Healthy').reduce((total, row) => total + Math.max(1, Math.round(row.tasks * 0.04)), 0) },
+  ];
+}
+
+function buildResolutionData(rows) {
+  return rows.map((row) => ({
+    state: row.state,
+    hours: Number((2.2 + row.tickets / Math.max(row.activeSites, 1) * 7 + (100 - row.sla) / 18).toFixed(2)),
+  }));
+}
+
+function buildBusinessSnapshot(business, state) {
+  const businesses = business === 'All Businesses' ? businessFilterOptions.slice(1) : [business];
+  return businesses.map((name) => {
+    const rows = filterOperationSummary(name, state);
+    const attendance = averageOperationRows(rows, 'attendance');
+    const escalations = rows.reduce((total, row) => total + (row.status === 'Critical' ? row.tickets : Math.round(row.tickets * 0.25)), 0);
+    const visits = sumOperationRows(rows, 'visits');
+    const sla = averageOperationRows(rows, 'sla');
+    return {
+      id: name,
+      business: name,
+      attendance: `${attendance || 0}%`,
+      escalations,
+      siteVisits: visits,
+      slaHealth: `${sla || 0}%`,
+      status: sla < 88 || escalations > 8 ? 'Critical' : sla < 93 || attendance < 89 ? 'Warning' : 'Healthy',
+    };
+  });
+}
+
+function operationsStatus(rows) {
+  if (!rows.length) return { label: 'Attention Required', tone: 'yellow' };
+  const critical = rows.filter((row) => row.status === 'Critical').length;
+  const warning = rows.filter((row) => row.status === 'Warning').length;
+  if (critical) return { label: 'Critical Escalations', tone: 'red' };
+  if (warning) return { label: 'Attention Required', tone: 'yellow' };
+  return { label: 'Stable Operations', tone: 'green' };
+}
+
+function filterRowsByState(rows, summaryRows) {
+  const allowedStates = new Set(summaryRows.map((row) => row.state));
+  return rows.filter((row) => !row.state || allowedStates.has(row.state));
+}
+
+function buildFilteredOperationsDetailSections(summaryRows, business, state) {
+  const suffix = `${business === 'All Businesses' ? 'All businesses' : business} / ${state === 'All States' ? 'All states' : state}`;
+  return Object.fromEntries(Object.entries(operationsDetailSections).map(([key, detail]) => {
+    const rows = key === 'attendanceCaptured'
+      ? summaryRows.map((item) => ({
+          id: item.id,
+          state: item.state,
+          attendance: `${item.attendance}%`,
+          captured: item.activeSites * 84,
+          missing: Math.max(4, 100 - item.attendance),
+          exceptions: item.status === 'Healthy' ? 'Low' : 'Review needed',
+          status: item.status,
+        }))
+      : filterRowsByState(detail.rows, summaryRows);
+
+    return [key, { ...detail, description: `${detail.description} Filter: ${suffix}.`, rows }];
+  }));
 }
 
 function compactTone(tone) {
@@ -606,10 +793,13 @@ function DrilldownChart({ sectionId }) {
   );
 }
 
-function OperationsDrilldownChart({ sectionId }) {
+function OperationsDrilldownChart({ sectionId, summaryRows = stateOperationsSummary }) {
+  const taskDistribution = buildTaskDistribution(summaryRows);
+  const severityData = buildSeverityData(summaryRows);
+  const resolutionData = buildResolutionData(summaryRows);
   const chartBySection = {
     activeSites: (
-      <BarChart data={stateOperationsSummary}>
+      <BarChart data={summaryRows}>
         <CartesianGrid stroke={chartGrid} vertical={false} />
         <XAxis dataKey="state" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 11 }} interval={0} height={62} />
         <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
@@ -618,7 +808,7 @@ function OperationsDrilldownChart({ sectionId }) {
       </BarChart>
     ),
     fieldOfficersActive: (
-      <BarChart data={stateOperationsSummary}>
+      <BarChart data={summaryRows}>
         <CartesianGrid stroke={chartGrid} vertical={false} />
         <XAxis dataKey="state" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 11 }} interval={0} height={62} />
         <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
@@ -627,7 +817,7 @@ function OperationsDrilldownChart({ sectionId }) {
       </BarChart>
     ),
     attendanceCaptured: (
-      <ComposedChart data={stateOperationsSummary}>
+      <ComposedChart data={summaryRows}>
         <CartesianGrid stroke={chartGrid} vertical={false} />
         <XAxis dataKey="state" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 11 }} interval={0} height={62} />
         <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
@@ -649,7 +839,7 @@ function OperationsDrilldownChart({ sectionId }) {
       </LineChart>
     ),
     openTickets: (
-      <BarChart data={stateOperationsSummary}>
+      <BarChart data={summaryRows}>
         <CartesianGrid stroke={chartGrid} vertical={false} />
         <XAxis dataKey="state" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 11 }} interval={0} height={62} />
         <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
@@ -659,8 +849,8 @@ function OperationsDrilldownChart({ sectionId }) {
     ),
     pendingTasks: (
       <PieChart>
-        <Pie data={taskCompletionDistribution} dataKey="value" nameKey="name" innerRadius={62} outerRadius={92} paddingAngle={3}>
-          {taskCompletionDistribution.map((entry, index) => (
+        <Pie data={taskDistribution} dataKey="value" nameKey="name" innerRadius={62} outerRadius={92} paddingAngle={3}>
+          {taskDistribution.map((entry, index) => (
             <Cell key={entry.name} fill={taskColors[index]} />
           ))}
         </Pie>
@@ -669,11 +859,7 @@ function OperationsDrilldownChart({ sectionId }) {
       </PieChart>
     ),
     overdueTasks: (
-      <BarChart data={[
-        { severity: 'High', count: 12 },
-        { severity: 'Medium', count: 14 },
-        { severity: 'Low', count: 5 },
-      ]}>
+      <BarChart data={severityData}>
         <CartesianGrid stroke={chartGrid} vertical={false} />
         <XAxis dataKey="severity" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
         <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
@@ -682,14 +868,7 @@ function OperationsDrilldownChart({ sectionId }) {
       </BarChart>
     ),
     avgResolutionTime: (
-      <BarChart data={[
-        { state: 'Tamil Nadu', hours: 2.75 },
-        { state: 'Kerala', hours: 3.1 },
-        { state: 'Karnataka', hours: 3.8 },
-        { state: 'Telangana', hours: 2.9 },
-        { state: 'Andhra Pradesh - 1', hours: 4.2 },
-        { state: 'Andhra Pradesh - 2', hours: 5.25 },
-      ]}>
+      <BarChart data={resolutionData}>
         <CartesianGrid stroke={chartGrid} vertical={false} />
         <XAxis dataKey="state" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 11 }} interval={0} height={62} />
         <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
@@ -960,10 +1139,66 @@ function NewBusinessPipeline({ activeDashboardSection, onSectionChange, visibleL
 }
 
 function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }) {
+  const [businessFilter, setBusinessFilter] = useState('All Businesses');
+  const [stateFilter, setStateFilter] = useState('All States');
+  const filteredSummary = useMemo(() => filterOperationSummary(businessFilter, stateFilter), [businessFilter, stateFilter]);
+  const operationKpis = useMemo(() => buildOperationsKpis(filteredSummary), [filteredSummary]);
+  const operationSections = useMemo(
+    () => buildFilteredOperationsDetailSections(filteredSummary, businessFilter, stateFilter),
+    [filteredSummary, businessFilter, stateFilter],
+  );
+  const snapshotRows = useMemo(() => buildBusinessSnapshot(businessFilter, stateFilter), [businessFilter, stateFilter]);
+  const status = operationsStatus(filteredSummary);
+  const filteredOfficers = useMemo(
+    () => filterRowsByState(fieldOfficerActivity, filteredSummary),
+    [filteredSummary],
+  );
+  const filteredTaskDistribution = useMemo(() => buildTaskDistribution(filteredSummary), [filteredSummary]);
+
   return (
     <div className="space-y-6">
+      <section className="enterprise-card p-4">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-slate-950 dark:text-white">Existing Business Operations</p>
+            <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">Filter operational performance by business and region.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[minmax(180px,220px)_minmax(180px,220px)_auto] sm:items-end">
+            <label className="space-y-1">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Business Filter</span>
+              <select
+                value={businessFilter}
+                onChange={(event) => {
+                  setBusinessFilter(event.target.value);
+                  onSectionChange(null);
+                }}
+                className="focus-ring h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+              >
+                {businessFilterOptions.map((option) => <option key={option}>{option}</option>)}
+              </select>
+            </label>
+            <label className="space-y-1">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">State Filter</span>
+              <select
+                value={stateFilter}
+                onChange={(event) => {
+                  setStateFilter(event.target.value);
+                  onSectionChange(null);
+                }}
+                className="focus-ring h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+              >
+                {stateFilterOptions.map((option) => <option key={option}>{option}</option>)}
+              </select>
+            </label>
+            <span className={`inline-flex h-10 items-center justify-center rounded-xl px-3 text-xs font-bold ring-1 ${healthTone[status.tone]}`}>
+              {status.label}
+            </span>
+          </div>
+        </div>
+      </section>
+
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {existingOperationsKpis.map((kpi) => (
+        {operationKpis.map((kpi) => (
           <KpiCard
             key={kpi.title}
             {...kpi}
@@ -976,16 +1211,20 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
       {activeOperationsSection ? (
         <DashboardDetailPanel
           sectionId={activeOperationsSection}
-          sections={operationsDetailSections}
-          renderChart={(sectionId) => <OperationsDrilldownChart sectionId={sectionId} />}
+          sections={operationSections}
+          renderChart={(sectionId) => <OperationsDrilldownChart sectionId={sectionId} summaryRows={filteredSummary} />}
         />
       ) : (
         <div className="space-y-6 animate-[login-fade-up_220ms_ease-out]">
+          <ChartCard title="Business Performance Snapshot" description="Compact comparison of attendance, escalations, site visits, and SLA health.">
+            <DataTable columns={businessSnapshotColumns} rows={snapshotRows} embedded />
+          </ChartCard>
+
           <section className="grid gap-6 xl:grid-cols-2">
             <ChartCard title="State-wise Site Performance" description="Active site coverage and field officer distribution.">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={stateOperationsSummary}>
+                  <BarChart data={filteredSummary}>
                     <CartesianGrid stroke={chartGrid} vertical={false} />
                     <XAxis dataKey="state" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 11 }} interval={0} height={62} />
                     <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
@@ -1001,7 +1240,7 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
             <ChartCard title="Attendance by State" description="Captured attendance percentage against today site visits.">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={stateOperationsSummary}>
+                  <ComposedChart data={filteredSummary}>
                     <CartesianGrid stroke={chartGrid} vertical={false} />
                     <XAxis dataKey="state" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 11 }} interval={0} height={62} />
                     <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
@@ -1019,7 +1258,7 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
             <ChartCard title="Ticket Volume by State" description="Open operational tickets requiring field or branch action.">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={stateOperationsSummary}>
+                  <BarChart data={filteredSummary}>
                     <CartesianGrid stroke={chartGrid} vertical={false} />
                     <XAxis dataKey="state" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 11 }} interval={0} height={62} />
                     <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
@@ -1034,8 +1273,8 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={taskCompletionDistribution} dataKey="value" nameKey="name" innerRadius={62} outerRadius={92} paddingAngle={3}>
-                      {taskCompletionDistribution.map((entry, index) => (
+                    <Pie data={filteredTaskDistribution} dataKey="value" nameKey="name" innerRadius={62} outerRadius={92} paddingAngle={3}>
+                      {filteredTaskDistribution.map((entry, index) => (
                         <Cell key={entry.name} fill={taskColors[index]} />
                       ))}
                     </Pie>
@@ -1067,7 +1306,7 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
             <ChartCard title="SLA Performance by State" description="Service-level health across operating regions.">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart data={stateOperationsSummary}>
+                  <RadarChart data={filteredSummary}>
                     <PolarGrid stroke={chartGrid} />
                     <PolarAngleAxis dataKey="state" tick={{ fill: chartText, fontSize: 11 }} />
                     <PolarRadiusAxis angle={90} domain={[70, 100]} tick={{ fill: chartText, fontSize: 11 }} />
@@ -1080,11 +1319,11 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
           </section>
 
           <ChartCard title="State-wise Operations Summary" description="Management view of sites, officers, attendance, tickets, tasks, SLA, and operating status.">
-            <DataTable columns={operationsColumns} rows={stateOperationsSummary} embedded />
+            <DataTable columns={operationsColumns} rows={filteredSummary} embedded />
           </ChartCard>
 
           <ChartCard title="Field Officer Activity" description="Live-style mock activity feed for officers working across QPMS branches and assigned sites.">
-            <DataTable columns={officerColumns} rows={fieldOfficerActivity} embedded />
+            <DataTable columns={officerColumns} rows={filteredOfficers} embedded />
           </ChartCard>
         </div>
       )}
