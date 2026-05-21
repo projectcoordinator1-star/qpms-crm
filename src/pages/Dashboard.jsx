@@ -208,17 +208,6 @@ const reviewerScopeMatrix = {
   },
 };
 
-const workflowTimelineStages = [
-  'Lead Created',
-  'Contacted',
-  'Site Visit',
-  'Estimation',
-  'Commercial Review',
-  'Finance Review',
-  'Proposal Sent',
-  'Converted',
-];
-
 const healthTone = {
   green: 'bg-emerald-50 text-emerald-700 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-500/20',
   yellow: 'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/20',
@@ -316,35 +305,6 @@ function buildCommandCenterData({ user, leads, siteVisits, stage }) {
     { event: employeeFocus ? 'Employee checked in' : 'Lead converted', detail: employeeFocus ? 'South Zone supervisor' : leads.find((lead) => lead.stage === 'Converted')?.company || 'Green Square Mall', time: '3 hrs ago' },
   ];
 
-  const timeline = workflowTimelineStages.map((name) => {
-    const countByName = {
-      'Lead Created': leads.length,
-      Contacted: leads.filter((lead) => ['Contacted', 'In Discussion'].includes(lead.stage)).length,
-      'Site Visit': siteVisits.length,
-      Estimation: siteVisits.filter((visit) => ['Scheduled', 'Site Visit MOM Created', 'Pending Review'].includes(visit.status)).length,
-      'Commercial Review': pendingCommercial,
-      'Finance Review': pendingFinance,
-      'Proposal Sent': leads.filter((lead) => lead.stage === 'Proposal Sent').length,
-      Converted: converted,
-    };
-    const fallbackByName = {
-      'Lead Created': 18,
-      Contacted: 12,
-      'Site Visit': 8,
-      Estimation: 6,
-      'Commercial Review': 4,
-      'Finance Review': 3,
-      'Proposal Sent': 5,
-      Converted: 2,
-    };
-    const count = positiveCount(countByName[name], fallbackByName[name]);
-    return {
-      name,
-      count,
-      status: count > 8 ? 'Healthy' : count > 3 ? 'Active' : 'Watch',
-    };
-  });
-
   const operationalHealth = [
     { label: 'Proposal TAT', value: '2.4 days', tone: 'green', helper: 'Target 3 days' },
     { label: 'Approval TAT', value: '18 hrs', tone: pendingApprovals > 8 ? 'yellow' : 'green', helper: 'Current workflow' },
@@ -354,7 +314,7 @@ function buildCommandCenterData({ user, leads, siteVisits, stage }) {
     { label: 'Pending Escalations', value: operationsFocus ? '5' : '3', tone: operationsFocus ? 'yellow' : 'green', helper: 'Client actions' },
   ];
 
-  return { todayOperations, actions, recentActivity, timeline, operationalHealth };
+  return { todayOperations, actions, recentActivity, operationalHealth };
 }
 
 function ChartFrame({ children, height = 'h-72' }) {
@@ -412,17 +372,17 @@ function QuickActionBar({ user }) {
 function TodayOperations({ items }) {
   return (
     <ChartCard title="Today's Operations" description="Live-style operational pulse for current CRM and field workflow.">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
         {items.map((item) => {
           const Icon = item.icon;
           return (
-            <div key={item.label} className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/55">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{item.label}</p>
-                <p className="mt-2 text-2xl font-semibold leading-none text-slate-950 dark:text-white">{item.value}</p>
+            <div key={item.label} className="flex min-h-20 items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950/55">
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold uppercase leading-4 tracking-wide text-slate-500 dark:text-slate-400">{item.label}</p>
+                <p className="mt-1 text-xl font-semibold leading-none text-slate-950 dark:text-white">{item.value}</p>
               </div>
-              <div className={`rounded-2xl p-3 ring-1 ${compactTone(item.tone)}`}>
-                <Icon className="h-5 w-5" />
+              <div className={`shrink-0 rounded-xl p-2 ring-1 ${compactTone(item.tone)}`}>
+                <Icon className="h-4 w-4" />
               </div>
             </div>
           );
@@ -434,7 +394,7 @@ function TodayOperations({ items }) {
 
 function ActionCenter({ actions }) {
   return (
-    <ChartCard title="Action Center / Pending Alerts" description="Management items that need review, assignment, or follow-up.">
+    <ChartCard title="Pending Alerts" description="Items requiring COO/management attention.">
       <div className="space-y-3">
         {actions.map((action) => (
           <div key={action.label} className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:flex-row sm:items-center sm:justify-between">
@@ -475,27 +435,6 @@ function RecentActivityFeed({ items }) {
   );
 }
 
-function WorkflowTimeline({ stages }) {
-  return (
-    <ChartCard title="Workflow Timeline" description="Business flow from lead creation to converted account.">
-      <div className="overflow-x-auto pb-1">
-        <div className="flex min-w-[920px] items-stretch">
-          {stages.map((stage, index) => (
-            <div key={stage.name} className="relative flex flex-1 flex-col items-center px-2 text-center">
-              {index < stages.length - 1 ? <div className="absolute left-1/2 top-6 h-0.5 w-full bg-slate-200 dark:bg-slate-800" /> : null}
-              <div className="relative grid h-12 w-12 place-items-center rounded-full bg-qpms-600 text-sm font-bold text-white shadow-lg shadow-qpms-600/20">{stage.count}</div>
-              <p className="mt-3 text-xs font-bold text-slate-900 dark:text-white">{stage.name}</p>
-              <span className={`mt-2 rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ${stage.status === 'Healthy' ? healthTone.green : stage.status === 'Active' ? healthTone.yellow : healthTone.red}`}>
-                {stage.status}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-    </ChartCard>
-  );
-}
-
 function OperationalHealth({ items }) {
   return (
     <ChartCard title="Operational Health / SLA Insights" description="Management indicators for turnaround, compliance, conversion, and risk.">
@@ -519,18 +458,16 @@ function OperationalHealth({ items }) {
 
 function CommandCenterOverview({ user, leads, siteVisits, stage }) {
   const data = useMemo(() => buildCommandCenterData({ user, leads, siteVisits, stage }), [user, leads, siteVisits, stage]);
+  const isExecutiveView = ['Admin', 'COO'].includes(user?.role);
 
   return (
     <div className="space-y-6">
-      <QuickActionBar user={user} />
+      {isExecutiveView ? null : <QuickActionBar user={user} />}
       <section className="grid gap-6 xl:grid-cols-[1.18fr_0.82fr]">
         <TodayOperations items={data.todayOperations} />
         <ActionCenter actions={data.actions} />
       </section>
-      <section className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
-        <WorkflowTimeline stages={data.timeline} />
-        <RecentActivityFeed items={data.recentActivity} />
-      </section>
+      <RecentActivityFeed items={data.recentActivity} />
       <OperationalHealth items={data.operationalHealth} />
     </div>
   );
