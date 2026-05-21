@@ -317,7 +317,7 @@ function buildCommandCenterData({ user, leads, siteVisits, stage }) {
   return { todayOperations, actions, recentActivity, operationalHealth };
 }
 
-function ChartFrame({ children, height = 'h-72' }) {
+function ChartFrame({ children, height = 'h-56' }) {
   return <div className={`${height} min-w-0 overflow-hidden rounded-2xl bg-slate-50 p-3 dark:bg-slate-950/55`}>{children}</div>;
 }
 
@@ -371,83 +371,97 @@ function QuickActionBar({ user }) {
 
 function TodayOperations({ items }) {
   return (
-    <ChartCard title="Today's Operations" description="Live-style operational pulse for current CRM and field workflow.">
+    <section className="enterprise-card p-3 sm:p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-[15px] font-semibold leading-5 text-slate-950 dark:text-white">Today's Operations</h2>
+          <p className="text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">Current operational pulse</p>
+        </div>
+      </div>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
         {items.map((item) => {
           const Icon = item.icon;
           return (
-            <div key={item.label} className="flex min-h-20 items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950/55">
+            <div key={item.label} className="flex min-h-16 items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/55">
               <div className="min-w-0">
-                <p className="text-[11px] font-bold uppercase leading-4 tracking-wide text-slate-500 dark:text-slate-400">{item.label}</p>
-                <p className="mt-1 text-xl font-semibold leading-none text-slate-950 dark:text-white">{item.value}</p>
+                <p className="truncate text-[10px] font-bold uppercase leading-4 tracking-wide text-slate-500 dark:text-slate-400">{item.label}</p>
+                <p className="mt-0.5 text-lg font-semibold leading-none text-slate-950 dark:text-white">{item.value}</p>
               </div>
-              <div className={`shrink-0 rounded-xl p-2 ring-1 ${compactTone(item.tone)}`}>
-                <Icon className="h-4 w-4" />
+              <div className={`shrink-0 rounded-lg p-1.5 ring-1 ${compactTone(item.tone)}`}>
+                <Icon className="h-3.5 w-3.5" />
               </div>
             </div>
           );
         })}
       </div>
-    </ChartCard>
+    </section>
   );
 }
 
 function ActionCenter({ actions }) {
   return (
-    <ChartCard title="Pending Alerts" description="Items requiring COO/management attention.">
-      <div className="space-y-3">
+    <section className="enterprise-card p-4">
+      <div className="mb-3">
+        <h2 className="text-[15px] font-semibold leading-5 text-slate-950 dark:text-white">Pending Alerts</h2>
+        <p className="text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">Items requiring COO/management attention.</p>
+      </div>
+      <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
         {actions.map((action) => (
-          <div key={action.label} className="flex flex-col gap-3 rounded-2xl border border-slate-100 bg-white px-4 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:flex-row sm:items-center sm:justify-between">
+          <div key={action.label} className="flex flex-col gap-2 rounded-xl border border-slate-100 bg-white px-3 py-2 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <p className="font-semibold text-slate-950 dark:text-white">{action.label}</p>
-                <span className={`rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ${priorityClass(action.priority)}`}>{action.priority}</span>
+                <p className="text-sm font-semibold leading-5 text-slate-950 dark:text-white">{action.label}</p>
+                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ${priorityClass(action.priority)}`}>{action.priority}</span>
               </div>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{action.count} records need attention</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{action.count} records need attention</p>
             </div>
-            <button type="button" className="focus-ring inline-flex items-center justify-center gap-1.5 rounded-xl bg-qpms-600 px-3.5 py-2 text-sm font-bold text-white transition hover:bg-qpms-700">
+            <button type="button" className="focus-ring inline-flex items-center justify-center gap-1 rounded-lg bg-qpms-600 px-2.5 py-1.5 text-xs font-bold text-white transition hover:bg-qpms-700">
               {action.cta}
-              <ArrowRight className="h-4 w-4" />
+              <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </div>
         ))}
       </div>
-    </ChartCard>
+    </section>
   );
 }
 
 function RecentActivityFeed({ items }) {
   return (
-    <ChartCard title="Recent Activity Feed" description="Latest CRM and operational workflow movements.">
-      <div className="space-y-4">
+    <section className="enterprise-card p-4">
+      <div className="mb-3">
+        <h2 className="text-[15px] font-semibold leading-5 text-slate-950 dark:text-white">Recent Activity Feed</h2>
+        <p className="text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">Latest CRM and operational movements.</p>
+      </div>
+      <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
         {items.map((item) => (
-          <div key={`${item.event}-${item.time}`} className="flex gap-3">
-            <div className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-qpms-500 shadow-[0_0_0_4px_rgba(79,130,251,0.14)]" />
+          <div key={`${item.event}-${item.time}`} className="flex gap-2.5">
+            <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-qpms-500 shadow-[0_0_0_3px_rgba(79,130,251,0.12)]" />
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-950 dark:text-white">{item.event}</p>
-              <p className="text-sm text-slate-500 dark:text-slate-400">{item.detail}</p>
-              <p className="mt-1 text-xs font-bold uppercase tracking-wide text-slate-400">{item.time}</p>
+              <p className="text-sm font-semibold leading-5 text-slate-950 dark:text-white">{item.event}</p>
+              <p className="truncate text-xs text-slate-500 dark:text-slate-400">{item.detail}</p>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{item.time}</p>
             </div>
           </div>
         ))}
       </div>
-    </ChartCard>
+    </section>
   );
 }
 
 function OperationalHealth({ items }) {
   return (
     <ChartCard title="Operational Health / SLA Insights" description="Management indicators for turnaround, compliance, conversion, and risk.">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         {items.map((item) => (
-          <div key={item.label} className={`rounded-2xl p-4 ring-1 ${healthTone[item.tone]}`}>
+          <div key={item.label} className={`rounded-xl p-3 ring-1 ${healthTone[item.tone]}`}>
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wide">{item.label}</p>
-                <p className="mt-2 text-2xl font-semibold leading-none">{item.value}</p>
-                <p className="mt-2 text-xs font-semibold opacity-80">{item.helper}</p>
+                <p className="text-[10px] font-bold uppercase leading-4 tracking-wide">{item.label}</p>
+                <p className="mt-1 text-xl font-semibold leading-none">{item.value}</p>
+                <p className="mt-1 text-[11px] font-semibold opacity-80">{item.helper}</p>
               </div>
-              <TimerReset className="h-5 w-5 shrink-0" />
+              <TimerReset className="h-4 w-4 shrink-0" />
             </div>
           </div>
         ))}
@@ -461,13 +475,13 @@ function CommandCenterOverview({ user, leads, siteVisits, stage }) {
   const isExecutiveView = ['Admin', 'COO'].includes(user?.role);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {isExecutiveView ? null : <QuickActionBar user={user} />}
-      <section className="grid gap-6 xl:grid-cols-[1.18fr_0.82fr]">
-        <TodayOperations items={data.todayOperations} />
+      <TodayOperations items={data.todayOperations} />
+      <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
         <ActionCenter actions={data.actions} />
+        <RecentActivityFeed items={data.recentActivity} />
       </section>
-      <RecentActivityFeed items={data.recentActivity} />
       <OperationalHealth items={data.operationalHealth} />
     </div>
   );
@@ -1155,7 +1169,7 @@ function ApprovalDashboard({ title, description, stage, siteVisits, leads, user 
 
       <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <ChartCard title="Review Aging" description="Queue aging overview for review SLA awareness.">
-          <ChartFrame height="h-64">
+          <ChartFrame height="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={agingData}>
                 <CartesianGrid stroke={chartGrid} vertical={false} />
