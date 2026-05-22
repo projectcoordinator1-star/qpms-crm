@@ -291,7 +291,7 @@ app.post('/send-sitevisit-mom', routeSendMom('sitevisit'));
 app.listen(port, () => {
   console.log('[QPMS Mail API] Startup complete', {
     port,
-    frontendOrigin,
+    allowedOrigins,
     emailUserConfigured: Boolean(process.env.EMAIL_USER),
     emailPassConfigured: Boolean(process.env.EMAIL_PASS),
   });
