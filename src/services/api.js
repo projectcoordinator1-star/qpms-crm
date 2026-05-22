@@ -8,7 +8,7 @@ console.log('[QPMS Mail API] Using API base:', API_BASE);
 
 export const api = axios.create({
   baseURL: API_BASE,
-  timeout: 20000,
+  timeout: 60000,
   headers: {
     'Content-Type': 'application/json',
   },

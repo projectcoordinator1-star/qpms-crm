@@ -29,14 +29,18 @@ function createTransporter() {
     throw new Error('EMAIL_USER and EMAIL_PASS are required');
   }
 
-  return nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
-}
+ return nodemailer.createTransport({
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true,
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 10000,
+});
 
 function normalizeRecipients(value) {
   if (!value) return [];
@@ -296,3 +300,4 @@ app.listen(port, () => {
     emailPassConfigured: Boolean(process.env.EMAIL_PASS),
   });
 });
+}
