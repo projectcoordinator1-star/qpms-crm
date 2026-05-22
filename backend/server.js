@@ -36,14 +36,24 @@ const apiDemoUsers = [
 ];
 
 const apiSessions = new Map();
-const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey, {
+function normalizeSupabaseUrl(url) {
+  return String(url || '').replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
+}
+
+const supabaseUrl = normalizeSupabaseUrl(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL);
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey, {
   auth: {
     persistSession: false,
     autoRefreshToken: false,
   },
 }) : null;
+const supabaseConfigStatus = {
+  configured: Boolean(supabase),
+  urlPresent: Boolean(supabaseUrl),
+  keyPresent: Boolean(supabaseKey),
+  serviceRolePresent: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+};
 
 const approvalRoleMap = {
   Commercial: 'Commercial Reviewer',
@@ -104,8 +114,8 @@ function requireRoles(roles) {
 
 function requireSupabase() {
   if (!supabase) {
-    const error = new Error('Supabase backend configuration is missing. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY or SUPABASE_URL and SUPABASE_ANON_KEY.');
-    error.statusCode = 500;
+    const error = new Error('Supabase backend configuration is missing on the API server. Set SUPABASE_URL and SUPABASE_ANON_KEY on Render, or set SUPABASE_SERVICE_ROLE_KEY for backend-only workflow writes.');
+    error.statusCode = 503;
     throw error;
   }
   return supabase;
@@ -698,7 +708,11 @@ app.get('/', (request, response) => {
 });
 
 app.get('/health', (request, response) => {
-  response.json({ ok: true, service: 'qpms-mail-api' });
+  response.json({
+    ok: true,
+    service: 'qpms-mail-api',
+    supabase: supabaseConfigStatus,
+  });
 });
 
 app.post('/api/test/reset', async (request, response) => {
@@ -1270,6 +1284,9 @@ app.listen(port, () => {
     allowedOrigins,
     emailUserConfigured: Boolean(process.env.EMAIL_USER),
     emailPassConfigured: Boolean(process.env.EMAIL_PASS),
+    supabaseConfigured: supabaseConfigStatus.configured,
+    supabaseUrlPresent: supabaseConfigStatus.urlPresent,
+    supabaseKeyPresent: supabaseConfigStatus.keyPresent,
   });
   verifyMailTransporter();
 });
