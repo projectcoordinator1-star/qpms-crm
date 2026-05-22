@@ -1,5 +1,8 @@
 import { isSupabaseConfigured, supabase } from '../lib/supabase.js';
 
+const appMode = String(import.meta.env.VITE_APP_MODE || 'demo').toLowerCase();
+const isProductionMode = appMode === 'production';
+
 function assertConfigured() {
   if (!isSupabaseConfigured || !supabase) {
     throw new Error('Supabase is not configured');
@@ -7,7 +10,100 @@ function assertConfigured() {
 }
 
 export function isRemoteWorkflowEnabled() {
-  return isSupabaseConfigured;
+  return isProductionMode || isSupabaseConfigured;
+}
+
+export function getWorkflowAppMode() {
+  return appMode;
+}
+
+export function isProductionWorkflowMode() {
+  return isProductionMode;
+}
+
+export function canUseLocalWorkflowStorage() {
+  return !isProductionMode;
+}
+
+function rpcMissing(error) {
+  const message = String(error?.message || error?.details || '').toLowerCase();
+  return error?.code === 'PGRST202' || error?.code === '42883' || message.includes('function') || message.includes('schema cache');
+}
+
+function normalizeRpcError(error, label) {
+  if (!error) return new Error(`${label} failed`);
+  const nextError = new Error(error.message || `${label} failed`);
+  nextError.code = error.code;
+  nextError.details = error.details;
+  nextError.hint = error.hint;
+  nextError.isRpcMissing = rpcMissing(error);
+  return nextError;
+}
+
+async function callWorkflowRpc(functionName, params, label) {
+  assertConfigured();
+  const { data, error } = await supabase.rpc(functionName, params);
+  if (error) {
+    console.error(`[QPMS Workflow RPC] ${label} failed`, error);
+    throw normalizeRpcError(error, label);
+  }
+  return data;
+}
+
+function createIdempotencyKey(scope, entityId) {
+  const suffix = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `${scope}:${entityId || 'new'}:${suffix}`;
+}
+
+const stageNameToCode = {
+  'Lead MOM': 'lead_mom',
+  'Site Visit Started': 'site_visit_started',
+  'Pre-Operational Assessment': 'site_visit_started',
+  'Operations Review': 'operations_review',
+  'Coordinator Costing Review': 'coordinator_costing_review',
+  'HR Validation': 'hr_validation',
+  'Commercial Review': 'commercial_review',
+  'Finance Review': 'finance_review',
+  'Returned to BD': 'returned_to_bd',
+  'Proposal Sent': 'proposal_sent',
+};
+
+const decisionToRpcDecision = {
+  approve: 'Approved',
+  approved: 'Approved',
+  Approved: 'Approved',
+  rework: 'Rework Requested',
+  'Rework Requested': 'Rework Requested',
+  reject: 'Rejected',
+  rejected: 'Rejected',
+  Rejected: 'Rejected',
+  reassign: 'Reassigned',
+  Reassigned: 'Reassigned',
+  escalate: 'Escalated',
+  Escalated: 'Escalated',
+};
+
+function stageCodeFor(stage) {
+  return stageNameToCode[stage] || stage || 'operations_review';
+}
+
+function compactActor(user = {}) {
+  return {
+    userId: user.id && /^[0-9a-f-]{36}$/i.test(String(user.id)) ? user.id : null,
+    name: user.name || user.full_name || user.email || '',
+    role: user.role || '',
+  };
+}
+
+function primaryContactPayload(lead) {
+  const contact = (lead.contacts || []).find((item) => item.isPrimary) || (lead.contacts || [])[0];
+  if (!contact) return null;
+  return {
+    contact_person_name: contact.name || lead.contact || '',
+    contact_person_designation: contact.designation || lead.designation || '',
+    contact_number: contact.phone || lead.phone || '',
+    email_id: contact.email || lead.email || '',
+  };
 }
 
 function pick(row, keys, fallback = '') {
@@ -112,6 +208,8 @@ export function appLeadToDbLead(lead) {
 
 export function dbSiteVisitToApp(row) {
   const lead = row.leads || {};
+  const workflowInstance = row.workflow_instance || row.workflow_instances?.[0] || {};
+  const activeAssignment = row.workflow_assignment || workflowInstance.workflow_assignments?.[0] || {};
   const contacts = (lead.lead_contacts || []).map((contact) => ({
     id: contact.id,
     name: contact.contact_person_name || '',
@@ -156,13 +254,17 @@ export function dbSiteVisitToApp(row) {
     status: row.status,
     assessmentStatus: assessment?.assessment_status || 'Draft',
     currentStage: row.current_stage,
+    workflowInstanceId: workflowInstance.id || '',
+    currentAssignmentId: activeAssignment.id || '',
+    workflowStageCode: workflowInstance.current_stage_code || '',
+    workflowStatus: workflowInstance.status || '',
     createdFrom: 'Supabase',
     survey: assessment ? dbAssessmentToSurvey(assessment) : undefined,
     assessmentId: assessment?.id,
     approvals,
     reviewStatus,
-    pendingWith: latestApproval.pending_with || row.pending_with || '',
-    approvalStatus: latestApproval.status || '',
+    pendingWith: activeAssignment.assigned_role || workflowInstance.pending_role || latestApproval.pending_with || row.pending_with || '',
+    approvalStatus: workflowInstance.approval_status || latestApproval.status || '',
     approvalRemarks: latestApproval.remarks || '',
     lastApprovalBy: latestApproval.approved_by || '',
     lastApprovalAt: latestApproval.approved_at || '',
@@ -411,9 +513,43 @@ export async function fetchWorkflowData() {
     console.warn('[QPMS Supabase] Site visits fetch skipped/failed', visitsResponse.error);
   }
 
+  const siteVisitRows = visitsResponse.error ? [] : visitsResponse.data || [];
+  const siteVisitIds = siteVisitRows.map((visit) => visit.id).filter(Boolean);
+  let workflowBySiteVisitId = {};
+
+  if (siteVisitIds.length) {
+    const workflowResponse = await supabase
+      .from('workflow_instances')
+      .select('*, workflow_assignments(*)')
+      .in('site_visit_id', siteVisitIds);
+    if (workflowResponse.error) {
+      if (rpcMissing(workflowResponse.error)) {
+        console.info('[QPMS Supabase] Workflow foundation tables unavailable; continuing with legacy workflow fetch');
+      } else {
+        console.warn('[QPMS Supabase] workflow_instances fetch skipped/failed', workflowResponse.error);
+      }
+    } else {
+      workflowBySiteVisitId = (workflowResponse.data || []).reduce((grouped, workflow) => {
+        const activeAssignments = (workflow.workflow_assignments || [])
+          .filter((assignment) => assignment.status === 'Pending')
+          .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+        grouped[workflow.site_visit_id] = {
+          ...workflow,
+          workflow_assignments: activeAssignments,
+        };
+        return grouped;
+      }, {});
+    }
+  }
+
   const leadsWithContacts = (leadsResponse.data || []).map((lead) => ({
     ...lead,
     lead_contacts: contactsByLeadId[lead.id] || [],
+  }));
+
+  const visitsWithWorkflow = siteVisitRows.map((visit) => ({
+    ...visit,
+    workflow_instance: workflowBySiteVisitId[visit.id],
   }));
 
   console.info('[QPMS Supabase] Workflow fetch success', {
@@ -424,8 +560,157 @@ export async function fetchWorkflowData() {
 
   return {
     leads: leadsWithContacts.map(dbLeadToAppLead),
-    siteVisits: visitsResponse.error ? [] : (visitsResponse.data || []).map(dbSiteVisitToApp),
+    siteVisits: visitsResponse.error ? [] : visitsWithWorkflow.map(dbSiteVisitToApp),
   };
+}
+
+export async function convertLeadToAssessment(lead, { user, idempotencyKey, metadata } = {}) {
+  const actor = compactActor(user);
+  const payload = await callWorkflowRpc(
+    'rpc_convert_lead_to_assessment',
+    {
+      p_lead_id: lead.id,
+      p_actor_user_id: actor.userId,
+      p_actor_name: actor.name || lead.created_by_name,
+      p_actor_role: actor.role || 'BD Team',
+      p_idempotency_key: idempotencyKey || createIdempotencyKey('lead-conversion', lead.id),
+      p_scheduled_visit_date: lead.scheduledVisitDate || null,
+      p_scheduled_visit_time: lead.scheduledVisitTime || null,
+      p_site_name: lead.location || lead.company || null,
+      p_primary_contact: primaryContactPayload(lead),
+      p_metadata: metadata || {},
+    },
+    'Lead conversion',
+  );
+  return payload;
+}
+
+export async function saveAssessmentSection({
+  visit,
+  sectionCode,
+  sectionName,
+  sectionData,
+  baseVersionNumber,
+  saveMode = 'save',
+  user,
+  remarks,
+}) {
+  const actor = compactActor(user);
+  return callWorkflowRpc(
+    'rpc_save_assessment_section',
+    {
+      p_site_visit_id: visit.id,
+      p_section_code: sectionCode,
+      p_section_name: sectionName || sectionCode,
+      p_section_data: sectionData || {},
+      p_base_version_number: baseVersionNumber ?? null,
+      p_save_mode: saveMode,
+      p_actor_user_id: actor.userId,
+      p_actor_name: actor.name,
+      p_actor_role: actor.role,
+      p_remarks: remarks || null,
+    },
+    'Assessment section save',
+  );
+}
+
+export async function submitForReview({ visit, targetStage = 'operations_review', user, idempotencyKey, remarks }) {
+  const actor = compactActor(user);
+  return callWorkflowRpc(
+    'rpc_submit_for_review',
+    {
+      p_workflow_instance_id: visit.workflowInstanceId || null,
+      p_site_visit_id: visit.id,
+      p_target_stage_code: stageCodeFor(targetStage),
+      p_actor_user_id: actor.userId,
+      p_actor_name: actor.name,
+      p_actor_role: actor.role || 'BD Team',
+      p_idempotency_key: idempotencyKey || createIdempotencyKey('submit-review', visit.id),
+      p_remarks: remarks || null,
+    },
+    'Submit for review',
+  );
+}
+
+export async function recordApprovalDecision({
+  visit,
+  stage,
+  decision,
+  remarks,
+  user,
+  assignmentId,
+  reassignToRole,
+  reassignToUserId,
+  idempotencyKey,
+}) {
+  const actor = compactActor(user);
+  return callWorkflowRpc(
+    'rpc_record_approval_decision',
+    {
+      p_workflow_instance_id: visit.workflowInstanceId || visit.workflow_instance_id,
+      p_assignment_id: assignmentId || visit.currentAssignmentId || null,
+      p_stage_code: stageCodeFor(stage || visit.currentStage),
+      p_decision: decisionToRpcDecision[decision] || decision || 'Approved',
+      p_actor_user_id: actor.userId,
+      p_actor_name: actor.name,
+      p_actor_role: actor.role,
+      p_remarks: remarks || null,
+      p_reassign_to_role: reassignToRole || null,
+      p_reassign_to_user_id: reassignToUserId || null,
+      p_idempotency_key: idempotencyKey || createIdempotencyKey('approval', visit.id),
+    },
+    'Approval decision',
+  );
+}
+
+export async function createNotification(notification) {
+  return callWorkflowRpc(
+    'rpc_create_notification',
+    {
+      p_recipient_user_id: notification.recipientUserId || null,
+      p_recipient_role: notification.recipientRole || null,
+      p_workflow_instance_id: notification.workflowInstanceId || null,
+      p_lead_id: notification.leadId || null,
+      p_site_visit_id: notification.siteVisitId || null,
+      p_notification_type: notification.type || 'Workflow Alert',
+      p_title: notification.title || 'Workflow alert',
+      p_message: notification.message || null,
+      p_priority: notification.priority || 'Medium',
+      p_action_url: notification.actionUrl || null,
+      p_action_label: notification.actionLabel || null,
+      p_metadata: notification.metadata || {},
+    },
+    'Create notification',
+  );
+}
+
+export async function markNotificationRead(notificationId, readerUserId = null) {
+  return callWorkflowRpc(
+    'rpc_mark_notification_read',
+    {
+      p_notification_id: notificationId,
+      p_reader_user_id: readerUserId,
+    },
+    'Mark notification read',
+  );
+}
+
+export async function generateProposalRecord({ visit, proposal, user, idempotencyKey }) {
+  const actor = compactActor(user);
+  return callWorkflowRpc(
+    'rpc_generate_proposal_record',
+    {
+      p_workflow_instance_id: visit.workflowInstanceId || visit.workflow_instance_id,
+      p_actor_user_id: actor.userId,
+      p_actor_name: actor.name,
+      p_actor_role: actor.role || 'BD Team',
+      p_proposal_number: proposal?.proposalNumber || null,
+      p_template_name: proposal?.templateName || null,
+      p_payload: proposal || {},
+      p_idempotency_key: idempotencyKey || createIdempotencyKey('proposal', visit.id),
+    },
+    'Generate proposal record',
+  );
 }
 
 export async function createLeadRemote(lead) {

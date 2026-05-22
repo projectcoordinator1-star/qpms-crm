@@ -28,7 +28,7 @@ import { useAuth } from '../context/auth-context.js';
 import { useWorkflow } from '../context/workflow-context.js';
 import { canViewBdTeam, isApprovalReviewer, isCommercialTeam, isCoordinator, isFinanceTeam, isHrReviewer, isOperationsTeam } from '../data/mockUsers.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
-import { sendSiteVisitMomEmail } from '../services/mailService.js';
+import { sendProposalEmail, sendSiteVisitMomEmail } from '../services/mailService.js';
 import { logAssessmentAuditRemote } from '../services/workflowRepository.js';
 import { calculateManpowerCost } from '../services/costingEngine.js';
 import { buildProposalRows, getProposalTemplateMetadata } from '../services/proposalService.js';
@@ -296,6 +296,11 @@ function buildSiteVisitMom(visit, survey) {
   };
 }
 
+function isProposalReady(visit) {
+  return ['Returned to BD', 'Ready for Proposal', 'Proposal Generated'].includes(visit?.status)
+    || ['Returned to BD', 'Ready for Proposal'].includes(visit?.currentStage);
+}
+
 function getCommercialTotals(survey) {
   const revenue = (survey.commercial.billingComponents || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const expenses = (survey.commercial.expenseComponents || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -304,6 +309,51 @@ function getCommercialTotals(survey) {
   const margin = revenue - monthlyCost;
   const marginPercent = revenue ? (margin / revenue) * 100 : 0;
   return { revenue, expenses, nonBillable, monthlyCost, margin, marginPercent };
+}
+
+function buildProposalPayload(visit, survey, metadata) {
+  const safeSurvey = mergeSurvey(survey);
+  const rows = buildProposalRows({ survey: safeSurvey });
+  const totals = getCommercialTotals(safeSurvey);
+  const lineItems = rows.length
+    ? rows
+    : [{
+        designation: 'IFM Services',
+        quantity: 1,
+        shift: safeSurvey.operatingHours || 'General',
+        ratePerHead: totals.revenue,
+        monthlyTotal: totals.revenue,
+        managementFee: Number(safeSurvey.commercial?.managementFee || 0),
+        contractValue: totals.revenue * 12,
+      }];
+
+  return {
+    proposalNumber: `QPMS-PROP-${String(Date.now()).slice(-6)}`,
+    clientName: visit?.company || '',
+    to: visit?.email || '',
+    cc: [visit?.assigned_bd_email, 'bdhead@qpms.in'].filter(Boolean).join(', '),
+    subject: `Business Proposal - ${visit?.company || 'Client'} - QPMS`,
+    templateName: 'New Business Proposal Format.xlsx',
+    templatePath: metadata.templatePath,
+    supportedExports: metadata.supportedExports,
+    proposalValue: lineItems.reduce((sum, row) => sum + Number(row.contractValue || 0), 0),
+    monthlyValue: lineItems.reduce((sum, row) => sum + Number(row.monthlyTotal || 0), 0),
+    projectedRevenue: totals.revenue,
+    monthlyCost: totals.monthlyCost,
+    margin: totals.margin,
+    marginPercent: totals.marginPercent,
+    lineItems,
+    body: [
+      `Dear ${visit?.contact || 'Client'},`,
+      '',
+      `Please find the QPMS facility management proposal for ${visit?.company || 'your site'}.`,
+      `Monthly value: ${currency(lineItems.reduce((sum, row) => sum + Number(row.monthlyTotal || 0), 0))}`,
+      `Annual contract value: ${currency(lineItems.reduce((sum, row) => sum + Number(row.contractValue || 0), 0))}`,
+      '',
+      'Regards,',
+      'QPMS Business Development Team',
+    ].join('\n'),
+  };
 }
 
 function sectionSnapshot(section, survey) {
@@ -375,7 +425,8 @@ function VisitMeta({ icon, label, value }) {
   );
 }
 
-function AssessmentQueueCard({ visit, onOpenAssessment, onOpenMom }) {
+function AssessmentQueueCard({ visit, onOpenAssessment, onOpenMom, onGenerateProposal, proposalLoading }) {
+  const readyForProposal = isProposalReady(visit);
   return (
     <Motion.article
       layout
@@ -413,11 +464,17 @@ function AssessmentQueueCard({ visit, onOpenAssessment, onOpenMom }) {
         <div className="flex flex-wrap items-center gap-2">
           <CompactStatusBadge label="MOM" value={visit.momStatus || 'Pending'} tone="amber" />
           <CompactStatusBadge label="Stage" value={normalizeStage(visit.currentStage || 'Assessment')} tone="blue" />
+          {readyForProposal ? <CompactStatusBadge label="Proposal" value={visit.status === 'Proposal Sent' ? 'Sent' : 'Ready'} tone="blue" /> : null}
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={(event) => { event.stopPropagation(); onOpenAssessment(); }} className="focus-ring rounded-xl bg-gradient-to-r from-qpms-700 to-qpms-500 px-3.5 py-2 text-xs font-bold text-white shadow-lg shadow-qpms-600/20 hover:from-qpms-800 hover:to-qpms-600">
             Open Assessment
           </button>
+          {readyForProposal ? (
+            <button type="button" disabled={proposalLoading} onClick={(event) => { event.stopPropagation(); onGenerateProposal(); }} className="focus-ring rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2 text-xs font-bold text-emerald-700 shadow-sm hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+              Generate Proposal
+            </button>
+          ) : null}
           <button type="button" onClick={(event) => { event.stopPropagation(); onOpenMom(); }} className="focus-ring rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
             {visit.siteMom ? 'View Site Visit MOM' : 'Create Site Visit MOM'}
           </button>
@@ -661,6 +718,8 @@ export default function Sites() {
     saveSiteVisitMom,
     sendSiteVisitMom,
     submitCommercialReview,
+    generateProposal,
+    markProposalSent,
     uploadSiteImage,
   } = useWorkflow();
   const [query, setQuery] = useState('');
@@ -677,6 +736,8 @@ export default function Sites() {
   const [editingSection, setEditingSection] = useState('');
   const [pendingEditSection, setPendingEditSection] = useState('');
   const [momComposerVisit, setMomComposerVisit] = useState(null);
+  const [proposalPreviewVisit, setProposalPreviewVisit] = useState(null);
+  const [proposalDraft, setProposalDraft] = useState(null);
   const [showWorkflowTimeline, setShowWorkflowTimeline] = useState(false);
   const [sectionsCollapsed, setSectionsCollapsed] = useState(false);
   usePageTitle('Site Visit & Estimation');
@@ -705,6 +766,7 @@ export default function Sites() {
   const isEditingActiveSection = editingSection === activeSection;
   const isActiveSectionLocked = (isSectionSaved && !isEditingActiveSection) || !roleCanEditActiveSection;
   const proposalMetadata = getProposalTemplateMetadata();
+  const selectedVisitReadyForProposal = isProposalReady(selectedVisit);
 
   const filteredVisits = useMemo(() => {
     const value = query.trim().toLowerCase();
@@ -961,18 +1023,126 @@ function duplicateRow(section, index) {
         user,
         oldValue: sectionSnapshot(activeSection, selectedVisit.survey),
         newValue: sectionSnapshot(activeSection, surveyDraft),
-        remarks: 'Assessment submitted to Operations, Coordinator, HR, Commercial, and Finance review workflow.',
+        remarks: 'Assessment submitted to HR, Commercial, and Finance review workflow.',
       });
       rememberSectionAudit('Submitted for Review Workflow');
       setEditingSection('');
-      setAutoSaveLabel('Submitted');
-      showToast('Submitted to Operations Review', 'success');
+      setAutoSaveLabel('Submitted for Review');
+      showToast('Submitted for Review. Pending with HR Reviewer.', 'success');
     } catch (error) {
       setAutoSaveLabel('Failed to save');
       showToast(`Failed to submit: ${error.message}`, 'error');
     } finally {
       setPendingAction('');
     }
+  }
+
+  async function handleGenerateProposal(targetVisit = selectedVisit) {
+    if (!targetVisit) return;
+    const sourceSurvey = targetVisit.id === selectedVisit?.id ? surveyDraft : mergeSurvey(targetVisit.survey);
+    const nextProposal = buildProposalPayload(targetVisit, sourceSurvey, proposalMetadata);
+    setPendingAction('generateProposal');
+    try {
+      if (targetVisit.id === selectedVisit?.id && surveyDraft) {
+        await Promise.resolve(saveSiteSurvey(targetVisit.id, surveyDraft, 'Proposal Ready', user));
+      }
+      await Promise.resolve(generateProposal(targetVisit.id, nextProposal, user));
+      setProposalDraft(nextProposal);
+      setProposalPreviewVisit(targetVisit);
+      showToast('Proposal generated for preview', 'success');
+    } catch (error) {
+      showToast(`Proposal generation failed: ${error.message}`, 'error');
+    } finally {
+      setPendingAction('');
+    }
+  }
+
+  async function handleSendProposal() {
+    const targetVisit = proposalPreviewVisit || selectedVisit;
+    const nextProposal = proposalDraft || buildProposalPayload(targetVisit, surveyDraft || mergeSurvey(targetVisit?.survey), proposalMetadata);
+    if (!targetVisit) return;
+    setPendingAction('sendProposal');
+    try {
+      await sendProposalEmail(nextProposal, targetVisit);
+      await Promise.resolve(markProposalSent(targetVisit.id, nextProposal));
+      setProposalPreviewVisit(null);
+      setProposalDraft(null);
+      showToast('Proposal mail sent. Record moved to Existing Business Pipeline.', 'success');
+    } catch (error) {
+      showToast(`Proposal mail failed: ${error.response?.data?.message || error.message}`, 'error');
+    } finally {
+      setPendingAction('');
+    }
+  }
+
+  function renderProposalPreviewModal() {
+    if (!proposalPreviewVisit || !proposalDraft) return null;
+    return (
+      <div className="fixed inset-0 z-[67] flex items-center justify-center bg-slate-950/60 px-4 py-6 backdrop-blur-sm" onClick={() => setProposalPreviewVisit(null)}>
+        <Motion.section initial={{ opacity: 0, y: 18, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl border border-white/70 bg-white p-6 shadow-2xl dark:border-slate-800 dark:bg-slate-900" onClick={(event) => event.stopPropagation()}>
+          <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4 dark:border-slate-800">
+            <div>
+              <p className="text-xs font-bold uppercase text-qpms-600 dark:text-qpms-300">Proposal Preview</p>
+              <h3 className="mt-1 text-xl font-semibold text-slate-950 dark:text-white">{proposalDraft.subject}</h3>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{proposalPreviewVisit.company}</p>
+            </div>
+            <button type="button" onClick={() => setProposalPreviewVisit(null)} className="focus-ring rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white">
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-4">
+            <SummaryPill label="Proposal No." value={proposalDraft.proposalNumber} />
+            <SummaryPill label="Monthly Value" value={currency(proposalDraft.monthlyValue)} />
+            <SummaryPill label="Annual Value" value={currency(proposalDraft.proposalValue)} />
+            <SummaryPill label="Margin" value={`${Number(proposalDraft.marginPercent || 0).toFixed(1)}%`} />
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700 dark:border-slate-800 dark:bg-slate-950/55 dark:text-slate-300">
+            <p className="font-bold text-slate-950 dark:text-white">Email Preview</p>
+            <p className="mt-3 font-semibold">To: {proposalDraft.to || 'Client email pending'}</p>
+            <p className="font-semibold">CC: {proposalDraft.cc || 'Not configured'}</p>
+            <p className="mt-3 whitespace-pre-line">{proposalDraft.body}</p>
+          </div>
+
+          <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800">
+            <table className="min-w-full divide-y divide-slate-200 text-sm dark:divide-slate-800">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-500 dark:bg-slate-950 dark:text-slate-400">
+                <tr>
+                  <th className="px-4 py-3 text-left">Designation</th>
+                  <th className="px-4 py-3 text-left">Qty</th>
+                  <th className="px-4 py-3 text-left">Shift</th>
+                  <th className="px-4 py-3 text-left">Rate / Head</th>
+                  <th className="px-4 py-3 text-left">Monthly Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-900">
+                {proposalDraft.lineItems.map((row, index) => (
+                  <tr key={`${row.designation}-${index}`}>
+                    <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">{row.designation || 'IFM Services'}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{row.quantity}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{row.shift || 'General'}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{currency(row.ratePerHead)}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{currency(row.monthlyTotal)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-white p-4 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
+            Attachments prepared from {proposalDraft.templateName}. PDF/Excel export remains linked to the proposal engine template mapping.
+          </div>
+
+          <div className="mt-6 flex flex-wrap justify-end gap-3">
+            <button type="button" onClick={() => setProposalPreviewVisit(null)} className="focus-ring rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">Cancel</button>
+            <button type="button" onClick={handleSendProposal} disabled={pendingAction === 'sendProposal'} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-qpms-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700">
+              <ButtonContent loading={pendingAction === 'sendProposal'} icon={Send}>Send Proposal Mail</ButtonContent>
+            </button>
+          </div>
+        </Motion.section>
+      </div>
+    );
   }
 
   function renderActiveSection() {
@@ -1367,6 +1537,8 @@ function duplicateRow(section, index) {
     setPendingEditSection('');
     setShowWorkflowTimeline(false);
     setSectionsCollapsed(false);
+    setProposalPreviewVisit(null);
+    setProposalDraft(null);
   }
 
   if (routeVisitId) {
@@ -1518,6 +1690,11 @@ function duplicateRow(section, index) {
               <button type="button" onClick={handleSubmitCommercialReview} disabled={pendingAction === 'submitReview'} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 hover:bg-slate-800 dark:bg-white dark:text-slate-950">
                 <ButtonContent loading={pendingAction === 'submitReview'}>Submit for Reviews</ButtonContent>
               </button>
+              {selectedVisitReadyForProposal ? (
+                <button type="button" onClick={() => handleGenerateProposal(selectedVisit)} disabled={pendingAction === 'generateProposal'} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-qpms-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 hover:from-emerald-700 hover:to-qpms-700">
+                  <ButtonContent loading={pendingAction === 'generateProposal'} icon={FileText}>Generate Proposal</ButtonContent>
+                </button>
+              ) : null}
             </div>
           </div>
         </div>
@@ -1534,7 +1711,7 @@ function duplicateRow(section, index) {
                 <div>
                   <p className="text-xs font-bold uppercase text-qpms-600 dark:text-qpms-300">Workflow Timeline</p>
                   <h3 className="mt-1 text-xl font-semibold text-slate-950 dark:text-white">{selectedVisit.company}</h3>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Current stage: {selectedStage} • Pending with: {selectedVisit.pendingWith || 'BD Executive'}</p>
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Current stage: {selectedStage} - Pending with: {selectedVisit.pendingWith || 'BD Executive'}</p>
                 </div>
                 <button type="button" onClick={() => setShowWorkflowTimeline(false)} className="focus-ring rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white">
                   <X className="h-5 w-5" />
@@ -1603,6 +1780,8 @@ function duplicateRow(section, index) {
             </Motion.section>
           </div>
         ) : null}
+
+        {renderProposalPreviewModal()}
 
         {pendingEditSection ? (
           <div className="fixed inset-0 z-[65] flex items-center justify-center bg-slate-950/60 px-4 backdrop-blur-sm">
@@ -1701,6 +1880,8 @@ function duplicateRow(section, index) {
                       visit={visit}
                       onOpenAssessment={() => openVisitPage(visit)}
                       onOpenMom={() => openQueueMomWorkspace(visit)}
+                      onGenerateProposal={() => handleGenerateProposal(visit)}
+                      proposalLoading={pendingAction === 'generateProposal'}
                     />
                   ))}
                 </AnimatePresence>
@@ -1758,6 +1939,8 @@ function duplicateRow(section, index) {
           </Motion.section>
         </div>
       ) : null}
+
+      {renderProposalPreviewModal()}
 
       {previewPhoto ? (
         <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/75 p-5" onClick={() => setPreviewPhoto(null)}>

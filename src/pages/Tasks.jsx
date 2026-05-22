@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
-import { CheckCircle2, Clock3, RotateCcw, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock3, ExternalLink, RotateCcw } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/PageHeader.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
+import Toast from '../components/Toast.jsx';
 import { useAuth } from '../context/auth-context.js';
 import { useWorkflow } from '../context/workflow-context.js';
 import { isCoordinator, isFinanceTeam, isHrReviewer, isOperationsTeam } from '../data/mockUsers.js';
@@ -17,15 +19,18 @@ function serviceScope(visit) {
 const stageWaitingCopy = {
   'Operations Review': 'Records appear here immediately after BD submits the site assessment for review.',
   'Coordinator Costing Review': 'Records appear here after Operations approves the assessment.',
-  'HR Validation': 'Records appear here after Coordinator Costing Review is approved.',
-  'Commercial Review': 'Records appear here after Operations, Coordinator, and HR approvals are completed.',
+  'HR Validation': 'Records appear here immediately after BD submits the assessment for review.',
+  'Commercial Review': 'Records appear here after HR approves the assessment.',
   'Finance Review': 'Records appear here after Commercial Review is approved.',
 };
 
 export default function Tasks() {
   const { user } = useAuth();
   const { siteVisits, decideApproval } = useWorkflow();
+  const navigate = useNavigate();
   const [remarks, setRemarks] = useState({});
+  const [pendingDecision, setPendingDecision] = useState('');
+  const [toast, setToast] = useState(null);
   const financeMode = isFinanceTeam(user);
   const hrMode = isHrReviewer(user);
   const operationsMode = isOperationsTeam(user);
@@ -41,13 +46,28 @@ export default function Tasks() {
 
   const pendingCount = queue.filter((visit) => !['Approved', 'Rejected', 'Rework Requested'].includes(visit.approvalStatus)).length;
 
-  function handleDecision(visit, decision) {
-    decideApproval(visit.id, decision, remarks[visit.id] || '', user, stage);
-    setRemarks((current) => ({ ...current, [visit.id]: '' }));
+  function showToast(message, type = 'success') {
+    setToast({ message, type });
+    window.setTimeout(() => setToast(null), 3000);
+  }
+
+  async function handleDecision(visit, decision) {
+    const actionKey = `${visit.id}-${decision}`;
+    setPendingDecision(actionKey);
+    try {
+      await Promise.resolve(decideApproval(visit.id, decision, remarks[visit.id] || '', user, stage));
+      setRemarks((current) => ({ ...current, [visit.id]: '' }));
+      showToast(decision === 'rework' ? 'Rework requested' : decision === 'return' ? 'Returned to BD for proposal' : 'Review approved', 'success');
+    } catch (error) {
+      showToast(`Review action failed: ${error.message}`, 'error');
+    } finally {
+      setPendingDecision('');
+    }
   }
 
   return (
     <div className="space-y-7">
+      <Toast message={toast?.message} type={toast?.type} />
       <PageHeader
         title={pageTitle}
         description={operationsMode ? 'Review tools, machinery, consumables, site readiness, and execution feasibility.' : coordinatorMode ? 'Consolidate manpower, reliever logic, zone logic, and costing readiness before HR validation.' : hrMode ? 'Review manpower, wage, reliever, gender, shift, and uniform details without commercial costing access.' : financeMode ? 'Review financial feasibility, billing, margins, payment terms, and commercial risk.' : 'Review BD submitted assessments for pricing, margins, management fee, and commercial statement readiness.'}
@@ -96,16 +116,21 @@ export default function Tasks() {
                   placeholder={operationsMode ? 'Add operations remarks' : coordinatorMode ? 'Add coordinator remarks' : hrMode ? 'Add HR remarks' : financeMode ? 'Add finance remarks' : 'Add commercial remarks'}
                   className="focus-ring min-h-24 w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-white"
                 />
-                <div className="grid grid-cols-3 gap-2">
-                  <button type="button" onClick={() => handleDecision(visit, 'approve')} className="focus-ring inline-flex items-center justify-center gap-1 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700">
+                <button type="button" onClick={() => navigate(`/site-visit/${visit.id}`)} className="focus-ring inline-flex w-full items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                  <ExternalLink className="h-4 w-4" /> Open submitted record
+                </button>
+                <div className={financeMode ? 'grid grid-cols-3 gap-2' : 'grid grid-cols-2 gap-2'}>
+                  <button type="button" disabled={Boolean(pendingDecision)} onClick={() => handleDecision(visit, 'approve')} className="focus-ring inline-flex items-center justify-center gap-1 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60">
                     <CheckCircle2 className="h-4 w-4" /> Approve
                   </button>
-                  <button type="button" onClick={() => handleDecision(visit, 'rework')} className="focus-ring inline-flex items-center justify-center gap-1 rounded-xl bg-amber-500 px-3 py-2 text-xs font-bold text-white hover:bg-amber-600">
-                    <RotateCcw className="h-4 w-4" /> Rework
+                  <button type="button" disabled={Boolean(pendingDecision)} onClick={() => handleDecision(visit, 'rework')} className="focus-ring inline-flex items-center justify-center gap-1 rounded-xl bg-amber-500 px-3 py-2 text-xs font-bold text-white hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60">
+                    <RotateCcw className="h-4 w-4" /> Request Rework
                   </button>
-                  <button type="button" onClick={() => handleDecision(visit, 'reject')} className="focus-ring inline-flex items-center justify-center gap-1 rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white hover:bg-rose-700">
-                    <XCircle className="h-4 w-4" /> Reject
-                  </button>
+                  {financeMode ? (
+                    <button type="button" disabled={Boolean(pendingDecision)} onClick={() => handleDecision(visit, 'return')} className="focus-ring inline-flex items-center justify-center gap-1 rounded-xl bg-qpms-600 px-3 py-2 text-xs font-bold text-white hover:bg-qpms-700 disabled:cursor-not-allowed disabled:opacity-60">
+                      <CheckCircle2 className="h-4 w-4" /> Return to BD
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </div>

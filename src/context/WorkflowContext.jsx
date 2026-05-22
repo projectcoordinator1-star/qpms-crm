@@ -2,14 +2,22 @@ import { useEffect, useState } from 'react';
 import { leadRows } from '../data/qpmsWorkflowData.js';
 import { bdExecutives, getExecutiveByName } from '../data/mockUsers.js';
 import {
+  canUseLocalWorkflowStorage,
+  convertLeadToAssessment,
   createLeadRemote,
   createSiteVisitRemote,
   deleteLeadRemote,
   fetchWorkflowData,
+  getWorkflowAppMode,
+  generateProposalRecord,
   isRemoteWorkflowEnabled,
+  isProductionWorkflowMode,
+  recordApprovalDecision,
   saveLeadMomRemote,
+  saveAssessmentSection,
   saveSiteAssessmentRemote,
   saveSiteMomRemote,
+  submitForReview,
   submitApprovalRemote,
   recordApprovalDecisionRemote,
   updateLeadRemote,
@@ -19,6 +27,7 @@ import { WorkflowContext } from './workflow-context.js';
 
 const leadsStorageKey = 'qpms-crm-workflow-leads';
 const siteVisitsStorageKey = 'qpms-crm-workflow-site-visits';
+const appMode = getWorkflowAppMode();
 
 const defaultLeadDetails = {
   industry: 'Facility Management',
@@ -201,6 +210,42 @@ function upsertById(items, nextItem) {
   return exists ? items.map((item) => (item.id === nextItem.id ? nextItem : item)) : [nextItem, ...items];
 }
 
+function shouldUseLegacyRemoteFallback(error) {
+  return !isProductionWorkflowMode() && (error?.isRpcMissing || String(error?.message || '').toLowerCase().includes('schema cache'));
+}
+
+function rpcIdempotencyKey(scope, id) {
+  const suffix = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `ui:${scope}:${id || 'unknown'}:${suffix}`;
+}
+
+function inferSectionFromSurveyPatch(survey = {}) {
+  const keys = Object.keys(survey || {}).filter((key) => !key.startsWith('__'));
+  if (survey.__sectionCode) {
+    return {
+      code: survey.__sectionCode,
+      name: survey.__sectionName || survey.__sectionCode,
+      data: survey.__sectionData || survey,
+      baseVersionNumber: survey.__baseVersionNumber,
+    };
+  }
+  if (keys.length === 1) {
+    const code = keys[0];
+    return {
+      code,
+      name: code.replace(/([A-Z])/g, ' $1').replace(/^./, (letter) => letter.toUpperCase()),
+      data: survey[code],
+      baseVersionNumber: survey.__baseVersionNumber,
+    };
+  }
+  return {
+    code: 'legacy_full_assessment_snapshot',
+    name: 'Legacy Full Assessment Snapshot',
+    data: survey,
+    baseVersionNumber: survey.__baseVersionNumber,
+  };
+}
+
 export function WorkflowProvider({ children }) {
   const [leads, setLeads] = useState(() => (isRemoteWorkflowEnabled() ? [] : readStorage(leadsStorageKey, leadRows).map(normalizeLead)));
   const [siteVisits, setSiteVisits] = useState(() => (isRemoteWorkflowEnabled() ? [] : readStorage(siteVisitsStorageKey, [])));
@@ -209,12 +254,12 @@ export function WorkflowProvider({ children }) {
 
   useEffect(() => {
     if (!isRemoteWorkflowEnabled()) {
-      console.info('[QPMS Workflow] Supabase env missing; using local/mock workflow storage');
+      console.info('[QPMS Workflow] Supabase env missing; using local/mock workflow storage', { appMode });
       return;
     }
 
     let active = true;
-    console.info('[QPMS Workflow] Supabase env detected; loading remote workflow data');
+    console.info('[QPMS Workflow] Remote workflow mode active; loading Supabase workflow data', { appMode });
     refreshWorkflowData()
       .then(() => {
         if (!active) return;
@@ -253,12 +298,12 @@ export function WorkflowProvider({ children }) {
   }
 
   useEffect(() => {
-    if (isRemoteWorkflowEnabled()) return;
+    if (!canUseLocalWorkflowStorage() || isRemoteWorkflowEnabled()) return;
     window.localStorage.setItem(leadsStorageKey, JSON.stringify(leads));
   }, [leads]);
 
   useEffect(() => {
-    if (isRemoteWorkflowEnabled()) return;
+    if (!canUseLocalWorkflowStorage() || isRemoteWorkflowEnabled()) return;
     window.localStorage.setItem(siteVisitsStorageKey, JSON.stringify(siteVisits));
   }, [siteVisits]);
 
@@ -395,16 +440,36 @@ export function WorkflowProvider({ children }) {
         };
         if (shouldCreateSiteVisit) createdVisit = buildSiteVisitFromLead(nextLead);
         if (isRemoteWorkflowEnabled()) {
-          const remoteTasks = [
-            updateLeadRemote(leadId, nextLead),
-            saveLeadMomRemote(leadId, mom, 'Sent'),
-          ];
-          if (shouldCreateSiteVisit) remoteTasks.push(createSiteVisitRemote(nextLead));
-          Promise.all(remoteTasks)
+          const remoteWorkflow = async () => {
+            await saveLeadMomRemote(leadId, mom, 'Sent');
+            if (shouldCreateSiteVisit) {
+              try {
+                await convertLeadToAssessment(nextLead, {
+                  user: {
+                    id: nextLead.created_by_user_id,
+                    name: nextLead.created_by_name,
+                    email: nextLead.assigned_bd_email,
+                    role: 'BD Team',
+                  },
+                  idempotencyKey: rpcIdempotencyKey('lead-conversion', leadId),
+                });
+              } catch (error) {
+                if (!shouldUseLegacyRemoteFallback(error)) throw error;
+                console.warn('[QPMS Workflow] Lead conversion RPC unavailable; using legacy demo conversion fallback', error.message);
+                await updateLeadRemote(leadId, nextLead);
+                await createSiteVisitRemote(nextLead);
+              }
+            } else if (!isProductionWorkflowMode()) {
+              await updateLeadRemote(leadId, nextLead);
+            }
+          };
+
+          remoteWorkflow()
             .then(() => refreshWorkflowData())
             .catch((error) => {
               console.warn('Lead MOM/Site Visit Supabase save failed:', error.message);
-              setBackendStatus('fallback');
+              setBackendStatus(isProductionWorkflowMode() ? 'error' : 'fallback');
+              setWorkflowError(`Lead MOM workflow failed: ${error.message}`);
             });
         }
         return nextLead;
@@ -441,10 +506,35 @@ export function WorkflowProvider({ children }) {
       activity: ['Site survey draft saved', ...(visit.activity || [])].slice(0, 8),
     }));
     if (isRemoteWorkflowEnabled() && visit) {
-      saveSiteAssessmentRemote(visit, mergedSurvey, status, user).catch((error) => {
-        console.warn('Site assessment Supabase save failed:', error.message);
-        setBackendStatus('fallback');
-      });
+      const section = inferSectionFromSurveyPatch(survey);
+      saveAssessmentSection({
+        visit,
+        sectionCode: section.code,
+        sectionName: section.name,
+        sectionData: section.data,
+        baseVersionNumber: section.baseVersionNumber,
+        saveMode: status === 'Draft' ? 'draft' : 'save',
+        user,
+        remarks: status === 'Submitted' ? 'Assessment section submitted' : 'Assessment section saved',
+      })
+        .then(async () => {
+          if (!isProductionWorkflowMode()) {
+            await saveSiteAssessmentRemote(visit, mergedSurvey, status, user);
+          }
+        })
+        .catch((error) => {
+          if (shouldUseLegacyRemoteFallback(error)) {
+            console.warn('[QPMS Workflow] Assessment section RPC unavailable; using legacy demo assessment save fallback', error.message);
+            saveSiteAssessmentRemote(visit, mergedSurvey, status, user).catch((legacyError) => {
+              console.warn('Legacy site assessment Supabase save failed:', legacyError.message);
+              setBackendStatus('fallback');
+            });
+            return;
+          }
+          console.warn('Site assessment section save failed:', error.message);
+          setBackendStatus(isProductionWorkflowMode() ? 'error' : 'fallback');
+          setWorkflowError(`Assessment save failed: ${error.message}`);
+        });
     }
   }
 
@@ -478,43 +568,67 @@ export function WorkflowProvider({ children }) {
     }
   }
 
-  function submitCommercialReview(siteVisitId) {
+  async function submitCommercialReview(siteVisitId) {
     const visit = siteVisits.find((item) => item.id === siteVisitId);
+    if (!visit) throw new Error('Site visit not found.');
     updateSiteVisit(siteVisitId, (visit) => ({
       status: 'Pending Review',
-      currentStage: 'Operations Review',
-      pendingWith: 'Operations Team',
+      currentStage: 'HR Validation',
+      pendingWith: 'HR Reviewer',
       approvalStatus: 'Pending',
       approvalRemarks: '',
       reviewStatus: {
         ...(visit.reviewStatus || {}),
-        'Operations Review': 'Pending',
-        'Coordinator Costing Review': 'Not Started',
-        'HR Validation': 'Not Started',
+        'Operations Review': 'Not Required',
+        'Coordinator Costing Review': 'Not Required',
+        'HR Validation': 'Pending',
         'Commercial Review': 'Not Started',
         'Finance Review': 'Not Started',
       },
       approvalTimeline: buildApprovalTimeline(visit, 'Site Visit Started'),
-      activity: ['Submitted to Operations Review', ...(visit.activity || [])].slice(0, 8),
+      activity: ['Submitted to HR Review', ...(visit.activity || [])].slice(0, 8),
     }));
     if (isRemoteWorkflowEnabled() && visit) {
-      submitApprovalRemote(visit, visit.assessmentId).catch((error) => {
-        console.warn('Approval Supabase submit failed:', error.message);
-        setBackendStatus('fallback');
-      });
+      try {
+        await submitForReview({
+          visit,
+          targetStage: 'hr_validation',
+          user: { name: visit.created_by_name, email: visit.assigned_bd_email, role: 'BD Team' },
+          idempotencyKey: rpcIdempotencyKey('submit-review', siteVisitId),
+          remarks: 'Assessment submitted for HR, Commercial, and Finance review demo flow',
+        });
+        await refreshWorkflowData();
+      } catch (error) {
+        if (shouldUseLegacyRemoteFallback(error)) {
+          console.warn('[QPMS Workflow] Submit for review RPC unavailable; using legacy demo approval fallback', error.message);
+          try {
+            await submitApprovalRemote(visit, visit.assessmentId);
+            await refreshWorkflowData();
+            return;
+          } catch (legacyError) {
+            console.warn('Legacy approval Supabase submit failed:', legacyError.message);
+            setBackendStatus('fallback');
+            throw legacyError;
+          }
+        }
+        console.warn('Approval submit failed:', error.message);
+        setBackendStatus(isProductionWorkflowMode() ? 'error' : 'fallback');
+        setWorkflowError(`Submit for review failed: ${error.message}`);
+        throw error;
+      }
     }
   }
 
-  function decideApproval(siteVisitId, decision, remarks, user, reviewStage) {
+  async function decideApproval(siteVisitId, decision, remarks, user, reviewStage) {
     const visit = siteVisits.find((item) => item.id === siteVisitId);
-    if (!visit) return;
+    if (!visit) throw new Error('Site visit not found.');
 
     const stage = reviewStage || visit.currentStage || 'Commercial Review';
-    const normalizedDecision = decision === 'rework' ? 'Rework Requested' : decision === 'reject' ? 'Rejected' : 'Approved';
-    const orderedStages = ['Operations Review', 'Coordinator Costing Review', 'HR Validation', 'Commercial Review', 'Finance Review'];
+    const normalizedDecision = decision === 'rework' ? 'Rework Requested' : decision === 'reject' ? 'Rejected' : decision === 'return' ? 'Approved' : 'Approved';
+    const orderedStages = ['HR Validation', 'Commercial Review', 'Finance Review'];
     const nextReviewStatus = {
-      'Operations Review': 'Pending',
-      'Coordinator Costing Review': 'Not Started',
+      'Operations Review': 'Not Required',
+      'Coordinator Costing Review': 'Not Required',
       'HR Validation': 'Not Started',
       'Commercial Review': 'Not Started',
       'Finance Review': 'Not Started',
@@ -529,7 +643,7 @@ export function WorkflowProvider({ children }) {
       }
     }
     const nextPendingStage = orderedStages.find((name) => nextReviewStatus[name] === 'Pending');
-    const allApproved = orderedStages.every((name) => nextReviewStatus[name] === 'Approved');
+    const allApproved = orderedStages.every((name) => nextReviewStatus[name] === 'Approved') || decision === 'return';
     const nextStage = allApproved ? 'Returned to BD' : nextPendingStage;
     const pendingOwner = {
       'Operations Review': 'Operations Team',
@@ -563,18 +677,87 @@ export function WorkflowProvider({ children }) {
     }));
 
     if (isRemoteWorkflowEnabled()) {
-      recordApprovalDecisionRemote({
+      try {
+        await recordApprovalDecision({
         visit,
         stage,
-        status: normalizedDecision,
-        pendingWith,
+        decision: normalizedDecision,
         remarks,
         user,
-      }).catch((error) => {
-        console.warn('Approval Supabase decision failed:', error.message);
-        setBackendStatus('fallback');
-      });
+        });
+        await refreshWorkflowData();
+      } catch (error) {
+        if (shouldUseLegacyRemoteFallback(error) || (!isProductionWorkflowMode() && !visit.workflowInstanceId)) {
+          console.warn('[QPMS Workflow] Approval decision RPC unavailable; using legacy demo decision fallback', error.message);
+          try {
+            await recordApprovalDecisionRemote({
+              visit,
+              stage,
+              status: normalizedDecision,
+              pendingWith,
+              remarks,
+              user,
+            });
+            await refreshWorkflowData();
+            return;
+          } catch (legacyError) {
+            console.warn('Legacy approval Supabase decision failed:', legacyError.message);
+            setBackendStatus('fallback');
+            throw legacyError;
+          }
+        }
+        console.warn('Approval decision failed:', error.message);
+        setBackendStatus(isProductionWorkflowMode() ? 'error' : 'fallback');
+        setWorkflowError(`Approval decision failed: ${error.message}`);
+        throw error;
+      }
     }
+  }
+
+  async function generateProposal(siteVisitId, proposal, user) {
+    const visit = siteVisits.find((item) => item.id === siteVisitId);
+    if (!visit) throw new Error('Site visit not found.');
+    updateSiteVisit(siteVisitId, (visit) => ({
+      proposal: { ...(visit.proposal || {}), ...proposal, generatedAt: new Date().toISOString() },
+      status: 'Proposal Generated',
+      currentStage: 'Returned to BD',
+      pendingWith: 'BD Executive',
+      activity: ['Proposal generated', ...(visit.activity || [])].slice(0, 8),
+    }));
+
+    if (isRemoteWorkflowEnabled()) {
+      try {
+        await generateProposalRecord({
+          visit,
+          proposal,
+          user,
+          idempotencyKey: rpcIdempotencyKey('proposal', siteVisitId),
+        });
+        await refreshWorkflowData();
+      } catch (error) {
+        if (shouldUseLegacyRemoteFallback(error) || (!isProductionWorkflowMode() && !visit.workflowInstanceId)) {
+          console.warn('[QPMS Workflow] Proposal RPC unavailable; retaining demo proposal locally', error.message);
+          setBackendStatus('fallback');
+          return;
+        }
+        setBackendStatus('error');
+        setWorkflowError(`Proposal generation failed: ${error.message}`);
+        throw error;
+      }
+    }
+  }
+
+  async function markProposalSent(siteVisitId, proposalPatch = {}) {
+    const visit = siteVisits.find((item) => item.id === siteVisitId);
+    if (!visit) throw new Error('Site visit not found.');
+    updateSiteVisit(siteVisitId, (visit) => ({
+      proposal: { ...(visit.proposal || {}), ...proposalPatch, sentAt: new Date().toISOString(), status: 'Sent' },
+      status: 'Proposal Sent',
+      currentStage: 'Proposal Sent',
+      pendingWith: 'Existing Business Operations',
+      approvalStatus: 'Completed',
+      activity: ['Proposal sent to client', 'Moved to Existing Business Pipeline', ...(visit.activity || [])].slice(0, 8),
+    }));
   }
 
   async function uploadSiteImage(payload) {
@@ -606,6 +789,8 @@ export function WorkflowProvider({ children }) {
     sendSiteVisitMom,
     submitCommercialReview,
     decideApproval,
+    generateProposal,
+    markProposalSent,
     uploadSiteImage,
   };
 

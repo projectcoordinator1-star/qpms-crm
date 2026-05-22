@@ -15,7 +15,7 @@ import { canManageLeads, isApprovalReviewer } from '../data/mockUsers.js';
 import Logo from './Logo.jsx';
 
 const navItems = [
-  { label: 'Dashboard', to: '/dashboard', icon: Home },
+  { label: 'DashboardE', to: '/dashboard', icon: Home },
   { label: 'Lead Management', to: '/crm', icon: Workflow },
   { label: 'Site Visit & Estimation', to: '/sites', icon: ClipboardCheck },
   { label: 'MOM Draft', to: '/tickets', icon: FileText },

@@ -39,15 +39,31 @@ export default function Login() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isWelcoming, setIsWelcoming] = useState(false);
   const navigate = useNavigate();
-  const { setUser } = useAuth();
+  const { setUser, loginWithPassword, isProductionAuthMode } = useAuth();
   usePageTitle('Sign in');
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault();
     setError('');
     setIsSubmitting(true);
 
     const normalizedUsername = username.trim().toLowerCase();
+
+    if (isProductionAuthMode) {
+      try {
+        const nextUser = await loginWithPassword(normalizedUsername, password);
+        setIsSubmitting(false);
+        setIsWelcoming(true);
+        window.setTimeout(() => {
+          navigate('/dashboard', { replace: true });
+        }, 900);
+        return nextUser;
+      } catch (authError) {
+        setError(authError.message || 'Unable to sign in with Supabase Auth.');
+        setIsSubmitting(false);
+        return null;
+      }
+    }
 
     const matchedUser = findMockUser(normalizedUsername, password);
 
@@ -77,7 +93,7 @@ export default function Login() {
     }, 650);
   }
 
-  const matchedWelcomeUser = findMockUser(username, password);
+  const matchedWelcomeUser = isProductionAuthMode ? null : findMockUser(username, password);
   const welcomeText = matchedWelcomeUser ? `Welcome, ${matchedWelcomeUser.name}` : 'Welcome Back';
 
   return (

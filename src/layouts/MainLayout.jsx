@@ -1,16 +1,30 @@
 import { useState } from 'react';
-import { Navigate, Outlet } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import Navbar from '../components/Navbar.jsx';
 import Sidebar from '../components/Sidebar.jsx';
 import { useAuth } from '../context/auth-context.js';
+import { canAccessRoute } from '../utils/authRoles.js';
 
 export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [theme, setTheme] = useState('light');
-  const { user } = useAuth();
+  const { user, authStatus } = useAuth();
+  const location = useLocation();
+
+  if (authStatus === 'loading') {
+    return (
+      <div className="grid min-h-screen place-items-center bg-slate-50 text-sm font-semibold text-slate-500">
+        Verifying secure access...
+      </div>
+    );
+  }
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (!canAccessRoute(user, location.pathname)) {
+    return <Navigate to="/dashboard" replace />;
   }
 
   return (
