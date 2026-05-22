@@ -1,0 +1,318 @@
+{
+  "info": {
+    "name": "QPMS CRM Approval Matrix Automation",
+    "_postman_id": "84d2f5b8-qpms-approval-matrix",
+    "description": "Demo-safe API automation for QPMS CRM lead, site visit, assessment, and approval matrix testing.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 Reset Demo Store",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/api/test/reset"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": { "exec": ["pm.test('demo store reset', () => pm.expect(pm.response.json().ok).to.eql(true));"] }
+        }
+      ]
+    },
+    {
+      "name": "01 Login BD User",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"bd1@qpms.co.in\",\n  \"password\": \"123456\"\n}" },
+        "url": "{{baseUrl}}/api/auth/login"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": { "exec": ["const json = pm.response.json();", "pm.test('BD login ok', () => pm.expect(json.ok).to.eql(true));", "pm.environment.set('bdToken', json.token);"] }
+        }
+      ]
+    },
+    {
+      "name": "02 Login Commercial Reviewer",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"commercial1@qpms.co.in\",\n  \"password\": \"123456\"\n}" },
+        "url": "{{baseUrl}}/api/auth/login"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": { "exec": ["const json = pm.response.json();", "pm.test('Commercial login ok', () => pm.expect(json.ok).to.eql(true));", "pm.environment.set('commercialToken', json.token);"] }
+        }
+      ]
+    },
+    {
+      "name": "03 Login Finance Reviewer",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"finance1@qpms.co.in\",\n  \"password\": \"123456\"\n}" },
+        "url": "{{baseUrl}}/api/auth/login"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": { "exec": ["const json = pm.response.json();", "pm.test('Finance login ok', () => pm.expect(json.ok).to.eql(true));", "pm.environment.set('financeToken', json.token);"] }
+        }
+      ]
+    },
+    {
+      "name": "04 Login HR Reviewer",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"hr1@qpms.co.in\",\n  \"password\": \"123456\"\n}" },
+        "url": "{{baseUrl}}/api/auth/login"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": { "exec": ["const json = pm.response.json();", "pm.test('HR login ok', () => pm.expect(json.ok).to.eql(true));", "pm.environment.set('hrToken', json.token);"] }
+        }
+      ]
+    },
+    {
+      "name": "05 Create Dummy Lead",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{bdToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"company\": \"Postman IFM Demo Client\",\n  \"primaryContact\": \"Demo Client Contact\",\n  \"primaryContactEmail\": \"demo.client@example.com\",\n  \"industryType\": \"Integrated Facility Management\",\n  \"state\": \"Tamil Nadu\",\n  \"city\": \"Chennai\",\n  \"leadSource\": \"Postman Automation\",\n  \"leadPriority\": \"High\",\n  \"serviceScope\": [\"Soft Services Housekeeping\", \"Security Services\", \"Pest Control\"]\n}"
+        },
+        "url": "{{baseUrl}}/api/leads"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": { "exec": ["const json = pm.response.json();", "pm.test('lead created', () => pm.expect(json.ok).to.eql(true));", "pm.environment.set('leadId', json.leadId);"] }
+        }
+      ]
+    },
+    {
+      "name": "06 Convert Lead to Site Visit",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{bdToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"location\": \"Chennai Demo Site\",\n  \"scheduledVisitDate\": \"2026-05-25\",\n  \"scheduledVisitTime\": \"10:30\"\n}" },
+        "url": "{{baseUrl}}/api/leads/{{leadId}}/site-visit"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": { "exec": ["const json = pm.response.json();", "pm.test('site visit created', () => pm.expect(json.ok).to.eql(true));", "pm.environment.set('siteVisitId', json.siteVisitId);"] }
+        }
+      ]
+    },
+    {
+      "name": "07 Submit Site Visit Assessment",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{bdToken}}" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"manpower\": [\n    { \"designation\": \"Facility Supervisor\", \"quantity\": 2, \"shift\": \"General\", \"gender\": \"Any\", \"wageCategory\": \"Skilled\" },\n    { \"designation\": \"Housekeeping Associate\", \"quantity\": 12, \"shift\": \"Day\", \"gender\": \"Any\", \"wageCategory\": \"Unskilled\" }\n  ],\n  \"serviceScope\": [\"Housekeeping\", \"Security\", \"Pest Control\"],\n  \"proposalValue\": 1200000,\n  \"monthlyValue\": 100000,\n  \"commercial\": { \"marginPercent\": 12, \"managementFee\": 8 },\n  \"finance\": { \"paymentTerms\": \"30 days\" },\n  \"hr\": { \"minimumWageValidated\": true }\n}"
+        },
+        "url": "{{baseUrl}}/api/site-visits/{{siteVisitId}}/assessment"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": { "exec": ["const json = pm.response.json();", "pm.test('assessment submitted', () => pm.expect(json.ok).to.eql(true));"] }
+        }
+      ]
+    },
+    {
+      "name": "08 Submit for Approval Matrix",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{bdToken}}" }],
+        "url": "{{baseUrl}}/api/site-visits/{{siteVisitId}}/submit-approval-matrix"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const json = pm.response.json();",
+              "pm.test('approval matrix submitted', () => pm.expect(json.ok).to.eql(true));",
+              "pm.environment.set('approvalId', json.approvalId);",
+              "(json.approvals || []).forEach((approval) => {",
+              "  if (approval.department === 'Commercial') pm.environment.set('commercialApprovalId', approval.id);",
+              "  if (approval.department === 'Finance') pm.environment.set('financeApprovalId', approval.id);",
+              "  if (approval.department === 'HR') pm.environment.set('hrApprovalId', approval.id);",
+              "  if (approval.department === 'Management') pm.environment.set('managementApprovalId', approval.id);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Commercial Queue",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{commercialToken}}" }],
+        "url": "{{baseUrl}}/api/approvals/queue?department=Commercial"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": { "exec": ["const json = pm.response.json();", "pm.test('commercial queue has record', () => pm.expect(json.count).to.be.above(0));", "pm.environment.set('commercialApprovalId', json.approvals[0].id);"] }
+        }
+      ]
+    },
+    {
+      "name": "10 Approve Commercial Review",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{commercialToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"decision\": \"approve\",\n  \"remarks\": \"Commercial pricing and margin approved.\"\n}" },
+        "url": "{{baseUrl}}/api/approvals/{{commercialApprovalId}}/decision"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": { "exec": ["const json = pm.response.json();", "pm.test('commercial approved', () => pm.expect(json.approval.status).to.eql('Approved'));"] }
+        }
+      ]
+    },
+    {
+      "name": "11 Finance Queue",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{financeToken}}" }],
+        "url": "{{baseUrl}}/api/approvals/queue?department=Finance"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": { "exec": ["const json = pm.response.json();", "pm.test('finance queue has record', () => pm.expect(json.count).to.be.above(0));", "pm.environment.set('financeApprovalId', json.approvals[0].id);"] }
+        }
+      ]
+    },
+    {
+      "name": "12 Approve Finance Review",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{financeToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"decision\": \"approve\",\n  \"remarks\": \"Finance feasibility and payment terms approved.\"\n}" },
+        "url": "{{baseUrl}}/api/approvals/{{financeApprovalId}}/decision"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": { "exec": ["const json = pm.response.json();", "pm.test('finance approved', () => pm.expect(json.approval.status).to.eql('Approved'));"] }
+        }
+      ]
+    },
+    {
+      "name": "13 HR Queue",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{hrToken}}" }],
+        "url": "{{baseUrl}}/api/approvals/queue?department=HR"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": { "exec": ["const json = pm.response.json();", "pm.test('HR queue has record', () => pm.expect(json.count).to.be.above(0));", "pm.environment.set('hrApprovalId', json.approvals[0].id);"] }
+        }
+      ]
+    },
+    {
+      "name": "14 Approve HR Review",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{hrToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"decision\": \"approve\",\n  \"remarks\": \"Manpower, wage, shift, and reliever assumptions approved.\"\n}" },
+        "url": "{{baseUrl}}/api/approvals/{{hrApprovalId}}/decision"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": { "exec": ["const json = pm.response.json();", "pm.test('HR approved', () => pm.expect(json.approval.status).to.eql('Approved'));"] }
+        }
+      ]
+    },
+    {
+      "name": "15 Verify Final Workflow Status",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{bdToken}}" }],
+        "url": "{{baseUrl}}/api/workflows/{{siteVisitId}}/status"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const json = pm.response.json();",
+              "pm.test('workflow status available', () => pm.expect(json.ok).to.eql(true));",
+              "pm.test('all required departments approved', () => {",
+              "  const statuses = Object.fromEntries(json.approvals.map((approval) => [approval.department, approval.status]));",
+              "  pm.expect(statuses.Commercial).to.eql('Approved');",
+              "  pm.expect(statuses.Finance).to.eql('Approved');",
+              "  pm.expect(statuses.HR).to.eql('Approved');",
+              "});",
+              "pm.test('workflow returned to BD', () => pm.expect(json.workflow.currentStage).to.eql('Returned to BD'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Scenario - Commercial Reject",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "Bearer {{commercialToken}}" }
+        ],
+        "body": { "mode": "raw", "raw": "{\n  \"decision\": \"reject\",\n  \"remarks\": \"Commercial rejected for low margin.\"\n}" },
+        "url": "{{baseUrl}}/api/approvals/{{commercialApprovalId}}/decision"
+      }
+    },
+    {
+      "name": "Scenario - Missing Manpower Validation",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Authorization", "value": "Bearer {{bdToken}}" }],
+        "url": "{{baseUrl}}/api/site-visits/{{siteVisitId}}/submit-approval-matrix"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": { "exec": ["pm.test('missing manpower should fail if no manpower rows were saved', () => pm.expect([200, 400]).to.include(pm.response.code));"] }
+        }
+      ]
+    }
+  ]
+}

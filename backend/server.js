@@ -1,4 +1,5 @@
 import cors from 'cors';
+import { randomUUID } from 'node:crypto';
 import dotenv from 'dotenv';
 import express from 'express';
 import nodemailer from 'nodemailer';
@@ -23,6 +24,184 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '10mb' }));
+
+const apiDemoUsers = [
+  { id: 'bd-1', name: 'Ananya Rao', email: 'bd1@qpms.co.in', password: '123456', role: 'BD Executive' },
+  { id: 'commercial-1', name: 'Commercial Team 1', email: 'commercial1@qpms.co.in', password: '123456', role: 'Commercial Reviewer' },
+  { id: 'finance-1', name: 'Finance Team 1', email: 'finance1@qpms.co.in', password: '123456', role: 'Finance Reviewer' },
+  { id: 'hr-1', name: 'HR Reviewer 1', email: 'hr1@qpms.co.in', password: '123456', role: 'HR Reviewer' },
+  { id: 'admin', name: 'Admin', email: 'admin@qpms.co.in', password: '123456', role: 'Admin' },
+];
+
+const approvalMatrixStore = {
+  tokens: new Map(),
+  leads: new Map(),
+  siteVisits: new Map(),
+  approvals: new Map(),
+  events: [],
+};
+
+const approvalRoleMap = {
+  Commercial: 'Commercial Reviewer',
+  Finance: 'Finance Reviewer',
+  HR: 'HR Reviewer',
+  Management: 'Admin',
+};
+
+const reviewerRoleToDepartment = {
+  'Commercial Reviewer': 'Commercial',
+  'Finance Reviewer': 'Finance',
+  'HR Reviewer': 'HR',
+  Admin: 'Management',
+};
+
+function normalizeDecision(value) {
+  const decision = String(value || '').trim().toLowerCase();
+  if (['approve', 'approved'].includes(decision)) return 'Approved';
+  if (['reject', 'rejected'].includes(decision)) return 'Rejected';
+  if (['rework', 'request rework', 'rework requested'].includes(decision)) return 'Rework Requested';
+  return '';
+}
+
+function createApiId(prefix) {
+  return `${prefix}-${randomUUID()}`;
+}
+
+function createToken(user) {
+  const token = `qpms-demo-${user.id}-${randomUUID()}`;
+  approvalMatrixStore.tokens.set(token, user);
+  return token;
+}
+
+function getBearerToken(request) {
+  return String(request.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+}
+
+function requireApiAuth(request, response, next) {
+  const token = getBearerToken(request);
+  const user = approvalMatrixStore.tokens.get(token);
+  if (!user) {
+    response.status(401).json({ ok: false, message: 'Valid Bearer token required. Login with /api/auth/login first.' });
+    return;
+  }
+  request.apiUser = user;
+  next();
+}
+
+function requireRoles(roles) {
+  return (request, response, next) => {
+    if (!roles.includes(request.apiUser?.role)) {
+      response.status(403).json({ ok: false, message: `Role ${request.apiUser?.role || 'Unknown'} cannot perform this action.` });
+      return;
+    }
+    next();
+  };
+}
+
+function addApprovalEvent(type, payload) {
+  approvalMatrixStore.events.push({
+    id: createApiId('evt'),
+    type,
+    at: new Date().toISOString(),
+    ...payload,
+  });
+}
+
+function getSiteVisitApprovals(siteVisitId) {
+  return [...approvalMatrixStore.approvals.values()].filter((approval) => approval.siteVisitId === siteVisitId);
+}
+
+function calculateWorkflowStatus(siteVisitId) {
+  const approvals = getSiteVisitApprovals(siteVisitId);
+  const rejected = approvals.find((approval) => approval.status === 'Rejected');
+  if (rejected) {
+    return {
+      approvalStatus: 'Rejected',
+      currentStage: `${rejected.stage} Rejected`,
+      pendingWith: 'BD Executive',
+      reworkStatus: 'Closed',
+    };
+  }
+
+  const rework = approvals.find((approval) => approval.status === 'Rework Requested');
+  if (rework) {
+    return {
+      approvalStatus: 'Rework Requested',
+      currentStage: `${rework.stage} Rework`,
+      pendingWith: 'BD Executive',
+      reworkStatus: 'Open',
+    };
+  }
+
+  const pending = approvals.filter((approval) => approval.status === 'Pending');
+  if (pending.length) {
+    return {
+      approvalStatus: 'Pending',
+      currentStage: 'Approval Matrix Review',
+      pendingWith: pending.map((approval) => approval.department).join(', '),
+      reworkStatus: 'None',
+    };
+  }
+
+  return {
+    approvalStatus: approvals.length ? 'Approved' : 'Not Submitted',
+    currentStage: approvals.length ? 'Returned to BD' : 'Site Visit Started',
+    pendingWith: approvals.length ? 'BD Executive' : 'BD Executive',
+    reworkStatus: 'None',
+  };
+}
+
+function syncSiteVisitWorkflow(siteVisitId) {
+  const visit = approvalMatrixStore.siteVisits.get(siteVisitId);
+  if (!visit) return null;
+  const workflow = calculateWorkflowStatus(siteVisitId);
+  const nextVisit = {
+    ...visit,
+    ...workflow,
+    status: workflow.approvalStatus === 'Approved' ? 'Ready for Proposal' : workflow.approvalStatus,
+    updatedAt: new Date().toISOString(),
+  };
+  approvalMatrixStore.siteVisits.set(siteVisitId, nextVisit);
+  return nextVisit;
+}
+
+function createApproval(siteVisit, department, stage) {
+  const approval = {
+    id: createApiId('apr'),
+    approvalId: '',
+    leadId: siteVisit.leadId,
+    siteVisitId: siteVisit.id,
+    department,
+    stage,
+    assignedRole: approvalRoleMap[department],
+    status: 'Pending',
+    remarks: '',
+    approvedBy: null,
+    approvedAt: null,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  approval.approvalId = approval.id;
+  approvalMatrixStore.approvals.set(approval.id, approval);
+  return approval;
+}
+
+function ensureApprovalMatrix(siteVisit) {
+  const existing = getSiteVisitApprovals(siteVisit.id);
+  if (existing.length) return existing;
+
+  const approvals = [
+    createApproval(siteVisit, 'Commercial', 'Commercial Review'),
+    createApproval(siteVisit, 'Finance', 'Finance Review'),
+    createApproval(siteVisit, 'HR', 'HR Review'),
+  ];
+
+  if (Number(siteVisit.assessment?.proposalValue || 0) >= 2500000) {
+    approvals.push(createApproval(siteVisit, 'Management', 'COO Approval'));
+  }
+
+  return approvals;
+}
 
 function createTransporter() {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
@@ -346,6 +525,252 @@ app.get('/', (request, response) => {
 
 app.get('/health', (request, response) => {
   response.json({ ok: true, service: 'qpms-mail-api' });
+});
+
+app.post('/api/test/reset', (request, response) => {
+  approvalMatrixStore.tokens.clear();
+  approvalMatrixStore.leads.clear();
+  approvalMatrixStore.siteVisits.clear();
+  approvalMatrixStore.approvals.clear();
+  approvalMatrixStore.events = [];
+  response.json({ ok: true, message: 'Approval matrix test store reset.' });
+});
+
+app.post('/api/auth/login', (request, response) => {
+  const email = String(request.body?.email || '').trim().toLowerCase();
+  const password = String(request.body?.password || '');
+  const user = apiDemoUsers.find((item) => item.email === email && item.password === password);
+  if (!user) {
+    response.status(401).json({ ok: false, message: 'Invalid demo credentials.' });
+    return;
+  }
+
+  const token = createToken(user);
+  response.json({
+    ok: true,
+    token,
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    },
+  });
+});
+
+app.post('/api/leads', requireApiAuth, requireRoles(['BD Executive', 'BD Head', 'Admin']), (request, response) => {
+  const now = new Date().toISOString();
+  const lead = {
+    id: createApiId('lead'),
+    leadId: '',
+    company: request.body?.company || request.body?.clientName || 'Postman Demo Client',
+    primaryContact: request.body?.primaryContact || 'Demo Contact',
+    primaryContactEmail: request.body?.primaryContactEmail || 'demo.client@example.com',
+    primaryContactPhone: request.body?.primaryContactPhone || '+91 90000 00000',
+    industryType: request.body?.industryType || 'Facility Management',
+    state: request.body?.state || 'Tamil Nadu',
+    city: request.body?.city || 'Chennai',
+    leadSource: request.body?.leadSource || 'Postman Automation',
+    leadPriority: request.body?.leadPriority || 'High',
+    serviceScope: request.body?.serviceScope || ['Soft Services Housekeeping', 'Security Services'],
+    status: 'Active',
+    leadStage: 'New Lead',
+    createdBy: request.apiUser.email,
+    createdAt: now,
+    updatedAt: now,
+  };
+  lead.leadId = lead.id;
+  approvalMatrixStore.leads.set(lead.id, lead);
+  addApprovalEvent('Lead Created', { leadId: lead.id, actor: request.apiUser.email });
+  response.status(201).json({ ok: true, leadId: lead.id, lead });
+});
+
+app.post('/api/leads/:leadId/site-visit', requireApiAuth, requireRoles(['BD Executive', 'BD Head', 'Admin']), (request, response) => {
+  const lead = approvalMatrixStore.leads.get(request.params.leadId);
+  if (!lead) {
+    response.status(404).json({ ok: false, message: 'Lead not found.' });
+    return;
+  }
+
+  const existing = [...approvalMatrixStore.siteVisits.values()].find((visit) => visit.leadId === lead.id);
+  if (existing) {
+    response.json({ ok: true, siteVisitId: existing.id, siteVisit: existing, reused: true });
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const siteVisit = {
+    id: createApiId('sv'),
+    siteVisitId: '',
+    leadId: lead.id,
+    company: lead.company,
+    location: request.body?.location || `${lead.city}, ${lead.state}`,
+    scheduledVisitDate: request.body?.scheduledVisitDate || '',
+    scheduledVisitTime: request.body?.scheduledVisitTime || '',
+    assignedBdExecutive: request.apiUser.name,
+    status: 'Assessment Draft',
+    currentStage: 'Site Visit Started',
+    pendingWith: 'BD Executive',
+    approvalStatus: 'Not Submitted',
+    assessment: null,
+    createdAt: now,
+    updatedAt: now,
+  };
+  siteVisit.siteVisitId = siteVisit.id;
+  approvalMatrixStore.siteVisits.set(siteVisit.id, siteVisit);
+  approvalMatrixStore.leads.set(lead.id, {
+    ...lead,
+    leadStage: 'Converted',
+    status: 'Converted to Assessment',
+    updatedAt: now,
+  });
+  addApprovalEvent('Site Visit Created', { leadId: lead.id, siteVisitId: siteVisit.id, actor: request.apiUser.email });
+  response.status(201).json({ ok: true, siteVisitId: siteVisit.id, siteVisit });
+});
+
+app.post('/api/site-visits/:siteVisitId/assessment', requireApiAuth, requireRoles(['BD Executive', 'BD Head', 'Admin']), (request, response) => {
+  const siteVisit = approvalMatrixStore.siteVisits.get(request.params.siteVisitId);
+  if (!siteVisit) {
+    response.status(404).json({ ok: false, message: 'Site visit not found.' });
+    return;
+  }
+
+  const assessment = {
+    manpower: request.body?.manpower || [],
+    serviceScope: request.body?.serviceScope || [],
+    commercial: request.body?.commercial || {},
+    finance: request.body?.finance || {},
+    hr: request.body?.hr || {},
+    proposalValue: Number(request.body?.proposalValue || request.body?.commercial?.proposalValue || 0),
+    monthlyValue: Number(request.body?.monthlyValue || request.body?.commercial?.monthlyValue || 0),
+    riskLevel: request.body?.riskLevel || 'Medium',
+    submittedAt: new Date().toISOString(),
+  };
+  const nextVisit = {
+    ...siteVisit,
+    assessment,
+    status: 'Assessment Submitted',
+    currentStage: 'Assessment Saved',
+    pendingWith: 'BD Executive',
+    updatedAt: new Date().toISOString(),
+  };
+  approvalMatrixStore.siteVisits.set(nextVisit.id, nextVisit);
+  addApprovalEvent('Assessment Submitted', { siteVisitId: nextVisit.id, actor: request.apiUser.email });
+  response.json({ ok: true, siteVisitId: nextVisit.id, assessment, siteVisit: nextVisit });
+});
+
+app.post('/api/site-visits/:siteVisitId/submit-approval-matrix', requireApiAuth, requireRoles(['BD Executive', 'BD Head', 'Admin']), (request, response) => {
+  const siteVisit = approvalMatrixStore.siteVisits.get(request.params.siteVisitId);
+  if (!siteVisit) {
+    response.status(404).json({ ok: false, message: 'Site visit not found.' });
+    return;
+  }
+  if (!siteVisit.assessment) {
+    response.status(400).json({ ok: false, message: 'Assessment must be submitted before approval matrix.' });
+    return;
+  }
+  if (!Array.isArray(siteVisit.assessment.manpower) || !siteVisit.assessment.manpower.length) {
+    response.status(400).json({ ok: false, message: 'Missing manpower data. Add manpower rows before submitting approval matrix.' });
+    return;
+  }
+
+  const approvals = ensureApprovalMatrix(siteVisit);
+  const nextVisit = syncSiteVisitWorkflow(siteVisit.id);
+  addApprovalEvent('Approval Matrix Submitted', { siteVisitId: siteVisit.id, actor: request.apiUser.email });
+  response.json({
+    ok: true,
+    leadId: siteVisit.leadId,
+    siteVisitId: siteVisit.id,
+    approvalId: approvals[0]?.id || '',
+    approvals,
+    workflow: calculateWorkflowStatus(siteVisit.id),
+    siteVisit: nextVisit,
+  });
+});
+
+app.get('/api/approvals/queue', requireApiAuth, (request, response) => {
+  const requestedDepartment = request.query.department || reviewerRoleToDepartment[request.apiUser.role];
+  if (!requestedDepartment) {
+    response.status(400).json({ ok: false, message: 'department query is required for this role.' });
+    return;
+  }
+
+  if (request.apiUser.role !== 'Admin' && reviewerRoleToDepartment[request.apiUser.role] !== requestedDepartment) {
+    response.status(403).json({ ok: false, message: `${request.apiUser.role} cannot view ${requestedDepartment} queue.` });
+    return;
+  }
+
+  const queue = [...approvalMatrixStore.approvals.values()]
+    .filter((approval) => approval.department === requestedDepartment && approval.status === 'Pending')
+    .map((approval) => ({
+      ...approval,
+      siteVisit: approvalMatrixStore.siteVisits.get(approval.siteVisitId),
+      lead: approvalMatrixStore.leads.get(approval.leadId),
+    }));
+
+  response.json({ ok: true, department: requestedDepartment, count: queue.length, approvals: queue });
+});
+
+app.post('/api/approvals/:approvalId/decision', requireApiAuth, (request, response) => {
+  const approval = approvalMatrixStore.approvals.get(request.params.approvalId);
+  if (!approval) {
+    response.status(404).json({ ok: false, message: 'Approval not found.' });
+    return;
+  }
+
+  if (request.apiUser.role !== 'Admin' && request.apiUser.role !== approval.assignedRole) {
+    response.status(403).json({ ok: false, message: `${request.apiUser.role} cannot decide ${approval.department} approval.` });
+    return;
+  }
+
+  const decision = normalizeDecision(request.body?.decision);
+  if (!decision) {
+    response.status(400).json({ ok: false, message: 'decision must be approve, reject, or rework.' });
+    return;
+  }
+
+  const nextApproval = {
+    ...approval,
+    status: decision,
+    remarks: request.body?.remarks || '',
+    approvedBy: request.apiUser.email,
+    approvedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  approvalMatrixStore.approvals.set(nextApproval.id, nextApproval);
+  const nextVisit = syncSiteVisitWorkflow(nextApproval.siteVisitId);
+  addApprovalEvent('Approval Decision', {
+    siteVisitId: nextApproval.siteVisitId,
+    approvalId: nextApproval.id,
+    department: nextApproval.department,
+    decision,
+    actor: request.apiUser.email,
+  });
+
+  response.json({
+    ok: true,
+    approvalId: nextApproval.id,
+    approval: nextApproval,
+    workflow: calculateWorkflowStatus(nextApproval.siteVisitId),
+    siteVisit: nextVisit,
+  });
+});
+
+app.get('/api/workflows/:siteVisitId/status', requireApiAuth, (request, response) => {
+  const siteVisit = approvalMatrixStore.siteVisits.get(request.params.siteVisitId);
+  if (!siteVisit) {
+    response.status(404).json({ ok: false, message: 'Site visit not found.' });
+    return;
+  }
+
+  response.json({
+    ok: true,
+    lead: approvalMatrixStore.leads.get(siteVisit.leadId),
+    siteVisit,
+    approvals: getSiteVisitApprovals(siteVisit.id),
+    workflow: calculateWorkflowStatus(siteVisit.id),
+    events: approvalMatrixStore.events.filter((event) => event.siteVisitId === siteVisit.id || event.leadId === siteVisit.leadId),
+  });
 });
 
 app.post('/send-lead-mom', routeSendMom('lead'));
