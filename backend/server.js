@@ -31,16 +31,39 @@ function createTransporter() {
 
   return nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
+    port: 587,
+    secure: false,
+    family: 4,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
     },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
+    tls: {
+      rejectUnauthorized: false,
+    },
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 15000,
   });
+}
+
+async function verifyMailTransporter() {
+  try {
+    const transporter = createTransporter();
+    await transporter.verify();
+    console.log('[QPMS Mail API] SMTP transporter verified', {
+      host: 'smtp.gmail.com',
+      port: 587,
+      family: 4,
+      emailUserConfigured: Boolean(process.env.EMAIL_USER),
+    });
+  } catch (error) {
+    console.error('[QPMS Mail API] SMTP transporter verification failed', {
+      message: error.message,
+      code: error.code,
+      command: error.command,
+    });
+  }
 }
 
 function normalizeRecipients(value) {
@@ -184,14 +207,28 @@ async function sendMomEmail(payload, type) {
       : []),
   ];
 
-  const info = await transporter.sendMail({
-    from: `"QPMS CRM" <${process.env.EMAIL_USER}>`,
-    to,
-    cc,
-    subject,
-    html,
-    attachments,
-  });
+  let info;
+  try {
+    info = await transporter.sendMail({
+      from: `"QPMS CRM" <${process.env.EMAIL_USER}>`,
+      to,
+      cc,
+      subject,
+      html,
+      attachments,
+    });
+  } catch (error) {
+    console.error('[QPMS Mail API] sendMail failed', {
+      type,
+      to,
+      cc,
+      subject,
+      message: error.message,
+      code: error.code,
+      command: error.command,
+    });
+    throw error;
+  }
 
   return { messageId: info.messageId, accepted: info.accepted, rejected: info.rejected, calendarInviteSent: Boolean(calendarInvite) };
 }
@@ -300,4 +337,5 @@ app.listen(port, () => {
     emailUserConfigured: Boolean(process.env.EMAIL_USER),
     emailPassConfigured: Boolean(process.env.EMAIL_PASS),
   });
+  verifyMailTransporter();
 });
