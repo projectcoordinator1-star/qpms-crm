@@ -18,13 +18,25 @@ The existing application uses two API styles:
   - `approval_requests`
   - workflow RPC functions such as `rpc_submit_for_review` and `rpc_record_approval_decision`
 
-Because the backend did not previously expose approval workflow APIs, a demo-safe Postman API surface has been added under `/api/*`. These endpoints are isolated from the UI and use an in-memory test store so Postman can validate approval matrix behavior without changing production Supabase data.
+The Postman API surface under `/api/*` now writes to the same Supabase tables used by the CRM frontend. Postman-created records are stamped with `created_by_name = 'postman_automation'` and `metadata.created_by = 'postman_automation'`, so they can appear in the real dashboard while still being easy to identify and clean up.
+
+Real tables touched by the flow:
+
+- `leads`
+- `lead_contacts`
+- `lead_mom`
+- `site_visits`
+- `site_assessments`
+- `approval_requests`
+- `activity_logs`
+- optional sync tables when migrated: `approval_queue`, `workflow_status`, `workflow_instances`
 
 ## Files Added
 
 - `postman/QPMS_Approval_Matrix.postman_collection.json`
 - `postman/QPMS_Approval_Matrix.postman_environment.json`
 - `POSTMAN_APPROVAL_MATRIX_TESTING.md`
+- `database/migrations/011_postman_real_workflow_api_support.sql`
 
 ## Environment Variables
 
@@ -81,11 +93,11 @@ Use password `123456`.
 
 Checks whether the backend is alive.
 
-### Reset Demo Store
+### Reset Postman Automation Records
 
 `POST /api/test/reset`
 
-Clears the in-memory Postman approval test store.
+Deletes only Supabase records created by Postman automation. It targets leads stamped with `created_by_name = 'postman_automation'` and related site visits, assessments, MOMs, approvals, queue/status rows, contacts, and activity logs.
 
 ### Login
 
@@ -156,6 +168,30 @@ Saves:
 
 - `leadId`
 
+### Send Lead MOM
+
+`POST /api/leads/{{leadId}}/send-mom`
+
+Body:
+
+```json
+{
+  "to": "demo.client@example.com",
+  "subject": "Lead Minutes of Meeting - Postman IFM Demo Client - QPMS",
+  "discussionSummary": "Initial IFM requirement discussion completed from Postman automation.",
+  "serviceScopeDiscussion": "Soft Services Housekeeping, Security Services, Pest Control",
+  "scheduledVisitDate": "2026-05-25",
+  "scheduledVisitTime": "10:30",
+  "remarks": "MOM recorded for real CRM workflow visibility."
+}
+```
+
+Writes/updates:
+
+- `lead_mom`
+- `leads.lead_stage = 'Lead MOM Sent'`
+- `activity_logs`
+
 ### Convert Lead to Site Visit
 
 `POST /api/leads/{{leadId}}/site-visit`
@@ -222,7 +258,7 @@ Normal-value body:
 
 `POST /api/site-visits/{{siteVisitId}}/submit-approval-matrix`
 
-Creates pending approvals for:
+Creates pending approvals in `approval_requests` for:
 
 - Commercial
 - Finance
@@ -292,22 +328,23 @@ Returns:
 
 Run the collection requests in this order:
 
-1. `00 Reset Demo Store`
+1. `00 Reset Postman Automation Records`
 2. `01 Login BD User`
 3. `02 Login Commercial Reviewer`
 4. `03 Login Finance Reviewer`
 5. `04 Login HR Reviewer`
 6. `05 Create Dummy Lead`
-7. `06 Convert Lead to Site Visit`
-8. `07 Submit Site Visit Assessment`
-9. `08 Submit for Approval Matrix`
-10. `09 Commercial Queue`
-11. `10 Approve Commercial Review`
-12. `11 Finance Queue`
-13. `12 Approve Finance Review`
-14. `13 HR Queue`
-15. `14 Approve HR Review`
-16. `15 Verify Final Workflow Status`
+7. `06 Send Lead MOM`
+8. `07 Convert Lead to Site Visit`
+9. `08 Submit Site Visit Assessment`
+10. `09 Submit for Approval Matrix`
+11. `10 Commercial Queue`
+12. `11 Approve Commercial Review`
+13. `12 Finance Queue`
+14. `13 Approve Finance Review`
+15. `14 HR Queue`
+16. `15 Approve HR Review`
+17. `16 Verify Final Workflow Status`
 
 Expected final workflow:
 
@@ -465,7 +502,8 @@ Expected:
 
 ## Notes
 
-- These Postman APIs are demo-safe and isolated from the UI.
+- These Postman APIs are no longer isolated from the UI. They write to Supabase so the created leads, site visits, approval requests, and workflow statuses are visible in the CRM frontend after refresh.
+- `/api/test/reset` is the only cleanup endpoint and should be used only for records stamped as `postman_automation`.
 - Existing MOM mail routes remain unchanged.
 - Existing Supabase workflow logic remains unchanged.
-- For production-grade API testing, the same endpoint contracts can later be wired to Supabase RPC functions instead of the in-memory test store.
+- Backend Supabase environment is required: `VITE_SUPABASE_URL` plus `VITE_SUPABASE_ANON_KEY`, or `SUPABASE_URL` plus `SUPABASE_ANON_KEY`.

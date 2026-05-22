@@ -3,7 +3,9 @@ import { randomUUID } from 'node:crypto';
 import dotenv from 'dotenv';
 import express from 'express';
 import nodemailer from 'nodemailer';
+import { createClient } from '@supabase/supabase-js';
 
+dotenv.config({ path: './.env' });
 dotenv.config({ path: './backend/.env' });
 
 const app = express();
@@ -33,13 +35,15 @@ const apiDemoUsers = [
   { id: 'admin', name: 'Admin', email: 'admin@qpms.co.in', password: '123456', role: 'Admin' },
 ];
 
-const approvalMatrixStore = {
-  tokens: new Map(),
-  leads: new Map(),
-  siteVisits: new Map(),
-  approvals: new Map(),
-  events: [],
-};
+const apiSessions = new Map();
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+  },
+}) : null;
 
 const approvalRoleMap = {
   Commercial: 'Commercial Reviewer',
@@ -69,7 +73,7 @@ function createApiId(prefix) {
 
 function createToken(user) {
   const token = `qpms-demo-${user.id}-${randomUUID()}`;
-  approvalMatrixStore.tokens.set(token, user);
+  apiSessions.set(token, user);
   return token;
 }
 
@@ -79,7 +83,7 @@ function getBearerToken(request) {
 
 function requireApiAuth(request, response, next) {
   const token = getBearerToken(request);
-  const user = approvalMatrixStore.tokens.get(token);
+  const user = apiSessions.get(token);
   if (!user) {
     response.status(401).json({ ok: false, message: 'Valid Bearer token required. Login with /api/auth/login first.' });
     return;
@@ -98,26 +102,95 @@ function requireRoles(roles) {
   };
 }
 
-function addApprovalEvent(type, payload) {
-  approvalMatrixStore.events.push({
-    id: createApiId('evt'),
-    type,
-    at: new Date().toISOString(),
-    ...payload,
+function requireSupabase() {
+  if (!supabase) {
+    const error = new Error('Supabase backend configuration is missing. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY or SUPABASE_URL and SUPABASE_ANON_KEY.');
+    error.statusCode = 500;
+    throw error;
+  }
+  return supabase;
+}
+
+function stageToDepartment(stage) {
+  if (stage === 'Commercial Review') return 'Commercial';
+  if (stage === 'Finance Review') return 'Finance';
+  if (stage === 'HR Validation' || stage === 'HR Review') return 'HR';
+  if (stage === 'COO Approval' || stage === 'Management Approval') return 'Management';
+  return stage;
+}
+
+function departmentToStage(department) {
+  if (department === 'Commercial') return 'Commercial Review';
+  if (department === 'Finance') return 'Finance Review';
+  if (department === 'HR') return 'HR Validation';
+  if (department === 'Management') return 'COO Approval';
+  return department;
+}
+
+function stageToPendingWith(stage) {
+  if (stage === 'Commercial Review') return 'Commercial Reviewer';
+  if (stage === 'Finance Review') return 'Finance Reviewer';
+  if (stage === 'HR Validation') return 'HR Reviewer';
+  if (stage === 'COO Approval') return 'COO';
+  return 'Workflow Reviewer';
+}
+
+function reviewerRoleForStage(stage) {
+  return approvalRoleMap[stageToDepartment(stage)] || 'Admin';
+}
+
+function isMissingTable(error) {
+  return ['42P01', 'PGRST205'].includes(error?.code) || String(error?.message || '').toLowerCase().includes('could not find the table');
+}
+
+function isMissingColumn(error) {
+  return ['42703', 'PGRST204'].includes(error?.code) || String(error?.message || '').toLowerCase().includes('could not find');
+}
+
+async function optionalSupabaseWrite(label, operation) {
+  try {
+    return await operation();
+  } catch (error) {
+    if (!isMissingTable(error) && !isMissingColumn(error)) {
+      console.warn(`[QPMS Postman API] ${label} failed`, error);
+    }
+    return null;
+  }
+}
+
+async function logActivity({ leadId = null, siteVisitId = null, assessmentId = null, type, message, createdBy, metadata = {} }) {
+  const client = requireSupabase();
+  const { error } = await client.from('activity_logs').insert({
+    lead_id: leadId,
+    site_visit_id: siteVisitId,
+    assessment_id: assessmentId,
+    activity_type: type,
+    activity_message: message,
+    created_by: createdBy || 'postman_automation',
+    metadata: { created_by: 'postman_automation', ...metadata },
   });
+  if (error && !isMissingTable(error)) {
+    console.warn('[QPMS Postman API] activity log insert failed', error);
+  }
 }
 
-function getSiteVisitApprovals(siteVisitId) {
-  return [...approvalMatrixStore.approvals.values()].filter((approval) => approval.siteVisitId === siteVisitId);
+async function getApprovalsForSiteVisit(siteVisitId) {
+  const client = requireSupabase();
+  const { data, error } = await client
+    .from('approval_requests')
+    .select('*')
+    .eq('site_visit_id', siteVisitId)
+    .order('created_at', { ascending: true });
+  if (error) throw error;
+  return data || [];
 }
 
-function calculateWorkflowStatus(siteVisitId) {
-  const approvals = getSiteVisitApprovals(siteVisitId);
+function calculateWorkflowStatusFromApprovals(approvals = []) {
   const rejected = approvals.find((approval) => approval.status === 'Rejected');
   if (rejected) {
     return {
       approvalStatus: 'Rejected',
-      currentStage: `${rejected.stage} Rejected`,
+      currentStage: `${rejected.approval_stage} Rejected`,
       pendingWith: 'BD Executive',
       reworkStatus: 'Closed',
     };
@@ -127,7 +200,7 @@ function calculateWorkflowStatus(siteVisitId) {
   if (rework) {
     return {
       approvalStatus: 'Rework Requested',
-      currentStage: `${rework.stage} Rework`,
+      currentStage: `${rework.approval_stage} Rework`,
       pendingWith: 'BD Executive',
       reworkStatus: 'Open',
     };
@@ -138,7 +211,7 @@ function calculateWorkflowStatus(siteVisitId) {
     return {
       approvalStatus: 'Pending',
       currentStage: 'Approval Matrix Review',
-      pendingWith: pending.map((approval) => approval.department).join(', '),
+      pendingWith: pending.map((approval) => approval.pending_with || stageToPendingWith(approval.approval_stage)).join(', '),
       reworkStatus: 'None',
     };
   }
@@ -151,56 +224,157 @@ function calculateWorkflowStatus(siteVisitId) {
   };
 }
 
-function syncSiteVisitWorkflow(siteVisitId) {
-  const visit = approvalMatrixStore.siteVisits.get(siteVisitId);
-  if (!visit) return null;
-  const workflow = calculateWorkflowStatus(siteVisitId);
-  const nextVisit = {
-    ...visit,
-    ...workflow,
-    status: workflow.approvalStatus === 'Approved' ? 'Ready for Proposal' : workflow.approvalStatus,
-    updatedAt: new Date().toISOString(),
+function mapApprovalResponse(approval) {
+  return {
+    ...approval,
+    id: approval.id,
+    approvalId: approval.id,
+    leadId: approval.lead_id,
+    siteVisitId: approval.site_visit_id,
+    assessmentId: approval.assessment_id,
+    department: stageToDepartment(approval.approval_stage),
+    stage: approval.approval_stage,
+    assignedRole: reviewerRoleForStage(approval.approval_stage),
+    assignedTo: approval.pending_with,
+    approvedBy: approval.approved_by,
+    approvedAt: approval.approved_at,
+    createdAt: approval.created_at,
+    updatedAt: approval.updated_at,
   };
-  approvalMatrixStore.siteVisits.set(siteVisitId, nextVisit);
-  return nextVisit;
 }
 
-function createApproval(siteVisit, department, stage) {
-  const approval = {
-    id: createApiId('apr'),
-    approvalId: '',
-    leadId: siteVisit.leadId,
-    siteVisitId: siteVisit.id,
-    department,
-    stage,
-    assignedRole: approvalRoleMap[department],
-    status: 'Pending',
-    remarks: '',
-    approvedBy: null,
-    approvedAt: null,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  approval.approvalId = approval.id;
-  approvalMatrixStore.approvals.set(approval.id, approval);
-  return approval;
+async function syncSiteVisitWorkflow(siteVisitId) {
+  const client = requireSupabase();
+  const approvals = await getApprovalsForSiteVisit(siteVisitId);
+  const workflow = calculateWorkflowStatusFromApprovals(approvals);
+  const status = workflow.approvalStatus === 'Approved' ? 'Ready for Proposal' : workflow.approvalStatus;
+  const { data, error } = await client
+    .from('site_visits')
+    .update({
+      current_stage: workflow.currentStage,
+      pending_with: workflow.pendingWith,
+      status,
+      updated_at: new Date().toISOString(),
+      metadata: { created_by: 'postman_automation', workflow_status: workflow },
+    })
+    .eq('id', siteVisitId)
+    .select('*')
+    .single();
+  if (error) throw error;
+  await syncOptionalWorkflowTables({
+    leadId: data.lead_id,
+    siteVisitId,
+    assessmentId: approvals[0]?.assessment_id || null,
+    approvals,
+    workflow,
+    actor: { email: 'postman_automation' },
+  });
+  return { siteVisit: data, workflow, approvals };
 }
 
-function ensureApprovalMatrix(siteVisit) {
-  const existing = getSiteVisitApprovals(siteVisit.id);
-  if (existing.length) return existing;
+async function syncOptionalWorkflowTables({ leadId, siteVisitId, assessmentId, approvals = [], workflow, actor }) {
+  const client = requireSupabase();
+  const pendingApprovals = approvals.filter((approval) => approval.status === 'Pending');
+  const decidedApprovals = approvals.filter((approval) => approval.status !== 'Pending');
 
-  const approvals = [
-    createApproval(siteVisit, 'Commercial', 'Commercial Review'),
-    createApproval(siteVisit, 'Finance', 'Finance Review'),
-    createApproval(siteVisit, 'HR', 'HR Review'),
-  ];
+  await optionalSupabaseWrite('workflow_status sync', async () => {
+    const { error } = await client.from('workflow_status').upsert(
+      {
+        site_visit_id: siteVisitId,
+        lead_id: leadId,
+        assessment_id: assessmentId,
+        current_stage: workflow.currentStage,
+        pending_with: workflow.pendingWith,
+        approval_status: workflow.approvalStatus,
+        rework_status: workflow.reworkStatus,
+        metadata: {
+          created_by: 'postman_automation',
+          pending_count: pendingApprovals.length,
+          decided_count: decidedApprovals.length,
+        },
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'site_visit_id' },
+    );
+    if (error) throw error;
+  });
 
-  if (Number(siteVisit.assessment?.proposalValue || 0) >= 2500000) {
-    approvals.push(createApproval(siteVisit, 'Management', 'COO Approval'));
+  await optionalSupabaseWrite('approval_queue sync', async () => {
+    await client.from('approval_queue').delete().eq('site_visit_id', siteVisitId);
+    if (!pendingApprovals.length) return;
+    const rows = pendingApprovals.map((approval) => ({
+      approval_request_id: approval.id,
+      lead_id: approval.lead_id || leadId,
+      site_visit_id: siteVisitId,
+      assessment_id: approval.assessment_id || assessmentId,
+      approval_stage: approval.approval_stage,
+      pending_with: approval.pending_with,
+      status: approval.status,
+      priority: approval.metadata?.priority || 'Medium',
+      metadata: { created_by: 'postman_automation', actor: actor?.email || 'postman_automation' },
+    }));
+    const { error } = await client.from('approval_queue').insert(rows);
+    if (error) throw error;
+  });
+}
+
+async function maybeCreateWorkflowInstance({ leadId, siteVisitId, assessmentId, stageCode, pendingRole, actor }) {
+  const client = requireSupabase();
+  try {
+    const { data: existing, error: existingError } = await client
+      .from('workflow_instances')
+      .select('*')
+      .eq('site_visit_id', siteVisitId)
+      .maybeSingle();
+    if (existingError) throw existingError;
+
+    if (existing) {
+      await client
+        .from('workflow_instances')
+        .update({
+          assessment_id: assessmentId,
+          current_stage_code: stageCode,
+          status: 'Pending Review',
+          pending_role: pendingRole,
+          approval_status: 'Pending',
+          metadata: { ...(existing.metadata || {}), created_by: 'postman_automation' },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id);
+      return existing.id;
+    }
+
+    const { data, error } = await client
+      .from('workflow_instances')
+      .insert({
+        lead_id: leadId,
+        site_visit_id: siteVisitId,
+        assessment_id: assessmentId,
+        current_stage_code: stageCode,
+        status: 'Pending Review',
+        pending_role: pendingRole,
+        approval_status: 'Pending',
+        metadata: { created_by: 'postman_automation' },
+      })
+      .select('*')
+      .single();
+    if (error) throw error;
+    return data.id;
+  } catch (error) {
+    if (!isMissingTable(error)) {
+      console.warn('[QPMS Postman API] workflow instance sync failed', error);
+    }
+    await logActivity({
+      leadId,
+      siteVisitId,
+      assessmentId,
+      type: 'Workflow Transition',
+      message: `Workflow moved to ${stageCode}`,
+      createdBy: actor?.email || 'postman_automation',
+      metadata: { warning: error.message, stage_code: stageCode, pending_role: pendingRole },
+    });
+    return null;
   }
-
-  return approvals;
 }
 
 function createTransporter() {
@@ -527,13 +701,54 @@ app.get('/health', (request, response) => {
   response.json({ ok: true, service: 'qpms-mail-api' });
 });
 
-app.post('/api/test/reset', (request, response) => {
-  approvalMatrixStore.tokens.clear();
-  approvalMatrixStore.leads.clear();
-  approvalMatrixStore.siteVisits.clear();
-  approvalMatrixStore.approvals.clear();
-  approvalMatrixStore.events = [];
-  response.json({ ok: true, message: 'Approval matrix test store reset.' });
+app.post('/api/test/reset', async (request, response) => {
+  try {
+    const client = requireSupabase();
+    apiSessions.clear();
+
+    const { data: testLeads, error: leadFetchError } = await client
+      .from('leads')
+      .select('id')
+      .eq('created_by_name', 'postman_automation');
+    if (leadFetchError) throw leadFetchError;
+
+    const leadIds = (testLeads || []).map((lead) => lead.id);
+    if (leadIds.length) {
+      const { data: visits } = await client.from('site_visits').select('id').in('lead_id', leadIds);
+      const siteVisitIds = (visits || []).map((visit) => visit.id);
+      if (siteVisitIds.length) {
+        await optionalSupabaseWrite('approval queue cleanup', async () => {
+          const { error } = await client.from('approval_queue').delete().in('site_visit_id', siteVisitIds);
+          if (error) throw error;
+        });
+        await optionalSupabaseWrite('workflow status cleanup', async () => {
+          const { error } = await client.from('workflow_status').delete().in('site_visit_id', siteVisitIds);
+          if (error) throw error;
+        });
+        await optionalSupabaseWrite('workflow events cleanup', async () => {
+          const { error } = await client.from('workflow_events').delete().in('site_visit_id', siteVisitIds);
+          if (error) throw error;
+        });
+        await optionalSupabaseWrite('workflow instances cleanup', async () => {
+          const { error } = await client.from('workflow_instances').delete().in('site_visit_id', siteVisitIds);
+          if (error) throw error;
+        });
+        await client.from('activity_logs').delete().in('site_visit_id', siteVisitIds);
+        await client.from('approval_requests').delete().in('site_visit_id', siteVisitIds);
+        await client.from('site_assessments').delete().in('site_visit_id', siteVisitIds);
+        await client.from('site_mom').delete().in('site_visit_id', siteVisitIds);
+        await client.from('site_visits').delete().in('id', siteVisitIds);
+      }
+      await client.from('activity_logs').delete().in('lead_id', leadIds);
+      await client.from('lead_mom').delete().in('lead_id', leadIds);
+      await client.from('lead_contacts').delete().in('lead_id', leadIds);
+      await client.from('leads').delete().in('id', leadIds);
+    }
+
+    response.json({ ok: true, message: 'Postman automation records cleaned from Supabase.', deletedLeadCount: leadIds.length });
+  } catch (error) {
+    response.status(error.statusCode || 500).json({ ok: false, message: error.message });
+  }
 });
 
 app.post('/api/auth/login', (request, response) => {
@@ -558,219 +773,492 @@ app.post('/api/auth/login', (request, response) => {
   });
 });
 
-app.post('/api/leads', requireApiAuth, requireRoles(['BD Executive', 'BD Head', 'Admin']), (request, response) => {
-  const now = new Date().toISOString();
-  const lead = {
-    id: createApiId('lead'),
-    leadId: '',
-    company: request.body?.company || request.body?.clientName || 'Postman Demo Client',
-    primaryContact: request.body?.primaryContact || 'Demo Contact',
-    primaryContactEmail: request.body?.primaryContactEmail || 'demo.client@example.com',
-    primaryContactPhone: request.body?.primaryContactPhone || '+91 90000 00000',
-    industryType: request.body?.industryType || 'Facility Management',
-    state: request.body?.state || 'Tamil Nadu',
-    city: request.body?.city || 'Chennai',
-    leadSource: request.body?.leadSource || 'Postman Automation',
-    leadPriority: request.body?.leadPriority || 'High',
-    serviceScope: request.body?.serviceScope || ['Soft Services Housekeeping', 'Security Services'],
-    status: 'Active',
-    leadStage: 'New Lead',
-    createdBy: request.apiUser.email,
-    createdAt: now,
-    updatedAt: now,
-  };
-  lead.leadId = lead.id;
-  approvalMatrixStore.leads.set(lead.id, lead);
-  addApprovalEvent('Lead Created', { leadId: lead.id, actor: request.apiUser.email });
-  response.status(201).json({ ok: true, leadId: lead.id, lead });
+app.post('/api/leads', requireApiAuth, requireRoles(['BD Executive', 'BD Head', 'Admin']), async (request, response) => {
+  try {
+    const client = requireSupabase();
+    const leadPayload = {
+      client_name: request.body?.company || request.body?.clientName || 'Postman Demo Client',
+      company_name: request.body?.company || request.body?.clientName || 'Postman Demo Client',
+      industry_type: request.body?.industryType || 'Facility Management',
+      lead_source: request.body?.leadSource || 'Postman Automation',
+      site_location: request.body?.location || request.body?.siteLocation || '',
+      state: request.body?.state || 'Tamil Nadu',
+      city: request.body?.city || 'Chennai',
+      lead_priority: request.body?.leadPriority || 'High',
+      service_scope: request.body?.serviceScope || ['Soft Services Housekeeping', 'Security Services'],
+      remarks: request.body?.remarks || 'Created from Postman approval matrix automation.',
+      assigned_bd_executive: request.apiUser.name,
+      assigned_bd_email: request.apiUser.email,
+      created_by_user_id: request.apiUser.id,
+      created_by_name: 'postman_automation',
+      lead_stage: 'New Lead',
+      status: 'Active',
+      metadata: {
+        created_by: 'postman_automation',
+        created_by_user: request.apiUser.email,
+        scenario: request.body?.scenario || 'approval_matrix',
+      },
+    };
+
+    const { data: lead, error } = await client.from('leads').insert(leadPayload).select('*').single();
+    if (error) throw error;
+
+    const contactPayload = {
+      lead_id: lead.id,
+      contact_person_name: request.body?.primaryContact || 'Demo Contact',
+      contact_person_designation: request.body?.primaryContactDesignation || 'Client Contact',
+      contact_number: request.body?.primaryContactPhone || '+91 90000 00000',
+      email_id: request.body?.primaryContactEmail || 'demo.client@example.com',
+      is_primary: true,
+      metadata: { created_by: 'postman_automation' },
+    };
+    const { error: contactError } = await client.from('lead_contacts').insert(contactPayload);
+    if (contactError) throw contactError;
+
+    await logActivity({
+      leadId: lead.id,
+      type: 'Lead Created',
+      message: 'Lead Created via Postman Automation',
+      createdBy: 'postman_automation',
+    });
+
+    response.status(201).json({ ok: true, leadId: lead.id, lead });
+  } catch (error) {
+    response.status(error.statusCode || 500).json({ ok: false, message: error.message });
+  }
 });
 
-app.post('/api/leads/:leadId/site-visit', requireApiAuth, requireRoles(['BD Executive', 'BD Head', 'Admin']), (request, response) => {
-  const lead = approvalMatrixStore.leads.get(request.params.leadId);
-  if (!lead) {
-    response.status(404).json({ ok: false, message: 'Lead not found.' });
-    return;
-  }
+app.post('/api/leads/:leadId/send-mom', requireApiAuth, requireRoles(['BD Executive', 'BD Head', 'Admin']), async (request, response) => {
+  try {
+    const client = requireSupabase();
+    const { data: lead, error: leadError } = await client.from('leads').select('*').eq('id', request.params.leadId).single();
+    if (leadError) throw leadError;
 
-  const existing = [...approvalMatrixStore.siteVisits.values()].find((visit) => visit.leadId === lead.id);
-  if (existing) {
-    response.json({ ok: true, siteVisitId: existing.id, siteVisit: existing, reused: true });
-    return;
-  }
+    const momPayload = {
+      lead_id: lead.id,
+      to_email: request.body?.to || request.body?.toEmail || request.body?.primaryContactEmail || '',
+      cc_emails: request.body?.cc || request.body?.ccEmails || '',
+      subject: request.body?.subject || `Lead Minutes of Meeting - ${lead.client_name} - QPMS`,
+      discussion_summary: request.body?.discussionSummary || 'Lead MOM recorded from Postman approval matrix automation.',
+      service_scope_discussion: request.body?.serviceScopeDiscussion || (Array.isArray(lead.service_scope) ? lead.service_scope.join(', ') : ''),
+      action_items: request.body?.actionItems || '',
+      next_followup_date: request.body?.nextFollowUpDate || null,
+      scheduled_site_visit_date: request.body?.scheduledVisitDate || null,
+      scheduled_site_visit_time: request.body?.scheduledVisitTime || null,
+      site_visit_remarks: request.body?.remarks || '',
+      calendar_invite_sent: false,
+      mom_status: 'Sent',
+      sent_at: new Date().toISOString(),
+      metadata: { created_by: 'postman_automation', simulated: true },
+    };
+    const { data: mom, error: momError } = await client.from('lead_mom').upsert(momPayload, { onConflict: 'lead_id' }).select('*').single();
+    if (momError) throw momError;
 
-  const now = new Date().toISOString();
-  const siteVisit = {
-    id: createApiId('sv'),
-    siteVisitId: '',
-    leadId: lead.id,
-    company: lead.company,
-    location: request.body?.location || `${lead.city}, ${lead.state}`,
-    scheduledVisitDate: request.body?.scheduledVisitDate || '',
-    scheduledVisitTime: request.body?.scheduledVisitTime || '',
-    assignedBdExecutive: request.apiUser.name,
-    status: 'Assessment Draft',
-    currentStage: 'Site Visit Started',
-    pendingWith: 'BD Executive',
-    approvalStatus: 'Not Submitted',
-    assessment: null,
-    createdAt: now,
-    updatedAt: now,
-  };
-  siteVisit.siteVisitId = siteVisit.id;
-  approvalMatrixStore.siteVisits.set(siteVisit.id, siteVisit);
-  approvalMatrixStore.leads.set(lead.id, {
-    ...lead,
-    leadStage: 'Converted',
-    status: 'Converted to Assessment',
-    updatedAt: now,
-  });
-  addApprovalEvent('Site Visit Created', { leadId: lead.id, siteVisitId: siteVisit.id, actor: request.apiUser.email });
-  response.status(201).json({ ok: true, siteVisitId: siteVisit.id, siteVisit });
+    await client.from('leads').update({ lead_stage: 'Lead MOM Sent', updated_at: new Date().toISOString() }).eq('id', lead.id);
+    await logActivity({
+      leadId: lead.id,
+      type: 'Lead MOM Sent',
+      message: 'Lead MOM Sent via Postman Automation',
+      createdBy: 'postman_automation',
+    });
+
+    response.json({ ok: true, simulated: true, leadId: lead.id, mom });
+  } catch (error) {
+    response.status(error.statusCode || 500).json({ ok: false, message: error.message });
+  }
 });
 
-app.post('/api/site-visits/:siteVisitId/assessment', requireApiAuth, requireRoles(['BD Executive', 'BD Head', 'Admin']), (request, response) => {
-  const siteVisit = approvalMatrixStore.siteVisits.get(request.params.siteVisitId);
-  if (!siteVisit) {
-    response.status(404).json({ ok: false, message: 'Site visit not found.' });
-    return;
-  }
+app.post('/api/leads/:leadId/site-visit', requireApiAuth, requireRoles(['BD Executive', 'BD Head', 'Admin']), async (request, response) => {
+  try {
+    const client = requireSupabase();
+    const { data: lead, error: leadError } = await client.from('leads').select('*').eq('id', request.params.leadId).single();
+    if (leadError) throw leadError;
 
-  const assessment = {
-    manpower: request.body?.manpower || [],
-    serviceScope: request.body?.serviceScope || [],
-    commercial: request.body?.commercial || {},
-    finance: request.body?.finance || {},
-    hr: request.body?.hr || {},
-    proposalValue: Number(request.body?.proposalValue || request.body?.commercial?.proposalValue || 0),
-    monthlyValue: Number(request.body?.monthlyValue || request.body?.commercial?.monthlyValue || 0),
-    riskLevel: request.body?.riskLevel || 'Medium',
-    submittedAt: new Date().toISOString(),
-  };
-  const nextVisit = {
-    ...siteVisit,
-    assessment,
-    status: 'Assessment Submitted',
-    currentStage: 'Assessment Saved',
-    pendingWith: 'BD Executive',
-    updatedAt: new Date().toISOString(),
-  };
-  approvalMatrixStore.siteVisits.set(nextVisit.id, nextVisit);
-  addApprovalEvent('Assessment Submitted', { siteVisitId: nextVisit.id, actor: request.apiUser.email });
-  response.json({ ok: true, siteVisitId: nextVisit.id, assessment, siteVisit: nextVisit });
+    const { data: existing, error: existingError } = await client.from('site_visits').select('*').eq('lead_id', lead.id).maybeSingle();
+    if (existingError) throw existingError;
+    if (existing) {
+      response.json({ ok: true, siteVisitId: existing.id, siteVisit: existing, reused: true });
+      return;
+    }
+    const { data: leadMom } = await client.from('lead_mom').select('mom_status').eq('lead_id', lead.id).maybeSingle();
+
+    const siteVisitPayload = {
+      lead_id: lead.id,
+      client_name: lead.client_name,
+      site_name: request.body?.location || lead.site_location || `${lead.city || ''}, ${lead.state || ''}`.trim(),
+      scheduled_visit_date: request.body?.scheduledVisitDate || null,
+      scheduled_visit_time: request.body?.scheduledVisitTime || null,
+      assigned_bd_executive: request.apiUser.name,
+      assigned_bd_email: request.apiUser.email,
+      current_stage: 'Pre-Operational Assessment',
+      pending_with: 'BD Executive',
+      status: 'Scheduled',
+      mom_status: leadMom?.mom_status || 'Pending',
+      metadata: { created_by: 'postman_automation', source: 'postman_approval_matrix' },
+    };
+    const { data: siteVisit, error } = await client.from('site_visits').insert(siteVisitPayload).select('*').single();
+    if (error) throw error;
+
+    await client.from('leads').update({ lead_stage: 'Converted', status: 'Converted to Assessment', updated_at: new Date().toISOString() }).eq('id', lead.id);
+    await logActivity({
+      leadId: lead.id,
+      siteVisitId: siteVisit.id,
+      type: 'Site Visit Created',
+      message: 'Lead converted to Site Visit & Estimation via Postman Automation',
+      createdBy: 'postman_automation',
+    });
+
+    response.status(201).json({ ok: true, siteVisitId: siteVisit.id, siteVisit });
+  } catch (error) {
+    response.status(error.statusCode || 500).json({ ok: false, message: error.message });
+  }
 });
 
-app.post('/api/site-visits/:siteVisitId/submit-approval-matrix', requireApiAuth, requireRoles(['BD Executive', 'BD Head', 'Admin']), (request, response) => {
-  const siteVisit = approvalMatrixStore.siteVisits.get(request.params.siteVisitId);
-  if (!siteVisit) {
-    response.status(404).json({ ok: false, message: 'Site visit not found.' });
-    return;
-  }
-  if (!siteVisit.assessment) {
-    response.status(400).json({ ok: false, message: 'Assessment must be submitted before approval matrix.' });
-    return;
-  }
-  if (!Array.isArray(siteVisit.assessment.manpower) || !siteVisit.assessment.manpower.length) {
-    response.status(400).json({ ok: false, message: 'Missing manpower data. Add manpower rows before submitting approval matrix.' });
-    return;
-  }
+app.post('/api/site-visits/:siteVisitId/assessment', requireApiAuth, requireRoles(['BD Executive', 'BD Head', 'Admin']), async (request, response) => {
+  try {
+    const client = requireSupabase();
+    const { data: siteVisit, error: visitError } = await client.from('site_visits').select('*').eq('id', request.params.siteVisitId).single();
+    if (visitError) throw visitError;
 
-  const approvals = ensureApprovalMatrix(siteVisit);
-  const nextVisit = syncSiteVisitWorkflow(siteVisit.id);
-  addApprovalEvent('Approval Matrix Submitted', { siteVisitId: siteVisit.id, actor: request.apiUser.email });
-  response.json({
-    ok: true,
-    leadId: siteVisit.leadId,
-    siteVisitId: siteVisit.id,
-    approvalId: approvals[0]?.id || '',
-    approvals,
-    workflow: calculateWorkflowStatus(siteVisit.id),
-    siteVisit: nextVisit,
-  });
+    const proposalValue = Number(request.body?.proposalValue || request.body?.commercial?.proposalValue || 0);
+    const monthlyValue = Number(request.body?.monthlyValue || request.body?.commercial?.monthlyValue || 0);
+    const assessmentPayload = {
+      site_visit_id: siteVisit.id,
+      lead_id: siteVisit.lead_id,
+      ifm_service_scope: request.body?.serviceScope || [],
+      manpower_requirement: {
+        rows: request.body?.manpower || [],
+        hr: request.body?.hr || {},
+      },
+      commercial_statement: {
+        ...(request.body?.commercial || {}),
+        proposalValue,
+        monthlyValue,
+        estimated_monthly_billing: monthlyValue,
+        approval_rules: {
+          management_approval_required: proposalValue >= 2500000,
+        },
+      },
+      risk_assessment: {
+        riskLevel: request.body?.riskLevel || 'Medium',
+      },
+      approval_mechanism: {
+        approvalWorkflow: 'Postman Approval Matrix',
+        management_approval_required: proposalValue >= 2500000,
+      },
+      final_remarks_signoff: {
+        finalRemarks: request.body?.finalRemarks || 'Submitted from Postman automation.',
+      },
+      assessment_status: 'Submitted',
+      final_remarks: request.body?.finalRemarks || '',
+      created_by: 'postman_automation',
+      metadata: {
+        created_by: 'postman_automation',
+        finance: request.body?.finance || {},
+        submitted_by: request.apiUser.email,
+      },
+    };
+
+    const { data: assessment, error } = await client
+      .from('site_assessments')
+      .upsert(assessmentPayload, { onConflict: 'site_visit_id' })
+      .select('*')
+      .single();
+    if (error) throw error;
+
+    const { data: updatedVisit, error: updateError } = await client
+      .from('site_visits')
+      .update({
+        current_stage: 'Assessment Saved',
+        pending_with: 'BD Executive',
+        status: 'Assessment Submitted',
+        metadata: { ...(siteVisit.metadata || {}), created_by: 'postman_automation', proposalValue, monthlyValue },
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', siteVisit.id)
+      .select('*')
+      .single();
+    if (updateError) throw updateError;
+
+    await logActivity({
+      leadId: siteVisit.lead_id,
+      siteVisitId: siteVisit.id,
+      assessmentId: assessment.id,
+      type: 'Assessment Submitted',
+      message: 'Site Visit Assessment submitted via Postman Automation',
+      createdBy: 'postman_automation',
+    });
+
+    response.json({ ok: true, siteVisitId: siteVisit.id, assessmentId: assessment.id, assessment, siteVisit: updatedVisit });
+  } catch (error) {
+    response.status(error.statusCode || 500).json({ ok: false, message: error.message });
+  }
 });
 
-app.get('/api/approvals/queue', requireApiAuth, (request, response) => {
-  const requestedDepartment = request.query.department || reviewerRoleToDepartment[request.apiUser.role];
-  if (!requestedDepartment) {
-    response.status(400).json({ ok: false, message: 'department query is required for this role.' });
-    return;
-  }
+app.post('/api/site-visits/:siteVisitId/submit-approval-matrix', requireApiAuth, requireRoles(['BD Executive', 'BD Head', 'Admin']), async (request, response) => {
+  try {
+    const client = requireSupabase();
+    const { data: siteVisit, error: visitError } = await client
+      .from('site_visits')
+      .select('*')
+      .eq('id', request.params.siteVisitId)
+      .single();
+    if (visitError) throw visitError;
 
-  if (request.apiUser.role !== 'Admin' && reviewerRoleToDepartment[request.apiUser.role] !== requestedDepartment) {
-    response.status(403).json({ ok: false, message: `${request.apiUser.role} cannot view ${requestedDepartment} queue.` });
-    return;
-  }
+    const { data: assessment, error: assessmentError } = await client
+      .from('site_assessments')
+      .select('*')
+      .eq('site_visit_id', siteVisit.id)
+      .maybeSingle();
+    if (assessmentError) throw assessmentError;
+    if (!assessment) {
+      response.status(400).json({ ok: false, message: 'Assessment must be submitted before approval matrix.' });
+      return;
+    }
 
-  const queue = [...approvalMatrixStore.approvals.values()]
-    .filter((approval) => approval.department === requestedDepartment && approval.status === 'Pending')
-    .map((approval) => ({
-      ...approval,
-      siteVisit: approvalMatrixStore.siteVisits.get(approval.siteVisitId),
-      lead: approvalMatrixStore.leads.get(approval.leadId),
+    const manpowerRows = assessment.manpower_requirement?.rows || assessment.metadata?.manpower || [];
+    if (!Array.isArray(manpowerRows) || !manpowerRows.length) {
+      response.status(400).json({ ok: false, message: 'Missing manpower data. Add manpower rows before submitting approval matrix.' });
+      return;
+    }
+
+    const { data: existingApprovals, error: existingError } = await client
+      .from('approval_requests')
+      .select('*')
+      .eq('site_visit_id', siteVisit.id)
+      .in('status', ['Pending', 'Approved', 'Rejected', 'Rework Requested']);
+    if (existingError) throw existingError;
+    if (existingApprovals?.length) {
+      const sync = await syncSiteVisitWorkflow(siteVisit.id);
+      response.json({
+        ok: true,
+        reused: true,
+        leadId: siteVisit.lead_id,
+        siteVisitId: siteVisit.id,
+        approvalId: existingApprovals[0]?.id || '',
+        approvals: existingApprovals.map(mapApprovalResponse),
+        workflow: sync.workflow,
+        siteVisit: sync.siteVisit,
+      });
+      return;
+    }
+
+    const proposalValue = Number(
+      assessment.commercial_statement?.proposalValue
+      || assessment.commercial_statement?.proposal_value
+      || assessment.metadata?.proposalValue
+      || 0,
+    );
+    const stages = [
+      'Commercial Review',
+      'Finance Review',
+      'HR Validation',
+      ...(proposalValue >= 2500000 ? ['COO Approval'] : []),
+    ];
+    const rows = stages.map((stage) => ({
+      lead_id: siteVisit.lead_id,
+      site_visit_id: siteVisit.id,
+      assessment_id: assessment.id,
+      approval_stage: stage,
+      pending_with: stageToPendingWith(stage),
+      status: 'Pending',
+      remarks: null,
+      metadata: {
+        created_by: 'postman_automation',
+        department: stageToDepartment(stage),
+        reviewer_role: reviewerRoleForStage(stage),
+        priority: proposalValue >= 2500000 ? 'High' : 'Medium',
+      },
     }));
 
-  response.json({ ok: true, department: requestedDepartment, count: queue.length, approvals: queue });
+    const { data: approvals, error } = await client.from('approval_requests').insert(rows).select('*');
+    if (error) throw error;
+
+    const pendingWith = approvals.map((approval) => approval.pending_with).join(', ');
+    await maybeCreateWorkflowInstance({
+      leadId: siteVisit.lead_id,
+      siteVisitId: siteVisit.id,
+      assessmentId: assessment.id,
+      stageCode: 'commercial_review',
+      pendingRole: pendingWith,
+      actor: request.apiUser,
+    });
+    const sync = await syncSiteVisitWorkflow(siteVisit.id);
+    await logActivity({
+      leadId: siteVisit.lead_id,
+      siteVisitId: siteVisit.id,
+      assessmentId: assessment.id,
+      type: 'Approval Matrix Submitted',
+      message: `Approval Matrix Submitted via Postman Automation. Pending with ${pendingWith}.`,
+      createdBy: request.apiUser.email,
+      metadata: { proposal_value: proposalValue, stages },
+    });
+
+    response.json({
+      ok: true,
+      leadId: siteVisit.lead_id,
+      siteVisitId: siteVisit.id,
+      approvalId: approvals[0]?.id || '',
+      approvals: approvals.map(mapApprovalResponse),
+      workflow: sync.workflow,
+      siteVisit: sync.siteVisit,
+    });
+  } catch (error) {
+    response.status(error.statusCode || 500).json({ ok: false, message: error.message });
+  }
 });
 
-app.post('/api/approvals/:approvalId/decision', requireApiAuth, (request, response) => {
-  const approval = approvalMatrixStore.approvals.get(request.params.approvalId);
-  if (!approval) {
-    response.status(404).json({ ok: false, message: 'Approval not found.' });
-    return;
+app.get('/api/approvals/queue', requireApiAuth, async (request, response) => {
+  try {
+    const client = requireSupabase();
+    const requestedDepartment = request.query.department || reviewerRoleToDepartment[request.apiUser.role];
+    if (!requestedDepartment) {
+      response.status(400).json({ ok: false, message: 'department query is required for this role.' });
+      return;
+    }
+
+    if (request.apiUser.role !== 'Admin' && reviewerRoleToDepartment[request.apiUser.role] !== requestedDepartment) {
+      response.status(403).json({ ok: false, message: `${request.apiUser.role} cannot view ${requestedDepartment} queue.` });
+      return;
+    }
+
+    const stage = departmentToStage(requestedDepartment);
+    const { data, error } = await client
+      .from('approval_requests')
+      .select('*, site_visits(*), leads(*)')
+      .eq('approval_stage', stage)
+      .eq('status', 'Pending')
+      .order('created_at', { ascending: true });
+    if (error) throw error;
+
+    const approvals = (data || []).map((approval) => ({
+      ...mapApprovalResponse(approval),
+      siteVisit: approval.site_visits || null,
+      lead: approval.leads || null,
+    }));
+
+    response.json({ ok: true, department: requestedDepartment, count: approvals.length, approvals });
+  } catch (error) {
+    response.status(error.statusCode || 500).json({ ok: false, message: error.message });
   }
-
-  if (request.apiUser.role !== 'Admin' && request.apiUser.role !== approval.assignedRole) {
-    response.status(403).json({ ok: false, message: `${request.apiUser.role} cannot decide ${approval.department} approval.` });
-    return;
-  }
-
-  const decision = normalizeDecision(request.body?.decision);
-  if (!decision) {
-    response.status(400).json({ ok: false, message: 'decision must be approve, reject, or rework.' });
-    return;
-  }
-
-  const nextApproval = {
-    ...approval,
-    status: decision,
-    remarks: request.body?.remarks || '',
-    approvedBy: request.apiUser.email,
-    approvedAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-  approvalMatrixStore.approvals.set(nextApproval.id, nextApproval);
-  const nextVisit = syncSiteVisitWorkflow(nextApproval.siteVisitId);
-  addApprovalEvent('Approval Decision', {
-    siteVisitId: nextApproval.siteVisitId,
-    approvalId: nextApproval.id,
-    department: nextApproval.department,
-    decision,
-    actor: request.apiUser.email,
-  });
-
-  response.json({
-    ok: true,
-    approvalId: nextApproval.id,
-    approval: nextApproval,
-    workflow: calculateWorkflowStatus(nextApproval.siteVisitId),
-    siteVisit: nextVisit,
-  });
 });
 
-app.get('/api/workflows/:siteVisitId/status', requireApiAuth, (request, response) => {
-  const siteVisit = approvalMatrixStore.siteVisits.get(request.params.siteVisitId);
-  if (!siteVisit) {
-    response.status(404).json({ ok: false, message: 'Site visit not found.' });
-    return;
-  }
+app.post('/api/approvals/:approvalId/decision', requireApiAuth, async (request, response) => {
+  try {
+    const client = requireSupabase();
+    const { data: approval, error: fetchError } = await client
+      .from('approval_requests')
+      .select('*')
+      .eq('id', request.params.approvalId)
+      .single();
+    if (fetchError) throw fetchError;
 
-  response.json({
-    ok: true,
-    lead: approvalMatrixStore.leads.get(siteVisit.leadId),
-    siteVisit,
-    approvals: getSiteVisitApprovals(siteVisit.id),
-    workflow: calculateWorkflowStatus(siteVisit.id),
-    events: approvalMatrixStore.events.filter((event) => event.siteVisitId === siteVisit.id || event.leadId === siteVisit.leadId),
-  });
+    const assignedRole = reviewerRoleForStage(approval.approval_stage);
+    if (request.apiUser.role !== 'Admin' && request.apiUser.role !== assignedRole) {
+      response.status(403).json({ ok: false, message: `${request.apiUser.role} cannot decide ${stageToDepartment(approval.approval_stage)} approval.` });
+      return;
+    }
+
+    const decision = normalizeDecision(request.body?.decision);
+    if (!decision) {
+      response.status(400).json({ ok: false, message: 'decision must be approve, reject, or rework.' });
+      return;
+    }
+
+    const { data: nextApproval, error } = await client
+      .from('approval_requests')
+      .update({
+        status: decision,
+        remarks: request.body?.remarks || '',
+        approved_by: request.apiUser.email,
+        approved_at: new Date().toISOString(),
+        metadata: {
+          ...(approval.metadata || {}),
+          created_by: 'postman_automation',
+          decided_by_role: request.apiUser.role,
+          decided_by_email: request.apiUser.email,
+        },
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', approval.id)
+      .select('*')
+      .single();
+    if (error) throw error;
+
+    if (decision !== 'Approved') {
+      const { error: closePendingError } = await client
+        .from('approval_requests')
+        .update({
+          status: 'Cancelled',
+          remarks: `${nextApproval.approval_stage} ${decision}; remaining pending approvals closed for this review cycle.`,
+          metadata: {
+            created_by: 'postman_automation',
+            closed_by_decision: decision,
+            closed_by_approval_id: nextApproval.id,
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('site_visit_id', nextApproval.site_visit_id)
+        .eq('status', 'Pending')
+        .neq('id', nextApproval.id);
+      if (closePendingError) throw closePendingError;
+    }
+
+    const sync = await syncSiteVisitWorkflow(nextApproval.site_visit_id);
+    await logActivity({
+      leadId: nextApproval.lead_id,
+      siteVisitId: nextApproval.site_visit_id,
+      assessmentId: nextApproval.assessment_id,
+      type: 'Approval Decision',
+      message: `${nextApproval.approval_stage} ${decision} by ${request.apiUser.email}`,
+      createdBy: request.apiUser.email,
+      metadata: { approval_request_id: nextApproval.id, decision },
+    });
+
+    response.json({
+      ok: true,
+      approvalId: nextApproval.id,
+      approval: mapApprovalResponse(nextApproval),
+      workflow: sync.workflow,
+      siteVisit: sync.siteVisit,
+    });
+  } catch (error) {
+    response.status(error.statusCode || 500).json({ ok: false, message: error.message });
+  }
+});
+
+app.get('/api/workflows/:siteVisitId/status', requireApiAuth, async (request, response) => {
+  try {
+    const client = requireSupabase();
+    const { data: siteVisit, error: visitError } = await client
+      .from('site_visits')
+      .select('*, leads(*), site_assessments(*)')
+      .eq('id', request.params.siteVisitId)
+      .single();
+    if (visitError) throw visitError;
+
+    const approvals = await getApprovalsForSiteVisit(siteVisit.id);
+    const workflow = calculateWorkflowStatusFromApprovals(approvals);
+    const { data: events, error: eventsError } = await client
+      .from('activity_logs')
+      .select('*')
+      .or(`site_visit_id.eq.${siteVisit.id},lead_id.eq.${siteVisit.lead_id}`)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    if (eventsError) throw eventsError;
+
+    response.json({
+      ok: true,
+      lead: siteVisit.leads || null,
+      siteVisit,
+      assessment: siteVisit.site_assessments?.[0] || null,
+      approvals: approvals.map(mapApprovalResponse),
+      workflow,
+      events: events || [],
+    });
+  } catch (error) {
+    response.status(error.statusCode || 500).json({ ok: false, message: error.message });
+  }
 });
 
 app.post('/send-lead-mom', routeSendMom('lead'));
