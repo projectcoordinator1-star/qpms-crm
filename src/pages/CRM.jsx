@@ -589,7 +589,12 @@ export default function CRM() {
       sendLeadMom(selectedLeadId, { ...momDraft, calendarInviteSent: Boolean(result?.calendarInviteSent) });
       setIsMomOpen(false);
       setShowMomPreview(false);
-      showToast(hasCompleteSiteVisitSchedule(momDraft) ? 'Lead moved to Site Visit & Estimation' : 'Lead Minutes of Meeting sent successfully', 'success');
+      showToast(
+        result?.simulated
+          ? 'MOM recorded. Email simulation used because SMTP is unavailable.'
+          : hasCompleteSiteVisitSchedule(momDraft) ? 'Lead moved to Site Visit & Estimation' : 'Lead Minutes of Meeting sent successfully',
+        result?.simulated ? 'warning' : 'success',
+      );
     } catch (error) {
       showToast(`Email failed: ${error.response?.data?.message || error.message}`, 'error');
     } finally {

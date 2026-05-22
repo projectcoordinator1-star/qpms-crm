@@ -997,11 +997,14 @@ function duplicateRow(section, index) {
     if (!targetVisit) return;
     try {
       setPendingAction('sendSiteMom');
-      await sendSiteVisitMomEmail(nextMom, targetVisit);
+      const result = await sendSiteVisitMomEmail(nextMom, targetVisit);
       sendSiteVisitMom(targetVisit.id, nextMom);
       setSiteMomDraft({ ...nextMom, sent: true });
       setMomComposerVisit(null);
-      showToast('Site Visit MOM sent successfully', 'success');
+      showToast(
+        result?.simulated ? 'MOM recorded. Email simulation used because SMTP is unavailable.' : 'Site Visit MOM sent successfully',
+        result?.simulated ? 'warning' : 'success',
+      );
     } catch (error) {
       showToast(`Email failed: ${error.response?.data?.message || error.message}`, 'error');
     } finally {
