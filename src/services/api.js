@@ -1,12 +1,13 @@
 import axios from 'axios';
 
-const apiBaseUrl = (import.meta.env.VITE_API_URL || 'http://localhost:4000').replace(/\/+$/, '');
+const API_BASE =
+  import.meta.env.VITE_API_URL ||
+  'http://localhost:4000';
 
-console.log('[QPMS Mail API] Using API base:', apiBaseUrl);
+console.log('[QPMS Mail API] Using API base:', API_BASE);
 
 export const api = axios.create({
-  baseURL: apiBaseUrl,
-  timeout: 15000,
+  baseURL: API_BASE,
   headers: {
     'Content-Type': 'application/json',
   },
