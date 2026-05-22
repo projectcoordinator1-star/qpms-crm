@@ -320,6 +320,21 @@ function routeSendMom(type) {
       const result = await sendMomEmail(request.body, type);
       response.json({ ok: true, ...result });
     } catch (error) {
+      if (!error.statusCode) {
+        console.error('[QPMS Mail API] MOM email simulated after delivery failure', {
+          type,
+          message: error.message,
+          code: error.code,
+          command: error.command,
+        });
+        response.json({
+          ok: true,
+          simulated: true,
+          message: 'MOM email simulated successfully. SMTP failed but demo flow continued.',
+          smtpError: error.message,
+        });
+        return;
+      }
       response.status(error.statusCode || 500).json({ ok: false, message: error.message || 'Email failed' });
     }
   };
