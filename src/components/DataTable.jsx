@@ -1,4 +1,4 @@
-export default function DataTable({ columns, rows, embedded = false, onRowClick, highlightedRowId }) {
+export default function DataTable({ columns, rows, embedded = false, onRowClick, highlightedRowId, emptyMessage = 'No records to show.' }) {
   return (
     <div
       className={[
@@ -24,7 +24,7 @@ export default function DataTable({ columns, rows, embedded = false, onRowClick,
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-900">
-            {rows.map((row) => (
+            {rows.length ? rows.map((row) => (
               <tr
                 key={row.id}
                 data-row-id={row.id}
@@ -52,7 +52,13 @@ export default function DataTable({ columns, rows, embedded = false, onRowClick,
                   </td>
                 ))}
               </tr>
-            ))}
+            )) : (
+              <tr>
+                <td colSpan={columns.length} className="px-5 py-10 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">
+                  {emptyMessage}
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

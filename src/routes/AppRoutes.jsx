@@ -10,6 +10,7 @@ import Tasks from '../pages/Tasks.jsx';
 import Reports from '../pages/Reports.jsx';
 import Employees from '../pages/Employees.jsx';
 import Settings from '../pages/Settings.jsx';
+import { isDemoMode } from '../config/demoMode.js';
 
 export const router = createBrowserRouter([
   {
@@ -25,10 +26,10 @@ export const router = createBrowserRouter([
           { path: 'crm', element: <CRM /> },
           { path: 'sites', element: <Sites /> },
           { path: 'site-visit/:id', element: <Sites /> },
-          { path: 'tickets', element: <Tickets /> },
+          { path: 'tickets', element: isDemoMode ? <Navigate to="/dashboard" replace /> : <Tickets /> },
           { path: 'tasks', element: <Tasks /> },
-          { path: 'reports', element: <Reports /> },
-          { path: 'employees', element: <Employees /> },
+          { path: 'reports', element: isDemoMode ? <Navigate to="/dashboard" replace /> : <Reports /> },
+          { path: 'employees', element: isDemoMode ? <Navigate to="/dashboard" replace /> : <Employees /> },
           { path: 'settings', element: <Settings /> },
         ],
       },

@@ -325,6 +325,67 @@ function ContactPersonsList({ contacts, lead }) {
   );
 }
 
+function buildLeadDemoSteps(lead, siteVisit) {
+  const reviewStatus = siteVisit?.reviewStatus || {};
+  const hasLead = Boolean(lead);
+  const hasMom = Boolean(lead?.mom || ['Lead MOM Sent', 'MOM Sent', 'Site Visit Scheduled', 'Converted'].includes(lead?.stage));
+  const hasVisit = Boolean(siteVisit || ['Converted', 'Converted to Assessment'].includes(lead?.status));
+  const hasAssessment = Boolean(siteVisit?.assessmentId || siteVisit?.survey || ['Assessment Submitted', 'Pending Review', 'Ready for Proposal'].includes(siteVisit?.status));
+  const commercialDone = reviewStatus['Commercial Review'] === 'Approved' || ['Ready for Proposal', 'Proposal Generated', 'Proposal Sent'].includes(siteVisit?.status);
+  const financeDone = reviewStatus['Finance Review'] === 'Approved' || ['Ready for Proposal', 'Proposal Generated', 'Proposal Sent'].includes(siteVisit?.status);
+  const hrDone = reviewStatus['HR Validation'] === 'Approved' || ['Ready for Proposal', 'Proposal Generated', 'Proposal Sent'].includes(siteVisit?.status);
+  const proposalDone = Boolean(siteVisit?.proposal) || ['Proposal Generated', 'Proposal Sent'].includes(siteVisit?.status);
+  return [
+    { label: 'Lead', done: hasLead },
+    { label: 'Site Visit', done: hasVisit || hasMom },
+    { label: 'Assessment', done: hasAssessment },
+    { label: 'Commercial', done: commercialDone },
+    { label: 'Finance', done: financeDone },
+    { label: 'HR', done: hrDone },
+    { label: 'Proposal', done: proposalDone },
+  ].map((step, index, list) => ({
+    ...step,
+    active: !step.done && list.slice(0, index).every((item) => item.done),
+  }));
+}
+
+function LeadWorkflowStepper({ lead, siteVisit }) {
+  const steps = buildLeadDemoSteps(lead, siteVisit);
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-950/50">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-bold text-slate-950 dark:text-white">Demo Approval Timeline</h3>
+          <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
+            {'Lead -> Site Visit -> Assessment -> Commercial -> Finance -> HR -> Proposal'}
+          </p>
+        </div>
+        <StatusBadge status={siteVisit?.status || lead?.status || 'Active'} />
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-4 xl:grid-cols-7">
+        {steps.map((step, index) => (
+          <div
+            key={step.label}
+            className={[
+              'rounded-xl border px-3 py-2.5 text-center text-xs font-bold transition',
+              step.done
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200'
+                : step.active
+                  ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200'
+                  : 'border-slate-200 bg-white text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400',
+            ].join(' ')}
+          >
+            <div className="mx-auto mb-1 grid h-6 w-6 place-items-center rounded-full bg-white shadow-sm dark:bg-slate-950">
+              {step.done ? <Check className="h-3.5 w-3.5" /> : <span>{index + 1}</span>}
+            </div>
+            {step.label}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function createLeadMomDraft(lead) {
   const primaryContact = getPrimaryContact(lead);
   const serviceScope = normalizeServiceScope(lead.serviceScope || lead.service_scope);
@@ -383,6 +444,7 @@ export default function CRM() {
   }, [leadQueueFilter, roleVisibleLeads]);
 
   const selectedLead = visibleLeads.find((lead) => lead.id === selectedLeadId);
+  const selectedLeadVisit = siteVisits.find((visit) => String(visit.leadId) === String(selectedLeadId));
 
   const leadColumns = useMemo(
     () => [
@@ -678,7 +740,13 @@ export default function CRM() {
         ))}
       </section>
 
-      <DataTable columns={leadColumns} rows={visibleLeads} onRowClick={openLeadDrawer} highlightedRowId={highlightedLeadId} />
+      <DataTable
+        columns={leadColumns}
+        rows={visibleLeads}
+        onRowClick={openLeadDrawer}
+        highlightedRowId={highlightedLeadId}
+        emptyMessage={leadQueueFilter === 'active' ? 'No active leads. Create a lead or switch to Converted Leads.' : 'No records in this lead view.'}
+      />
 
       {isFormOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 px-4 py-6 backdrop-blur-sm" onClick={closeLeadForm}>
@@ -774,6 +842,8 @@ export default function CRM() {
             </div>
 
             <div className="space-y-5 p-5">
+              <LeadWorkflowStepper lead={selectedLead} siteVisit={selectedLeadVisit} />
+
               <FormSection title="Client Details">
                 <TextField label="Client / Company Name" value={draftLead.company} onChange={(value) => updateDraftLead('company', value)} disabled={!isEditingLead} />
                 <SelectField label="Industry Type" value={draftLead.industry} onChange={(value) => updateDraftLead('industry', value)} options={industryOptions} disabled={!isEditingLead} />

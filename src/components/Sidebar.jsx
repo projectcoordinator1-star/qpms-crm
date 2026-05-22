@@ -10,24 +10,26 @@ import {
   Workflow,
 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
+import { isDemoMode } from '../config/demoMode.js';
 import { useAuth } from '../context/auth-context.js';
 import { canManageLeads, isApprovalReviewer } from '../data/mockUsers.js';
 import Logo from './Logo.jsx';
 
 const navItems = [
-  { label: 'DashboardE', to: '/dashboard', icon: Home },
+  { label: 'Dashboard', to: '/dashboard', icon: Home },
   { label: 'Lead Management', to: '/crm', icon: Workflow },
   { label: 'Site Visit & Estimation', to: '/sites', icon: ClipboardCheck },
-  { label: 'MOM Draft', to: '/tickets', icon: FileText },
+  { label: 'MOM Draft', to: '/tickets', icon: FileText, demoHidden: true },
   { label: 'Commercial Review', to: '/tasks', icon: CheckSquare },
-  { label: 'Approval Workflow', to: '/reports', icon: BarChart3 },
-  { label: 'Employee IAM', to: '/employees', icon: Users },
+  { label: 'Approval Workflow', to: '/reports', icon: BarChart3, demoHidden: true },
+  { label: 'Employee IAM', to: '/employees', icon: Users, demoHidden: true },
   { label: 'Settings', to: '/settings', icon: Settings },
 ];
 
 export default function Sidebar({ isOpen, onClose }) {
   const { user } = useAuth();
   const visibleNavItems = navItems.filter((item) => {
+    if (isDemoMode && item.demoHidden) return false;
     if (user?.role === 'Admin') return true;
     if (['BD Executive', 'BD Head'].includes(user?.role)) return ['/dashboard', '/crm', '/sites', '/settings'].includes(item.to);
     if (isApprovalReviewer(user)) return ['/dashboard', '/tasks', '/reports', '/sites', '/settings'].includes(item.to);

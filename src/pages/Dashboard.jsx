@@ -59,6 +59,7 @@ import { useAuth } from '../context/auth-context.js';
 import { useWorkflow } from '../context/workflow-context.js';
 import { bdExecutives, canViewBdTeam, isCommercialTeam, isCoordinator, isFinanceTeam, isHrReviewer, isOperationsTeam } from '../data/mockUsers.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
+import { isDemoMode } from '../config/demoMode.js';
 
 const tabs = [
   { id: 'new-business', label: 'New Business Pipeline' },
@@ -618,6 +619,7 @@ function priorityClass(priority) {
 }
 
 function QuickActionBar({ user }) {
+  if (isDemoMode) return null;
   const scope = roleScope(user);
   const actions = [
     { label: 'New Lead', icon: BriefcaseBusiness, scopes: ['admin', 'bd'] },
@@ -745,6 +747,60 @@ function OperationalHealth({ items }) {
         ))}
       </div>
     </ChartCard>
+  );
+}
+
+function DemoStatusPanel({ leads, siteVisits, backendStatus, workflowError }) {
+  const pendingByStage = (stage) => siteVisits.filter((visit) => (visit.reviewStatus?.[stage] || (visit.currentStage === stage ? 'Pending' : '')) === 'Pending').length;
+  const generatedProposals = siteVisits.filter((visit) => visit.proposal || ['Proposal Generated', 'Proposal Sent'].includes(visit.status)).length;
+  const approvedProposals = siteVisits.filter((visit) => ['Proposal Sent', 'Ready for Proposal', 'Proposal Generated'].includes(visit.status) || visit.approvalStatus === 'Approved').length;
+  const isLoading = backendStatus === 'connecting' || backendStatus === 'saving';
+  const isError = backendStatus === 'error';
+  const items = [
+    { label: 'Total leads', value: leads.length, tone: 'blue' },
+    { label: 'Pending Commercial', value: pendingByStage('Commercial Review'), tone: 'amber' },
+    { label: 'Pending Finance', value: pendingByStage('Finance Review'), tone: 'violet' },
+    { label: 'Pending HR', value: pendingByStage('HR Validation'), tone: 'green' },
+    { label: 'Approved proposals', value: approvedProposals, tone: 'green' },
+    { label: 'Generated proposals', value: generatedProposals, tone: 'blue' },
+  ];
+
+  return (
+    <section className="enterprise-card overflow-hidden">
+      <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/60 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-[15px] font-semibold text-slate-950 dark:text-white">Demo Workflow Status</h2>
+            <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ${isError ? compactTone('red') : isLoading ? compactTone('amber') : compactTone('green')}`}>
+              {isError ? 'Data issue' : isLoading ? 'Loading' : 'Ready'}
+            </span>
+            {isDemoMode ? <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ${compactTone('blue')}`}>DEMO MODE</span> : null}
+          </div>
+          <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+            Live Supabase-backed demo counters for Postman and CRM-created workflow records.
+          </p>
+        </div>
+        {workflowError ? <p className="max-w-xl text-xs font-semibold text-rose-600 dark:text-rose-300">{workflowError}</p> : null}
+      </div>
+      {isError ? (
+        <div className="m-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 dark:border-rose-500/25 dark:bg-rose-500/10 dark:text-rose-200">
+          Unable to load workflow data. Check Supabase environment and API health before the demo.
+        </div>
+      ) : null}
+      {!isLoading && !isError && !leads.length && !siteVisits.length ? (
+        <div className="m-4 rounded-xl border border-slate-200 bg-white px-4 py-4 text-sm font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+          No demo records yet. Run the Postman approval flow or create a lead from Lead Management to populate this status board.
+        </div>
+      ) : null}
+      <div className="grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+        {items.map((item) => (
+          <div key={item.label} className="rounded-xl border border-slate-100 bg-white px-3 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <p className="truncate text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">{item.label}</p>
+            <p className="mt-1 text-2xl font-semibold leading-none text-slate-950 dark:text-white">{isLoading ? '...' : item.value}</p>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -1562,7 +1618,7 @@ function ApprovalDashboard({ title, description, stage, siteVisits, leads, user 
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { leads, siteVisits } = useWorkflow();
+  const { leads, siteVisits, backendStatus, workflowError } = useWorkflow();
   const [activeTab, setActiveTab] = useState('new-business');
   const [activeOperationsSection, setActiveOperationsSection] = useState(null);
   usePageTitle('Dashboard');
@@ -1627,6 +1683,13 @@ export default function Dashboard() {
         title={reviewerDashboard?.title || 'Operations Command Center'}
         description={reviewerDashboard?.description || 'Management dashboard for new business pipeline health, site operations, attendance, tickets, tasks, field officers, and SLA visibility.'}
         actions={canSeeOperations ? <DashboardTabs tabs={reviewerDashboard ? reviewTabs : tabs} activeTab={activeTab} onChange={setActiveTab} /> : null}
+      />
+
+      <DemoStatusPanel
+        leads={visibleLeads}
+        siteVisits={visibleSiteVisits}
+        backendStatus={backendStatus}
+        workflowError={workflowError}
       />
 
       {reviewerDashboard && effectiveTab === 'new-business' ? (
