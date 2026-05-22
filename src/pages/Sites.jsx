@@ -6,6 +6,7 @@ import {
   CalendarClock,
   Camera,
   ClipboardCheck,
+  Download,
   Edit3,
   Eye,
   FileText,
@@ -31,7 +32,7 @@ import { usePageTitle } from '../hooks/usePageTitle.js';
 import { sendProposalEmail, sendSiteVisitMomEmail } from '../services/mailService.js';
 import { logAssessmentAuditRemote } from '../services/workflowRepository.js';
 import { calculateManpowerCost } from '../services/costingEngine.js';
-import { buildProposalRows, getProposalTemplateMetadata } from '../services/proposalService.js';
+import { buildProposalRows, exportProposalToExcel, exportProposalToPdf, getProposalTemplateMetadata } from '../services/proposalService.js';
 
 const surveySections = [
   'Basic Site Information',
@@ -311,34 +312,62 @@ function getCommercialTotals(survey) {
   return { revenue, expenses, nonBillable, monthlyCost, margin, marginPercent };
 }
 
+function getScopeLabels(scope = {}) {
+  if (Array.isArray(scope)) return scope.filter(Boolean);
+  return Object.entries(scope)
+    .filter(([, value]) => value === true || value?.selected)
+    .map(([key, value]) => value?.label || key)
+    .filter(Boolean);
+}
+
 function buildProposalPayload(visit, survey, metadata) {
   const safeSurvey = mergeSurvey(survey);
   const rows = buildProposalRows({ survey: safeSurvey });
   const totals = getCommercialTotals(safeSurvey);
+  const monthlyBilling = Number(safeSurvey.commercial?.estimated_monthly_billing || safeSurvey.commercial?.monthlyValue || safeSurvey.commercial?.monthly_value || 0);
+  const proposalValue = Number(safeSurvey.commercial?.proposalValue || safeSurvey.commercial?.proposal_value || 0);
+  const scopeOfWork = getScopeLabels(safeSurvey.ifmScope);
   const lineItems = rows.length
     ? rows
     : [{
         designation: 'IFM Services',
         quantity: 1,
         shift: safeSurvey.operatingHours || 'General',
-        ratePerHead: totals.revenue,
-        monthlyTotal: totals.revenue,
+        ratePerHead: monthlyBilling || totals.revenue,
+        monthlyTotal: monthlyBilling || totals.revenue,
         managementFee: Number(safeSurvey.commercial?.managementFee || 0),
-        contractValue: totals.revenue * 12,
+        contractValue: proposalValue || (monthlyBilling || totals.revenue) * 12,
+        wageCategory: safeSurvey.commercial?.wageCategory || '',
+        gender: 'Any',
       }];
+  const monthlyValue = lineItems.reduce((sum, row) => sum + Number(row.monthlyTotal || 0), 0) || monthlyBilling;
+  const annualValue = lineItems.reduce((sum, row) => sum + Number(row.contractValue || 0), 0) || proposalValue || monthlyValue * 12;
 
   return {
     proposalNumber: `QPMS-PROP-${String(Date.now()).slice(-6)}`,
     clientName: visit?.company || '',
+    siteDetails: [visit?.siteName || visit?.location, visit?.city, visit?.state].filter(Boolean).join(', '),
+    scopeOfWork,
+    manpowerRequirement: safeSurvey.manpowerPlan || [],
+    costingSummary: {
+      monthlyValue,
+      annualValue,
+      monthlyCost: totals.monthlyCost,
+      margin: totals.margin,
+      marginPercent: totals.marginPercent,
+      managementFee: Number(safeSurvey.commercial?.managementFee || safeSurvey.commercial?.management_fee || 0),
+    },
+    commercialNotes: safeSurvey.commercial?.notes || safeSurvey.commercial?.commercial_notes || safeSurvey.finalRemarks || 'Commercial terms prepared from approved site assessment.',
+    approvalStatus: visit?.approvalStatus || visit?.status || 'Approved',
     to: visit?.email || '',
     cc: [visit?.assigned_bd_email, 'bdhead@qpms.in'].filter(Boolean).join(', '),
     subject: `Business Proposal - ${visit?.company || 'Client'} - QPMS`,
     templateName: 'New Business Proposal Format.xlsx',
     templatePath: metadata.templatePath,
     supportedExports: metadata.supportedExports,
-    proposalValue: lineItems.reduce((sum, row) => sum + Number(row.contractValue || 0), 0),
-    monthlyValue: lineItems.reduce((sum, row) => sum + Number(row.monthlyTotal || 0), 0),
-    projectedRevenue: totals.revenue,
+    proposalValue: annualValue,
+    monthlyValue,
+    projectedRevenue: monthlyValue,
     monthlyCost: totals.monthlyCost,
     margin: totals.margin,
     marginPercent: totals.marginPercent,
@@ -347,8 +376,10 @@ function buildProposalPayload(visit, survey, metadata) {
       `Dear ${visit?.contact || 'Client'},`,
       '',
       `Please find the QPMS facility management proposal for ${visit?.company || 'your site'}.`,
-      `Monthly value: ${currency(lineItems.reduce((sum, row) => sum + Number(row.monthlyTotal || 0), 0))}`,
-      `Annual contract value: ${currency(lineItems.reduce((sum, row) => sum + Number(row.contractValue || 0), 0))}`,
+      `Scope of work: ${scopeOfWork.join(', ') || 'IFM services as per approved assessment'}`,
+      `Monthly value: ${currency(monthlyValue)}`,
+      `Annual contract value: ${currency(annualValue)}`,
+      `Approval status: ${visit?.approvalStatus || visit?.status || 'Approved'}`,
       '',
       'Regards,',
       'QPMS Business Development Team',
@@ -1078,6 +1109,23 @@ function duplicateRow(section, index) {
     }
   }
 
+  function handleExportProposal(format) {
+    const targetVisit = proposalPreviewVisit || selectedVisit;
+    const nextProposal = proposalDraft || buildProposalPayload(targetVisit, surveyDraft || mergeSurvey(targetVisit?.survey), proposalMetadata);
+    if (!targetVisit || !nextProposal) return;
+    try {
+      if (format === 'excel') {
+        exportProposalToExcel(nextProposal, targetVisit);
+        showToast('Proposal Excel export prepared', 'success');
+        return;
+      }
+      exportProposalToPdf(nextProposal, targetVisit);
+      showToast('Proposal PDF export opened', 'success');
+    } catch (error) {
+      showToast(`Proposal export failed: ${error.message}`, 'error');
+    }
+  }
+
   function renderProposalPreviewModal() {
     if (!proposalPreviewVisit || !proposalDraft) return null;
     return (
@@ -1098,7 +1146,21 @@ function duplicateRow(section, index) {
             <SummaryPill label="Proposal No." value={proposalDraft.proposalNumber} />
             <SummaryPill label="Monthly Value" value={currency(proposalDraft.monthlyValue)} />
             <SummaryPill label="Annual Value" value={currency(proposalDraft.proposalValue)} />
-            <SummaryPill label="Margin" value={`${Number(proposalDraft.marginPercent || 0).toFixed(1)}%`} />
+            <SummaryPill label="Approval Status" value={proposalDraft.approvalStatus || proposalPreviewVisit.approvalStatus || proposalPreviewVisit.status || 'Approved'} />
+          </div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-2">
+            <SummaryPill label="Client Name" value={proposalDraft.clientName || proposalPreviewVisit.company} />
+            <SummaryPill label="Site Details" value={proposalDraft.siteDetails || [proposalPreviewVisit.location, proposalPreviewVisit.city, proposalPreviewVisit.state].filter(Boolean).join(', ')} />
+            <SummaryPill label="Scope of Work" value={(proposalDraft.scopeOfWork || []).join(', ') || 'IFM service scope from assessment'} />
+            <SummaryPill label="Commercial Notes" value={proposalDraft.commercialNotes || 'Commercial terms prepared from approved site assessment.'} />
+          </div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-4">
+            <SummaryPill label="Costing Summary" value={`Cost ${currency(proposalDraft.monthlyCost || 0)}`} />
+            <SummaryPill label="Margin Value" value={currency(proposalDraft.margin || 0)} />
+            <SummaryPill label="Margin %" value={`${Number(proposalDraft.marginPercent || 0).toFixed(1)}%`} />
+            <SummaryPill label="Manpower Rows" value={proposalDraft.manpowerRequirement?.length || proposalDraft.lineItems?.length || 0} />
           </div>
 
           <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700 dark:border-slate-800 dark:bg-slate-950/55 dark:text-slate-300">
@@ -1139,6 +1201,14 @@ function duplicateRow(section, index) {
 
           <div className="mt-6 flex flex-wrap justify-end gap-3">
             <button type="button" onClick={() => setProposalPreviewVisit(null)} className="focus-ring rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">Cancel</button>
+            <button type="button" onClick={() => handleExportProposal('excel')} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 shadow-sm hover:bg-emerald-100 dark:border-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-200">
+              <Download className="h-4 w-4" />
+              Export Excel
+            </button>
+            <button type="button" onClick={() => handleExportProposal('pdf')} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-qpms-200 bg-qpms-50 px-4 py-2.5 text-sm font-semibold text-qpms-700 shadow-sm hover:bg-qpms-100 dark:border-qpms-500/25 dark:bg-qpms-500/10 dark:text-qpms-200">
+              <FileText className="h-4 w-4" />
+              Export PDF
+            </button>
             <button type="button" onClick={handleSendProposal} disabled={pendingAction === 'sendProposal'} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-qpms-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700">
               <ButtonContent loading={pendingAction === 'sendProposal'} icon={Send}>Send Proposal Mail</ButtonContent>
             </button>

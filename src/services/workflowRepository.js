@@ -30,6 +30,11 @@ function rpcMissing(error) {
   return error?.code === 'PGRST202' || error?.code === '42883' || message.includes('function') || message.includes('schema cache');
 }
 
+function tableMissing(error) {
+  const message = String(error?.message || error?.details || '').toLowerCase();
+  return ['42P01', 'PGRST205'].includes(error?.code) || message.includes('could not find the table');
+}
+
 function normalizeRpcError(error, label) {
   if (!error) return new Error(`${label} failed`);
   const nextError = new Error(error.message || `${label} failed`);
@@ -220,6 +225,7 @@ export function dbSiteVisitToApp(row) {
   }));
   const primary = contacts.find((contact) => contact.isPrimary) || contacts[0] || {};
   const assessment = row.site_assessments?.[0];
+  const latestProposal = [...(row.proposals || [])].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0];
   const approvals = [...(row.approval_requests || [])].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
   const latestApproval = approvals[0] || {};
   const reviewStatus = approvals.reduce((acc, approval) => {
@@ -272,6 +278,16 @@ export function dbSiteVisitToApp(row) {
       label: `${approval.approval_stage} ${approval.status}`,
       at: approval.approved_at || approval.created_at,
     })),
+    proposal: latestProposal ? {
+      id: latestProposal.id,
+      proposalNumber: latestProposal.proposal_number,
+      status: latestProposal.proposal_status,
+      generatedAt: latestProposal.generated_at,
+      sentAt: latestProposal.sent_at,
+      proposalValue: latestProposal.proposal_value,
+      marginPercent: latestProposal.margin_percent,
+      ...(latestProposal.metadata?.proposalPayload || {}),
+    } : undefined,
     siteMom: row.site_mom?.[0] ? dbSiteMomToApp(row.site_mom[0]) : null,
     activity: (row.activity_logs || []).map((log) => log.activity_message || log.message || log.activity_type).filter(Boolean),
   };
@@ -516,6 +532,7 @@ export async function fetchWorkflowData() {
   const siteVisitRows = visitsResponse.error ? [] : visitsResponse.data || [];
   const siteVisitIds = siteVisitRows.map((visit) => visit.id).filter(Boolean);
   let workflowBySiteVisitId = {};
+  let proposalsBySiteVisitId = {};
 
   if (siteVisitIds.length) {
     const workflowResponse = await supabase
@@ -542,6 +559,23 @@ export async function fetchWorkflowData() {
     }
   }
 
+  if (siteVisitIds.length) {
+    const proposalsResponse = await supabase
+      .from('proposals')
+      .select('*')
+      .in('site_visit_id', siteVisitIds);
+    if (proposalsResponse.error) {
+      if (!tableMissing(proposalsResponse.error)) {
+        console.warn('[QPMS Supabase] proposals fetch skipped/failed', proposalsResponse.error);
+      }
+    } else {
+      proposalsBySiteVisitId = (proposalsResponse.data || []).reduce((grouped, proposal) => {
+        grouped[proposal.site_visit_id] = [...(grouped[proposal.site_visit_id] || []), proposal];
+        return grouped;
+      }, {});
+    }
+  }
+
   const leadsWithContacts = (leadsResponse.data || []).map((lead) => ({
     ...lead,
     lead_contacts: contactsByLeadId[lead.id] || [],
@@ -550,6 +584,7 @@ export async function fetchWorkflowData() {
   const visitsWithWorkflow = siteVisitRows.map((visit) => ({
     ...visit,
     workflow_instance: workflowBySiteVisitId[visit.id],
+    proposals: proposalsBySiteVisitId[visit.id] || [],
   }));
 
   console.info('[QPMS Supabase] Workflow fetch success', {
@@ -697,20 +732,110 @@ export async function markNotificationRead(notificationId, readerUserId = null) 
 
 export async function generateProposalRecord({ visit, proposal, user, idempotencyKey }) {
   const actor = compactActor(user);
-  return callWorkflowRpc(
-    'rpc_generate_proposal_record',
-    {
-      p_workflow_instance_id: visit.workflowInstanceId || visit.workflow_instance_id,
-      p_actor_user_id: actor.userId,
-      p_actor_name: actor.name,
-      p_actor_role: actor.role || 'BD Team',
-      p_proposal_number: proposal?.proposalNumber || null,
-      p_template_name: proposal?.templateName || null,
-      p_payload: proposal || {},
-      p_idempotency_key: idempotencyKey || createIdempotencyKey('proposal', visit.id),
+  try {
+    return await callWorkflowRpc(
+      'rpc_generate_proposal_record',
+      {
+        p_workflow_instance_id: visit.workflowInstanceId || visit.workflow_instance_id,
+        p_actor_user_id: actor.userId,
+        p_actor_name: actor.name,
+        p_actor_role: actor.role || 'BD Team',
+        p_proposal_number: proposal?.proposalNumber || null,
+        p_template_name: proposal?.templateName || null,
+        p_payload: proposal || {},
+        p_idempotency_key: idempotencyKey || createIdempotencyKey('proposal', visit.id),
+      },
+      'Generate proposal record',
+    );
+  } catch (error) {
+    if (!error?.isRpcMissing) throw error;
+    console.warn('[QPMS Workflow] Proposal RPC unavailable; attempting direct proposal table insert', error.message);
+    return generateProposalRecordDirect({ visit, proposal, actor });
+  }
+}
+
+async function generateProposalRecordDirect({ visit, proposal, actor }) {
+  assertConfigured();
+  const proposalPayload = {
+    workflow_instance_id: visit.workflowInstanceId || visit.workflow_instance_id || null,
+    lead_id: visit.leadId || visit.lead_id || null,
+    site_visit_id: visit.id,
+    proposal_number: proposal?.proposalNumber || null,
+    client_name: proposal?.clientName || visit.company || visit.client_name || '',
+    proposal_status: 'Generated',
+    proposal_value: Number(proposal?.proposalValue || 0),
+    management_fee_percent: Number(proposal?.costingSummary?.managementFee || proposal?.managementFee || 0),
+    margin_percent: Number(proposal?.marginPercent || 0),
+    generated_by: actor.userId,
+    generated_by_name: actor.name || 'QPMS CRM',
+    generated_at: new Date().toISOString(),
+    metadata: {
+      created_by: 'crm_ui',
+      source: 'proposal_demo_export',
+      proposalPayload: proposal || {},
     },
-    'Generate proposal record',
-  );
+  };
+  let proposalRow;
+  const proposalResponse = await supabase
+    .from('proposals')
+    .insert(proposalPayload)
+    .select('*')
+    .single();
+  if (proposalResponse.error) {
+    if (tableMissing(proposalResponse.error)) {
+      const fallback = normalizeRpcError(proposalResponse.error, 'Generate proposal direct insert');
+      fallback.isRpcMissing = true;
+      throw fallback;
+    }
+    throw proposalResponse.error;
+  }
+  proposalRow = proposalResponse.data;
+
+  const versionResponse = await supabase
+    .from('proposal_versions')
+    .insert({
+      proposal_id: proposalRow.id,
+      version_number: 1,
+      source_template_name: proposal?.templateName || null,
+      generated_payload: proposal || {},
+      generated_by: actor.userId,
+      generated_by_name: actor.name || 'QPMS CRM',
+      remarks: 'Generated from CRM proposal demo workflow.',
+    })
+    .select('*')
+    .single();
+  if (versionResponse.error && !tableMissing(versionResponse.error)) {
+    throw versionResponse.error;
+  }
+
+  const lineItems = proposal?.lineItems || [];
+  if (lineItems.length && versionResponse.data?.id) {
+    const itemRows = lineItems.map((item, index) => ({
+      proposal_id: proposalRow.id,
+      proposal_version_id: versionResponse.data.id,
+      line_order: index + 1,
+      designation: item.designation || '',
+      service_scope: Array.isArray(proposal?.scopeOfWork) ? proposal.scopeOfWork.join(', ') : proposal?.scopeOfWork || '',
+      quantity: Number(item.quantity || 0),
+      shift_type: item.shift || '',
+      rate_per_head: Number(item.ratePerHead || 0),
+      monthly_total: Number(item.monthlyTotal || 0),
+      management_fee: Number(item.managementFee || 0),
+      contract_value: Number(item.contractValue || 0),
+      costing_snapshot: item,
+    }));
+    const lineItemResponse = await supabase.from('proposal_line_items').insert(itemRows);
+    if (lineItemResponse.error && !tableMissing(lineItemResponse.error)) {
+      throw lineItemResponse.error;
+    }
+  }
+
+  return {
+    proposal: proposalRow,
+    version: versionResponse.data || null,
+    lineItems,
+    direct: true,
+  };
 }
 
 export async function createLeadRemote(lead) {
