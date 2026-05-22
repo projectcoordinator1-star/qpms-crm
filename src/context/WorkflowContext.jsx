@@ -251,6 +251,14 @@ export function WorkflowProvider({ children }) {
   const [siteVisits, setSiteVisits] = useState(() => (isRemoteWorkflowEnabled() ? [] : readStorage(siteVisitsStorageKey, [])));
   const [backendStatus, setBackendStatus] = useState(isRemoteWorkflowEnabled() ? 'connecting' : 'local');
   const [workflowError, setWorkflowError] = useState('');
+  const [workflowDebug, setWorkflowDebug] = useState({
+    apiSource: isRemoteWorkflowEnabled() ? 'supabase.public.leads' : 'local.mock',
+    totalLeadsFetched: isRemoteWorkflowEnabled() ? 0 : leadRows.length,
+    latestLeadId: '',
+    latestClientName: '',
+    postmanAutomationLeads: 0,
+    approvalRequestsFetched: 0,
+  });
 
   useEffect(() => {
     if (!isRemoteWorkflowEnabled()) {
@@ -281,6 +289,14 @@ export function WorkflowProvider({ children }) {
       .then((data) => {
         setLeads(data.leads.map(normalizeLead));
         setSiteVisits(data.siteVisits);
+        setWorkflowDebug(data.debug || {
+          apiSource: 'supabase.public.leads',
+          totalLeadsFetched: data.leads.length,
+          latestLeadId: data.leads[0]?.id || '',
+          latestClientName: data.leads[0]?.company || '',
+          postmanAutomationLeads: data.leads.filter((lead) => lead.source === 'Postman Automation').length,
+          approvalRequestsFetched: data.siteVisits.reduce((sum, visit) => sum + (visit.approvals?.length || 0), 0),
+        });
         setBackendStatus('connected');
         console.info('[QPMS Workflow] Supabase workflow connected', {
           leads: data.leads.length,
@@ -776,6 +792,7 @@ export function WorkflowProvider({ children }) {
     siteVisits,
     backendStatus,
     workflowError,
+    workflowDebug,
     refreshWorkflowData,
     addLead,
     deleteLead,

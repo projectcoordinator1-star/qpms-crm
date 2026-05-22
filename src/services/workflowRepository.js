@@ -129,6 +129,15 @@ function normalizeJsonArray(value) {
     .filter(Boolean);
 }
 
+function groupBy(items = [], key) {
+  return items.reduce((grouped, item) => {
+    const value = item?.[key];
+    if (!value) return grouped;
+    grouped[value] = [...(grouped[value] || []), item];
+    return grouped;
+  }, {});
+}
+
 export function dbLeadToAppLead(row) {
   const relationContacts = row.lead_contacts || [];
   const directContact = pick(row, ['contact_person_name', 'contact', 'primary_contact_name']);
@@ -522,7 +531,7 @@ export async function fetchWorkflowData() {
 
   const visitsResponse = await supabase
     .from('site_visits')
-    .select('*, leads(*), site_assessments(*), site_mom(*), approval_requests(*), activity_logs(*)')
+    .select('*')
     .order('created_at', { ascending: false });
 
   if (visitsResponse.error) {
@@ -531,8 +540,52 @@ export async function fetchWorkflowData() {
 
   const siteVisitRows = visitsResponse.error ? [] : visitsResponse.data || [];
   const siteVisitIds = siteVisitRows.map((visit) => visit.id).filter(Boolean);
+  const leadsById = (leadsResponse.data || []).reduce((mapped, lead) => {
+    mapped[lead.id] = {
+      ...lead,
+      lead_contacts: contactsByLeadId[lead.id] || [],
+    };
+    return mapped;
+  }, {});
+  let assessmentsBySiteVisitId = {};
+  let siteMomBySiteVisitId = {};
+  let approvalsBySiteVisitId = {};
+  let activityBySiteVisitId = {};
   let workflowBySiteVisitId = {};
   let proposalsBySiteVisitId = {};
+
+  if (siteVisitIds.length) {
+    const [assessmentResponse, siteMomResponse, approvalResponse, activityResponse] = await Promise.all([
+      supabase.from('site_assessments').select('*').in('site_visit_id', siteVisitIds),
+      supabase.from('site_mom').select('*').in('site_visit_id', siteVisitIds),
+      supabase.from('approval_requests').select('*').in('site_visit_id', siteVisitIds).order('created_at', { ascending: false }),
+      supabase.from('activity_logs').select('*').in('site_visit_id', siteVisitIds).order('created_at', { ascending: false }),
+    ]);
+
+    if (assessmentResponse.error) {
+      console.warn('[QPMS Supabase] site_assessments fetch skipped/failed', assessmentResponse.error);
+    } else {
+      assessmentsBySiteVisitId = groupBy(assessmentResponse.data || [], 'site_visit_id');
+    }
+
+    if (siteMomResponse.error) {
+      console.warn('[QPMS Supabase] site_mom fetch skipped/failed', siteMomResponse.error);
+    } else {
+      siteMomBySiteVisitId = groupBy(siteMomResponse.data || [], 'site_visit_id');
+    }
+
+    if (approvalResponse.error) {
+      console.warn('[QPMS Supabase] approval_requests fetch skipped/failed', approvalResponse.error);
+    } else {
+      approvalsBySiteVisitId = groupBy(approvalResponse.data || [], 'site_visit_id');
+    }
+
+    if (activityResponse.error) {
+      console.warn('[QPMS Supabase] activity_logs fetch skipped/failed', activityResponse.error);
+    } else {
+      activityBySiteVisitId = groupBy(activityResponse.data || [], 'site_visit_id');
+    }
+  }
 
   if (siteVisitIds.length) {
     const workflowResponse = await supabase
@@ -583,6 +636,11 @@ export async function fetchWorkflowData() {
 
   const visitsWithWorkflow = siteVisitRows.map((visit) => ({
     ...visit,
+    leads: leadsById[visit.lead_id] || {},
+    site_assessments: assessmentsBySiteVisitId[visit.id] || [],
+    site_mom: siteMomBySiteVisitId[visit.id] || [],
+    approval_requests: approvalsBySiteVisitId[visit.id] || [],
+    activity_logs: activityBySiteVisitId[visit.id] || [],
     workflow_instance: workflowBySiteVisitId[visit.id],
     proposals: proposalsBySiteVisitId[visit.id] || [],
   }));
@@ -596,6 +654,14 @@ export async function fetchWorkflowData() {
   return {
     leads: leadsWithContacts.map(dbLeadToAppLead),
     siteVisits: visitsResponse.error ? [] : visitsWithWorkflow.map(dbSiteVisitToApp),
+    debug: {
+      apiSource: 'supabase.public.leads',
+      totalLeadsFetched: leadsWithContacts.length,
+      latestLeadId: leadsWithContacts[0]?.id || '',
+      latestClientName: leadsWithContacts[0]?.client_name || leadsWithContacts[0]?.company_name || '',
+      postmanAutomationLeads: leadsWithContacts.filter((lead) => lead.lead_source === 'Postman Automation' || lead.metadata?.created_by === 'postman_automation').length,
+      approvalRequestsFetched: Object.values(approvalsBySiteVisitId).reduce((sum, rows) => sum + rows.length, 0),
+    },
   };
 }
 

@@ -521,15 +521,17 @@ function filterPipelineLeads(leads, { business, region, owner }) {
 
 function stageCount(leads, siteVisits, matcher, fallback) {
   const count = matcher(leads, siteVisits);
-  return count > 0 ? count : fallback;
+  return leads.length || siteVisits.length ? count : fallback;
 }
 
 function buildPipelineCommandData(leads, siteVisits, bdRows) {
   const openLeads = leads.filter((lead) => !['Converted', 'Lost'].includes(lead.stage));
-  const commercialPending = leads.filter((lead) => lead.stage === 'Commercial Review').length + siteVisits.filter((visit) => visit.currentStage === 'Commercial Review').length;
-  const approvalPending = leads.filter((lead) => ['Approval Pending', 'BD Team Review', 'COO Approval'].includes(lead.stage)).length + siteVisits.filter((visit) => ['Finance Review', 'Returned to BD'].includes(visit.currentStage)).length;
-  const proposals = leads.filter((lead) => lead.stage === 'Proposal Sent').length;
-  const converted = leads.filter((lead) => lead.stage === 'Converted').length;
+  const commercialPending = leads.filter((lead) => lead.stage === 'Commercial Review').length + siteVisits.filter((visit) => (visit.reviewStatus?.['Commercial Review'] || (visit.currentStage === 'Commercial Review' ? 'Pending' : '')) === 'Pending').length;
+  const financePending = siteVisits.filter((visit) => (visit.reviewStatus?.['Finance Review'] || (visit.currentStage === 'Finance Review' ? 'Pending' : '')) === 'Pending').length;
+  const hrPending = siteVisits.filter((visit) => (visit.reviewStatus?.['HR Validation'] || (visit.currentStage === 'HR Validation' ? 'Pending' : '')) === 'Pending').length;
+  const approvalPending = commercialPending + financePending + hrPending + leads.filter((lead) => ['Approval Pending', 'BD Team Review', 'COO Approval'].includes(lead.stage)).length;
+  const proposals = leads.filter((lead) => lead.stage === 'Proposal Sent').length + siteVisits.filter((visit) => ['Proposal Generated', 'Proposal Sent'].includes(visit.status) || visit.proposal).length;
+  const converted = leads.filter((lead) => lead.stage === 'Converted' || lead.status === 'Converted to Assessment').length;
   const siteVisitCount = siteVisits.length || leads.filter((lead) => lead.stage === 'Site Visit Scheduled').length;
   const estimationCount = siteVisits.filter((visit) => ['Scheduled', 'Site Visit MOM Created', 'Site Visit MOM Sent', 'Pending Review'].includes(visit.status)).length;
   const totalLeadBase = Math.max(leads.length, 1);
@@ -750,12 +752,17 @@ function OperationalHealth({ items }) {
   );
 }
 
-function DemoStatusPanel({ leads, siteVisits, backendStatus, workflowError }) {
+function DemoStatusPanel({ leads, siteVisits, backendStatus, workflowError, workflowDebug }) {
   const pendingByStage = (stage) => siteVisits.filter((visit) => (visit.reviewStatus?.[stage] || (visit.currentStage === stage ? 'Pending' : '')) === 'Pending').length;
   const generatedProposals = siteVisits.filter((visit) => visit.proposal || ['Proposal Generated', 'Proposal Sent'].includes(visit.status)).length;
-  const approvedProposals = siteVisits.filter((visit) => ['Proposal Sent', 'Ready for Proposal', 'Proposal Generated'].includes(visit.status) || visit.approvalStatus === 'Approved').length;
+  const approvedProposals = siteVisits.filter((visit) => {
+    const statuses = Object.values(visit.reviewStatus || {});
+    const allApprovalsApproved = statuses.length && statuses.every((status) => status === 'Approved');
+    return ['Proposal Sent', 'Ready for Proposal', 'Proposal Generated'].includes(visit.status) || visit.approvalStatus === 'Approved' || allApprovalsApproved;
+  }).length;
   const isLoading = backendStatus === 'connecting' || backendStatus === 'saving';
   const isError = backendStatus === 'error';
+  const latestLead = leads[0] || {};
   const items = [
     { label: 'Total leads', value: leads.length, tone: 'blue' },
     { label: 'Pending Commercial', value: pendingByStage('Commercial Review'), tone: 'amber' },
@@ -799,6 +806,26 @@ function DemoStatusPanel({ leads, siteVisits, backendStatus, workflowError }) {
             <p className="mt-1 text-2xl font-semibold leading-none text-slate-950 dark:text-white">{isLoading ? '...' : item.value}</p>
           </div>
         ))}
+      </div>
+      <div className="border-t border-slate-100 bg-slate-50/70 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
+        <div className="grid gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl bg-white px-3 py-2 ring-1 ring-slate-100 dark:bg-slate-950 dark:ring-slate-800">
+            <span className="block text-[10px] font-bold uppercase text-slate-400">DEMO DEBUG: leads fetched</span>
+            {workflowDebug?.totalLeadsFetched ?? leads.length}
+          </div>
+          <div className="rounded-xl bg-white px-3 py-2 ring-1 ring-slate-100 dark:bg-slate-950 dark:ring-slate-800">
+            <span className="block text-[10px] font-bold uppercase text-slate-400">Latest lead id</span>
+            {workflowDebug?.latestLeadId || latestLead.id || '-'}
+          </div>
+          <div className="rounded-xl bg-white px-3 py-2 ring-1 ring-slate-100 dark:bg-slate-950 dark:ring-slate-800">
+            <span className="block text-[10px] font-bold uppercase text-slate-400">Latest client</span>
+            {workflowDebug?.latestClientName || latestLead.company || '-'}
+          </div>
+          <div className="rounded-xl bg-white px-3 py-2 ring-1 ring-slate-100 dark:bg-slate-950 dark:ring-slate-800">
+            <span className="block text-[10px] font-bold uppercase text-slate-400">API source</span>
+            {workflowDebug?.apiSource || (backendStatus === 'connected' ? 'supabase.public.leads' : 'local')}
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -1618,7 +1645,7 @@ function ApprovalDashboard({ title, description, stage, siteVisits, leads, user 
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { leads, siteVisits, backendStatus, workflowError } = useWorkflow();
+  const { leads, siteVisits, backendStatus, workflowError, workflowDebug } = useWorkflow();
   const [activeTab, setActiveTab] = useState('new-business');
   const [activeOperationsSection, setActiveOperationsSection] = useState(null);
   usePageTitle('Dashboard');
@@ -1690,6 +1717,7 @@ export default function Dashboard() {
         siteVisits={visibleSiteVisits}
         backendStatus={backendStatus}
         workflowError={workflowError}
+        workflowDebug={workflowDebug}
       />
 
       {reviewerDashboard && effectiveTab === 'new-business' ? (

@@ -787,6 +787,42 @@ app.post('/api/auth/login', (request, response) => {
   });
 });
 
+app.get('/api/leads', requireApiAuth, async (request, response) => {
+  try {
+    const client = requireSupabase();
+    const { data: leads, error } = await client
+      .from('leads')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+
+    const leadIds = (leads || []).map((lead) => lead.id);
+    let contactsByLeadId = {};
+    if (leadIds.length) {
+      const contactsResponse = await client.from('lead_contacts').select('*').in('lead_id', leadIds);
+      if (contactsResponse.error) throw contactsResponse.error;
+      contactsByLeadId = (contactsResponse.data || []).reduce((grouped, contact) => {
+        grouped[contact.lead_id] = [...(grouped[contact.lead_id] || []), contact];
+        return grouped;
+      }, {});
+    }
+
+    response.json({
+      ok: true,
+      source: 'supabase.public.leads',
+      count: leads?.length || 0,
+      latestLeadId: leads?.[0]?.id || null,
+      latestClientName: leads?.[0]?.client_name || leads?.[0]?.company_name || null,
+      leads: (leads || []).map((lead) => ({
+        ...lead,
+        lead_contacts: contactsByLeadId[lead.id] || [],
+      })),
+    });
+  } catch (error) {
+    response.status(error.statusCode || 500).json({ ok: false, message: error.message });
+  }
+});
+
 app.post('/api/leads', requireApiAuth, requireRoles(['BD Executive', 'BD Head', 'Admin']), async (request, response) => {
   try {
     const client = requireSupabase();
