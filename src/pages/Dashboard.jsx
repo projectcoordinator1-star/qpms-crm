@@ -807,6 +807,7 @@ function DemoStatusPanel({ leads, siteVisits, backendStatus, workflowError, work
           </div>
         ))}
       </div>
+      <ExecutiveWorkflowStepper leads={leads} siteVisits={siteVisits} />
       <div className="border-t border-slate-100 bg-slate-50/70 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
         <div className="grid gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl bg-white px-3 py-2 ring-1 ring-slate-100 dark:bg-slate-950 dark:ring-slate-800">
@@ -828,6 +829,43 @@ function DemoStatusPanel({ leads, siteVisits, backendStatus, workflowError, work
         </div>
       </div>
     </section>
+  );
+}
+
+function ExecutiveWorkflowStepper({ leads, siteVisits }) {
+  const countStage = (name) => siteVisits.filter((visit) => visit.currentStage === name || visit.reviewStatus?.[name]).length;
+  const stages = [
+    { label: 'Lead', count: leads.length },
+    { label: 'Site Visit', count: siteVisits.length },
+    { label: 'Assessment', count: siteVisits.filter((visit) => visit.assessmentStatus || visit.survey).length },
+    { label: 'Commercial', count: countStage('Commercial Review') },
+    { label: 'Finance', count: countStage('Finance Review') },
+    { label: 'HR', count: countStage('HR Validation') },
+    { label: 'Approved', count: siteVisits.filter((visit) => visit.approvalStatus === 'Approved' || Object.values(visit.reviewStatus || {}).includes('Approved')).length },
+    { label: 'Proposal', count: siteVisits.filter((visit) => visit.proposal || ['Proposal Generated', 'Proposal Sent'].includes(visit.status)).length },
+  ];
+
+  return (
+    <div className="border-t border-slate-100 px-3 py-3 dark:border-slate-800">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Workflow Status Pipeline</p>
+        <span className="rounded-full bg-qpms-50 px-2.5 py-1 text-[10px] font-bold text-qpms-700 ring-1 ring-qpms-200 dark:bg-qpms-500/15 dark:text-qpms-300 dark:ring-qpms-500/25">Live workflow view</span>
+      </div>
+      <div className="overflow-x-auto pb-1">
+        <div className="flex min-w-[860px] items-stretch gap-2">
+          {stages.map((stage, index) => (
+            <div key={stage.label} className="relative flex-1 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950/55">
+              {index < stages.length - 1 ? <div className="absolute -right-2 top-1/2 h-0.5 w-2 bg-slate-200 dark:bg-slate-800" /> : null}
+              <div className="flex items-center justify-between gap-2">
+                <p className="truncate text-xs font-bold text-slate-900 dark:text-white">{stage.label}</p>
+                <CheckCircle2 className={`h-3.5 w-3.5 ${stage.count ? 'text-emerald-500' : 'text-slate-300 dark:text-slate-700'}`} />
+              </div>
+              <p className="mt-1 text-xl font-semibold leading-none text-slate-950 dark:text-white">{stage.count}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 

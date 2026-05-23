@@ -3,6 +3,7 @@ import { motion as Motion, AnimatePresence } from 'framer-motion';
 import {
   AlertTriangle,
   ArrowLeft,
+  BadgeCheck,
   CalendarClock,
   Camera,
   ClipboardCheck,
@@ -10,8 +11,10 @@ import {
   Edit3,
   Eye,
   FileText,
+  Layers3,
   Lock,
   MapPin,
+  Paperclip,
   Plus,
   Save,
   Search,
@@ -19,6 +22,7 @@ import {
   Trash2,
   UploadCloud,
   UserRound,
+  WalletCards,
   X,
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -458,6 +462,14 @@ function VisitMeta({ icon, label, value }) {
 
 function AssessmentQueueCard({ visit, onOpenAssessment, onOpenMom, onGenerateProposal, proposalLoading }) {
   const readyForProposal = isProposalReady(visit);
+  const sections = [
+    { label: 'Site Details', icon: MapPin, value: [visit.city, visit.state].filter(Boolean).join(', ') || 'Captured' },
+    { label: 'Manpower', icon: UserRound, value: `${visit.survey?.manpowerPlan?.length || 0} rows` },
+    { label: 'Costing', icon: WalletCards, value: visit.survey?.commercialStatement ? 'Ready' : 'Draft' },
+    { label: 'MOM', icon: FileText, value: visit.siteMom ? 'Available' : visit.momStatus || 'Pending' },
+    { label: 'Attachments', icon: Paperclip, value: `${visit.photos?.length || 0} files` },
+    { label: 'Approval', icon: BadgeCheck, value: visit.approvalStatus || visit.currentStage || 'Draft' },
+  ];
   return (
     <Motion.article
       layout
@@ -467,34 +479,60 @@ function AssessmentQueueCard({ visit, onOpenAssessment, onOpenMom, onGeneratePro
       transition={{ duration: 0.18, ease: 'easeOut' }}
       onClick={onOpenAssessment}
       className={[
-        'cursor-pointer rounded-2xl border bg-white p-5 shadow-sm transition dark:bg-slate-950/70',
-        'border-slate-200 hover:border-qpms-200 hover:shadow-lg dark:border-slate-800 dark:hover:border-qpms-500/35',
+        'group cursor-pointer overflow-hidden rounded-3xl border bg-white shadow-sm transition dark:bg-slate-950/70',
+        'border-slate-200 hover:border-qpms-200 hover:shadow-xl dark:border-slate-800 dark:hover:border-qpms-500/35',
       ].join(' ')}
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="truncate text-lg font-semibold leading-6 text-slate-950 dark:text-white">{visit.company}</h3>
-            {visit.priority ? (
-              <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-500/25">{visit.priority}</span>
-            ) : null}
+      <div className="border-b border-slate-100 bg-gradient-to-r from-slate-50 to-white p-5 dark:border-slate-800 dark:from-slate-900/70 dark:to-slate-950">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="truncate text-lg font-semibold leading-6 text-slate-950 dark:text-white">{visit.company}</h3>
+              {visit.priority ? (
+                <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-500/25">{visit.priority}</span>
+              ) : null}
+            </div>
+            <p className="mt-1 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{visit.leadId || `Lead ${visit.leadId || visit.lead_id || visit.id}`}</p>
           </div>
-          <p className="mt-1 text-xs font-bold uppercase text-slate-500 dark:text-slate-400">{visit.leadId || `Lead ${visit.leadId || visit.lead_id || visit.id}`}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge status={visit.status || 'Scheduled'} />
+            <CompactStatusBadge label="Stage" value={normalizeStage(visit.currentStage || 'Assessment')} tone="blue" />
+          </div>
         </div>
-        <StatusBadge status={visit.status || 'Scheduled'} />
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
+      <div className="grid gap-4 p-5 xl:grid-cols-[0.9fr_1.1fr]">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-1">
         <VisitMeta icon={UserRound} label="Primary contact" value={visit.contact} />
         <VisitMeta icon={MapPin} label="Location" value={[visit.location, visit.city, visit.state].filter(Boolean).join(', ')} />
         <VisitMeta icon={CalendarClock} label="Visit schedule" value={`${formatDate(visit.scheduledVisitDate)}${visit.scheduledVisitTime ? `, ${visit.scheduledVisitTime}` : ''}`} />
         <VisitMeta icon={ClipboardCheck} label="Assigned BD" value={visit.assigned_bd_executive || visit.executive} />
+        </div>
+        <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-950/55">
+          <div className="mb-3 flex items-center gap-2">
+            <Layers3 className="h-4 w-4 text-qpms-600 dark:text-qpms-300" />
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Assessment workspace</p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {sections.map((section) => {
+              const Icon = section.icon;
+              return (
+                <div key={section.label} className="rounded-xl border border-white bg-white px-3 py-2 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <div className="flex items-center gap-2">
+                    <Icon className="h-3.5 w-3.5 text-qpms-600 dark:text-qpms-300" />
+                    <span className="truncate text-xs font-bold text-slate-800 dark:text-slate-100">{section.label}</span>
+                  </div>
+                  <p className="mt-1 truncate text-[11px] font-semibold text-slate-500 dark:text-slate-400">{section.value}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-4 dark:border-slate-800">
         <div className="flex flex-wrap items-center gap-2">
           <CompactStatusBadge label="MOM" value={visit.momStatus || 'Pending'} tone="amber" />
-          <CompactStatusBadge label="Stage" value={normalizeStage(visit.currentStage || 'Assessment')} tone="blue" />
           {readyForProposal ? <CompactStatusBadge label="Proposal" value={visit.status === 'Proposal Sent' ? 'Sent' : 'Ready'} tone="blue" /> : null}
         </div>
         <div className="flex flex-wrap gap-2">
