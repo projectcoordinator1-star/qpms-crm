@@ -29,7 +29,7 @@ export default function StatusBadge({ status }) {
 
   return (
     <span
-      className={`inline-flex self-start rounded-full px-2.5 py-1 text-xs font-bold ring-1 ${classes[status] || classes.Open}`}
+      className={`inline-flex self-start rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ring-1 ${classes[status] || classes.Open}`}
     >
       {status}
     </span>

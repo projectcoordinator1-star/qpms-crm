@@ -35,8 +35,8 @@ export default function Navbar({ onMenuClick, theme = 'light', onThemeToggle }) 
   }
 
   return (
-    <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/86">
-      <div className="flex h-20 items-center gap-4 px-4 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/92 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/86">
+      <div className="flex h-18 items-center gap-3 px-4 py-3 sm:px-6 lg:px-8">
         <button
           type="button"
           onClick={onMenuClick}
@@ -51,7 +51,7 @@ export default function Navbar({ onMenuClick, theme = 'light', onThemeToggle }) 
           <input
             type="search"
             placeholder="Search leads, sites, approvals, employees..."
-            className="focus-ring h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm font-medium text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-900"
+            className="focus-ring h-11 w-full rounded-2xl border border-slate-200 bg-slate-50/80 pl-10 pr-4 text-sm font-semibold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:placeholder:text-slate-500 dark:focus:bg-slate-900"
           />
         </div>
 
@@ -85,7 +85,7 @@ export default function Navbar({ onMenuClick, theme = 'light', onThemeToggle }) 
           <button
             type="button"
             onClick={() => setIsAccountOpen((value) => !value)}
-            className="focus-ring flex items-center gap-3 rounded-2xl border border-slate-200 bg-white py-1.5 pl-2 pr-2.5 shadow-sm transition hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700"
+            className="focus-ring flex items-center gap-3 rounded-2xl border border-slate-200 bg-white py-1.5 pl-2 pr-2.5 shadow-sm ring-1 ring-white/70 transition hover:border-qpms-200 dark:border-slate-800 dark:bg-slate-900 dark:ring-white/5 dark:hover:border-slate-700"
             aria-haspopup="menu"
             aria-expanded={isAccountOpen}
           >

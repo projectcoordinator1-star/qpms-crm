@@ -10,7 +10,6 @@ export default function Tickets() {
     <div className="space-y-7">
       <PageHeader
         title="MOM Draft"
-        description="MOM preview."
         actions={
           <button className="focus-ring inline-flex items-center gap-2 rounded-xl bg-qpms-600 px-4 py-2.5 text-sm font-semibold leading-5 text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700">
             Generate draft <Wand2 className="h-4 w-4" />
@@ -22,7 +21,7 @@ export default function Tickets() {
         <div className="border-b border-slate-100 bg-slate-50 px-6 py-4">
           <div className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-qpms-600" />
-            <h2 className="text-[17px] font-semibold leading-6 text-slate-950">MOM preview</h2>
+            <h2 className="text-[17px] font-semibold leading-6 text-slate-950">MOM Preview</h2>
           </div>
         </div>
         <div className="space-y-5 p-6 text-sm leading-7 text-slate-700">

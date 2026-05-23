@@ -17,7 +17,6 @@ export default function Employees() {
     <div className="space-y-7">
       <PageHeader
         title="Employee / IAM Foundation"
-        description="Role matrix."
         actions={
           <button className="focus-ring inline-flex items-center gap-2 rounded-xl bg-qpms-600 px-4 py-2.5 text-sm font-semibold leading-5 text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700">
             Configure roles <UserCog className="h-4 w-4" />
@@ -32,10 +31,6 @@ export default function Employees() {
           </div>
           <div>
             <h2 className="text-[17px] font-semibold leading-6 text-slate-950">Role-based access ready</h2>
-            <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-              Sidebar items are structured as workflow modules now, so role-based visibility can be added later for MD, COO, GM,
-              Branch Head, Business Team, Operations, and Supervisor users.
-            </p>
           </div>
         </div>
       </section>

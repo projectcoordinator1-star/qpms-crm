@@ -16,12 +16,11 @@ export default function Settings() {
     <div className="space-y-6">
       <PageHeader
         title="Settings"
-        description="Workspace controls."
       />
 
       <section className="grid gap-4 md:grid-cols-2">
         {settings.map((item) => (
-          <article key={item.title} className="enterprise-card p-5">
+          <article key={item.title} className="enterprise-card-compact p-5">
             <div className="flex gap-4">
               <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-qpms-50 text-qpms-600">
                 <item.icon className="h-5 w-5" />

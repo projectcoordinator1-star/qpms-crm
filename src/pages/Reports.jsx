@@ -33,7 +33,6 @@ export default function Reports() {
     <div className="space-y-7">
       <PageHeader
         title="Approval Workflow"
-        description="Workflow tracker."
         actions={
           <button className="focus-ring inline-flex items-center gap-2 rounded-xl bg-qpms-600 px-4 py-2.5 text-sm font-semibold leading-5 text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700">
             Submit approval <Send className="h-4 w-4" />

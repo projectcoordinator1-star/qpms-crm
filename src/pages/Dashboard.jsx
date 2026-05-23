@@ -67,7 +67,7 @@ const tabs = [
 ];
 
 const reviewTabs = [
-  { id: 'new-business', label: 'Review Command Center' },
+  { id: 'new-business', label: 'Review Dashboard' },
   { id: 'operations', label: 'Existing Business Operations' },
 ];
 
@@ -653,7 +653,7 @@ function QuickActionBar({ user }) {
 
 function TodayOperations({ items }) {
   return (
-    <section className="enterprise-card p-3 sm:p-4">
+    <section className="enterprise-card-compact p-3 sm:p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-[15px] font-semibold leading-5 text-slate-950 dark:text-white">Today's Operations</h2>
@@ -663,7 +663,7 @@ function TodayOperations({ items }) {
         {items.map((item) => {
           const Icon = item.icon;
           return (
-            <div key={item.label} className="flex min-h-16 items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/55">
+          <div key={item.label} className="flex min-h-16 items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50/90 px-3 py-2 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
               <div className="min-w-0">
                 <p className="truncate text-[10px] font-bold uppercase leading-4 tracking-wide text-slate-500 dark:text-slate-400">{item.label}</p>
                 <p className="mt-0.5 text-lg font-semibold leading-none text-slate-950 dark:text-white">{item.value}</p>
@@ -681,7 +681,7 @@ function TodayOperations({ items }) {
 
 function ActionCenter({ actions }) {
   return (
-    <section className="enterprise-card p-4">
+    <section className="enterprise-card-compact p-4">
       <div className="mb-3">
         <h2 className="text-[15px] font-semibold leading-5 text-slate-950 dark:text-white">Pending Alerts</h2>
       </div>
@@ -708,7 +708,7 @@ function ActionCenter({ actions }) {
 
 function RecentActivityFeed({ items }) {
   return (
-    <section className="enterprise-card p-4">
+    <section className="enterprise-card-compact p-4">
       <div className="mb-3">
         <h2 className="text-[15px] font-semibold leading-5 text-slate-950 dark:text-white">Recent Activity Feed</h2>
       </div>
@@ -770,7 +770,7 @@ function DemoStatusPanel({ leads, siteVisits, backendStatus, workflowError, work
   ];
 
   return (
-    <section className="enterprise-card overflow-hidden">
+    <section className="enterprise-card-compact overflow-hidden">
       <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/60 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -842,13 +842,12 @@ function ExecutiveWorkflowStepper({ leads, siteVisits }) {
   return (
     <div className="border-t border-slate-100 px-3 py-3 dark:border-slate-800">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Workflow Status Pipeline</p>
-        <span className="rounded-full bg-qpms-50 px-2.5 py-1 text-[10px] font-bold text-qpms-700 ring-1 ring-qpms-200 dark:bg-qpms-500/15 dark:text-qpms-300 dark:ring-qpms-500/25">Live workflow view</span>
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Workflow Status</p>
       </div>
       <div className="overflow-x-auto pb-1">
         <div className="flex min-w-[860px] items-stretch gap-2">
           {stages.map((stage, index) => (
-            <div key={stage.label} className="relative flex-1 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950/55">
+            <div key={stage.label} className="relative flex-1 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
               {index < stages.length - 1 ? <div className="absolute -right-2 top-1/2 h-0.5 w-2 bg-slate-200 dark:bg-slate-800" /> : null}
               <div className="flex items-center justify-between gap-2">
                 <p className="truncate text-xs font-bold text-slate-900 dark:text-white">{stage.label}</p>
@@ -1063,7 +1062,7 @@ function PipelineFilterBar({ filters, onChange, ownerOptions }) {
   ];
 
   return (
-    <section className="enterprise-card p-4">
+    <section className="enterprise-card-compact p-4">
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {fields.map(([label, key, options]) => (
           <label key={key} className="space-y-1">
@@ -1084,7 +1083,7 @@ function PipelineFilterBar({ filters, onChange, ownerOptions }) {
 
 function PipelineKpiStrip({ items }) {
   return (
-    <section className="enterprise-card p-3 sm:p-4">
+    <section className="enterprise-card-compact p-3 sm:p-4">
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
         {items.map((item) => (
           <div key={item.id} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950/55">
@@ -1102,14 +1101,14 @@ function PipelineKpiStrip({ items }) {
 
 function PipelineFlow({ stages }) {
   return (
-    <section className="enterprise-card p-4">
+    <section className="enterprise-card-compact p-4">
       <div className="mb-3">
         <h2 className="text-[16px] font-semibold text-slate-950 dark:text-white">Pipeline Stage Flow</h2>
       </div>
       <div className="overflow-x-auto pb-1">
         <div className="flex min-w-[980px] items-stretch gap-2">
           {stages.map((stage, index) => (
-            <div key={stage.stage} className="relative flex-1 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 dark:border-slate-800 dark:bg-slate-950/55">
+          <div key={stage.stage} className="relative flex-1 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
               {index < stages.length - 1 ? <div className="absolute -right-2 top-1/2 h-0.5 w-2 bg-slate-200 dark:bg-slate-800" /> : null}
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs font-bold text-slate-900 dark:text-white">{stage.stage}</p>
@@ -1134,7 +1133,7 @@ function PipelineInsightGrid({ items }) {
   return (
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
       {items.map((item) => (
-        <div key={item.label} className="enterprise-card p-3">
+        <div key={item.label} className="enterprise-card-compact p-3">
           <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{item.label}</p>
           <p className="mt-1 text-xl font-semibold leading-none text-slate-950 dark:text-white">{item.value}</p>
           <p className="mt-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400">{item.helper}</p>
@@ -1146,10 +1145,9 @@ function PipelineInsightGrid({ items }) {
 
 function PipelineBottlenecks({ items }) {
   return (
-    <section className="enterprise-card p-4">
+    <section className="enterprise-card-compact p-4">
       <div className="mb-3">
         <h2 className="text-[16px] font-semibold text-slate-950 dark:text-white">Pipeline Bottlenecks</h2>
-        <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Operational intelligence for stuck or delayed pipeline stages.</p>
       </div>
       <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
         {items.map((item) => (
@@ -1172,10 +1170,9 @@ function PipelineBottlenecks({ items }) {
 function PipelineActionActivity({ actions, activity }) {
   return (
     <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-      <div className="enterprise-card p-4">
+      <div className="enterprise-card-compact p-4">
         <div className="mb-3">
           <h2 className="text-[16px] font-semibold text-slate-950 dark:text-white">Pending Actions</h2>
-          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Compact pipeline action queue.</p>
         </div>
         <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
           {actions.map((item) => (
@@ -1190,7 +1187,7 @@ function PipelineActionActivity({ actions, activity }) {
         </div>
       </div>
 
-      <div className="enterprise-card p-4">
+      <div className="enterprise-card-compact p-4">
         <div className="mb-3">
           <h2 className="text-[16px] font-semibold text-slate-950 dark:text-white">Recent Pipeline Activity</h2>
         </div>
@@ -1350,7 +1347,6 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
         <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <p className="text-sm font-semibold text-slate-950 dark:text-white">Existing Business Operations</p>
-            <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">Filter operational performance by business and region.</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-[minmax(180px,220px)_minmax(180px,220px)_auto] sm:items-end">
             <label className="space-y-1">
@@ -1405,12 +1401,12 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
         />
       ) : (
         <div className="space-y-6 animate-[login-fade-up_220ms_ease-out]">
-          <ChartCard title="Business Performance Snapshot" description="Compact comparison of attendance, escalations, site visits, and SLA health.">
+          <ChartCard title="Business Performance Snapshot">
             <DataTable columns={businessSnapshotColumns} rows={snapshotRows} embedded />
           </ChartCard>
 
           <section className="grid gap-6 xl:grid-cols-2">
-            <ChartCard title="State-wise Site Performance" description="Active site coverage and field officer distribution.">
+            <ChartCard title="State-wise Site Performance">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={filteredSummary}>
@@ -1426,7 +1422,7 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
               </ChartFrame>
             </ChartCard>
 
-            <ChartCard title="Attendance by State" description="Captured attendance percentage against today site visits.">
+            <ChartCard title="Attendance by State">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={filteredSummary}>
@@ -1444,7 +1440,7 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
           </section>
 
           <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-            <ChartCard title="Ticket Volume by State" description="Open operational tickets requiring field or branch action.">
+            <ChartCard title="Ticket Volume by State">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={filteredSummary}>
@@ -1458,7 +1454,7 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
               </ChartFrame>
             </ChartCard>
 
-            <ChartCard title="Task Completion Distribution" description="Completed, pending, and overdue task visibility.">
+            <ChartCard title="Task Completion Distribution">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -1476,7 +1472,7 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
           </section>
 
           <section className="grid gap-6 xl:grid-cols-2">
-            <ChartCard title="Site Visit Trend" description="Planned visits versus completed visits across the current week.">
+            <ChartCard title="Site Visit Trend">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={siteVisitTrend}>
@@ -1492,7 +1488,7 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
               </ChartFrame>
             </ChartCard>
 
-            <ChartCard title="SLA Performance by State" description="Service-level health across operating regions.">
+            <ChartCard title="SLA Performance by State">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
                   <RadarChart data={filteredSummary}>
@@ -1507,11 +1503,11 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
             </ChartCard>
           </section>
 
-          <ChartCard title="State-wise Operations Summary" description="Management view of sites, officers, attendance, tickets, tasks, SLA, and operating status.">
+          <ChartCard title="State-wise Operations Summary">
             <DataTable columns={operationsColumns} rows={filteredSummary} embedded />
           </ChartCard>
 
-          <ChartCard title="Field Officer Activity" description="Live-style mock activity feed for officers working across QPMS branches and assigned sites.">
+          <ChartCard title="Field Officer Activity">
             <DataTable columns={officerColumns} rows={filteredOfficers} embedded />
           </ChartCard>
         </div>
@@ -1681,40 +1677,40 @@ export default function Dashboard() {
   const restrictedToPipeline = ['BD Head', 'BD Executive'].includes(user?.role);
   const reviewerDashboard = isOperationsTeam(user)
     ? {
-        title: 'Operations Command Center',
-        description: 'Operations review.',
+        title: 'Operations Review',
+            description: '',
         queueTitle: 'Operations Review Queue',
         queueDescription: 'Review queue.',
         stage: 'Operations Review',
       }
     : isCoordinator(user)
       ? {
-          title: 'Coordinator Command Center',
-          description: 'Costing readiness.',
+          title: 'Coordinator Review',
+          description: '',
           queueTitle: 'Coordinator Costing Queue',
           queueDescription: 'Review queue.',
           stage: 'Coordinator Costing Review',
         }
       : isHrReviewer(user)
         ? {
-            title: 'HR Command Center',
-            description: 'HR validation.',
+            title: 'HR Review',
+            description: '',
             queueTitle: 'HR Review Queue',
             queueDescription: 'Review queue.',
             stage: 'HR Validation',
           }
         : isCommercialTeam(user)
           ? {
-              title: 'Commercial Command Center',
-              description: 'Commercial review.',
+              title: 'Commercial Review',
+              description: '',
               queueTitle: 'Commercial Review Queue',
               queueDescription: 'Review queue.',
               stage: 'Commercial Review',
             }
           : isFinanceTeam(user)
             ? {
-                title: 'Finance Command Center',
-                description: 'Finance review.',
+                title: 'Finance Review',
+                description: '',
                 queueTitle: 'Finance Review Queue',
                 queueDescription: 'Review queue.',
                 stage: 'Finance Review',
@@ -1736,8 +1732,8 @@ export default function Dashboard() {
   return (
     <div className="space-y-7">
       <PageHeader
-        title={reviewerDashboard?.title || 'Operations Command Center'}
-        description={reviewerDashboard?.description || 'Executive command center.'}
+        title={reviewerDashboard?.title || 'Dashboard'}
+        description={reviewerDashboard?.description}
         actions={canSeeOperations ? <DashboardTabs tabs={reviewerDashboard ? reviewTabs : tabs} activeTab={activeTab} onChange={setActiveTab} /> : null}
       />
 

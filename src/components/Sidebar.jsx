@@ -5,8 +5,8 @@ import {
   ClipboardCheck,
   FileText,
   Home,
-  LifeBuoy,
   Settings,
+  ShieldCheck,
   Users,
   Workflow,
 } from 'lucide-react';
@@ -66,8 +66,8 @@ export default function Sidebar({ isOpen, onClose }) {
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="border-b border-slate-100 px-5 py-5 dark:border-slate-800">
-          <div className="rounded-2xl border border-slate-100 bg-gradient-to-br from-white to-qpms-50/70 p-3 shadow-sm dark:border-slate-800 dark:from-slate-950 dark:to-qpms-900/10">
+        <div className="border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+          <div className="rounded-2xl border border-slate-100 bg-gradient-to-br from-white to-qpms-50/70 p-3 shadow-sm ring-1 ring-white/70 dark:border-slate-800 dark:from-slate-950 dark:to-qpms-900/10 dark:ring-white/5">
             <Logo className="h-10 w-10" />
             <div className="mt-3 flex items-center gap-2 rounded-xl bg-white/80 px-3 py-2 ring-1 ring-slate-100 dark:bg-slate-950/70 dark:ring-slate-800">
               <BriefcaseBusiness className="h-4 w-4 text-qpms-600 dark:text-qpms-300" />
@@ -88,10 +88,10 @@ export default function Sidebar({ isOpen, onClose }) {
               onClick={onClose}
               className={({ isActive }) =>
                 [
-                  'group relative flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-semibold transition',
+                  'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition',
                   isActive
-                    ? 'bg-gradient-to-r from-qpms-600 to-qpms-500 text-white shadow-lg shadow-qpms-600/20'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white',
+                    ? 'bg-gradient-to-r from-qpms-700 to-qpms-500 text-white shadow-lg shadow-qpms-600/20'
+                    : 'text-slate-600 hover:bg-qpms-50 hover:text-qpms-700 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white',
                 ].join(' ')
               }
             >
@@ -101,14 +101,14 @@ export default function Sidebar({ isOpen, onClose }) {
           ))}
         </nav>
 
-        <div className="m-4 rounded-2xl border border-qpms-100 bg-gradient-to-br from-qpms-50 to-white p-4 shadow-sm dark:border-qpms-500/20 dark:from-qpms-500/10 dark:to-slate-950">
-          <div className="flex items-start gap-3">
-            <div className="rounded-xl bg-white p-2 text-qpms-600 shadow-sm">
-              <LifeBuoy className="h-4 w-4" />
+        <div className="m-4 rounded-2xl border border-slate-100 bg-slate-50 p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-white p-2 text-qpms-600 shadow-sm ring-1 ring-slate-100 dark:bg-slate-950 dark:ring-slate-800">
+              <ShieldCheck className="h-4 w-4" />
             </div>
-            <div>
-              <p className="text-sm font-bold text-slate-950 dark:text-white">Need help?</p>
-              <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-400">Navigation is filtered by your current workflow role.</p>
+            <div className="min-w-0">
+              <p className="truncate text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Access Scope</p>
+              <p className="truncate text-sm font-semibold text-slate-950 dark:text-white">{roleSection}</p>
             </div>
           </div>
         </div>

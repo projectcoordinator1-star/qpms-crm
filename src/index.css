@@ -24,7 +24,9 @@
 
   html {
     font-family: var(--font-sans);
-    background: #f5f7fb;
+    background:
+      radial-gradient(circle at 18% 0%, rgba(79, 130, 251, 0.08), transparent 28rem),
+      linear-gradient(180deg, #f8fafc 0%, #f3f6fb 45%, #eef3f8 100%);
     color: #172033;
     font-feature-settings:
       "cv02",
@@ -42,6 +44,7 @@
     min-height: 100vh;
     font-size: 15px;
     line-height: 1.55;
+    background: transparent;
   }
 
   button,
@@ -104,7 +107,27 @@
 
 @layer components {
   .enterprise-card {
-    @apply rounded-2xl border border-slate-200/80 bg-white shadow-[0_16px_42px_rgba(15,23,42,0.055)] dark:border-slate-800 dark:bg-slate-900/92 dark:shadow-[0_18px_55px_rgba(0,0,0,0.28)];
+    @apply rounded-2xl border border-slate-200/80 bg-white shadow-[0_18px_44px_rgba(15,23,42,0.06)] ring-1 ring-white/70 dark:border-slate-800 dark:bg-slate-900/92 dark:ring-white/5 dark:shadow-[0_18px_55px_rgba(0,0,0,0.28)];
+  }
+
+  .enterprise-card-compact {
+    @apply rounded-2xl border border-slate-200/80 bg-white shadow-[0_12px_30px_rgba(15,23,42,0.045)] ring-1 ring-white/70 dark:border-slate-800 dark:bg-slate-900/92 dark:ring-white/5 dark:shadow-[0_14px_44px_rgba(0,0,0,0.24)];
+  }
+
+  .section-kicker {
+    @apply text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500;
+  }
+
+  .control-surface {
+    @apply rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950;
+  }
+
+  .primary-gradient {
+    @apply bg-gradient-to-r from-qpms-700 to-qpms-500 text-white shadow-lg shadow-qpms-600/20 hover:from-qpms-800 hover:to-qpms-600;
+  }
+
+  .workspace-panel {
+    @apply rounded-2xl border border-slate-100 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-950/55;
   }
 
   .focus-ring {

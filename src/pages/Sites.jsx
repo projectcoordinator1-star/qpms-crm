@@ -1714,7 +1714,7 @@ function duplicateRow(section, index) {
     if (!selectedVisit || !surveyDraft) {
       return (
         <div className="space-y-7">
-          <PageHeader title="Site Visit Assessment" description="Loading workspace." />
+          <PageHeader title="Site Visit Assessment" />
           <section className="enterprise-card p-8 text-center">
             <ClipboardCheck className="mx-auto h-8 w-8 text-slate-400" />
             <p className="mt-3 text-sm font-semibold text-slate-700 dark:text-slate-200">Assessment is not available</p>
@@ -1730,7 +1730,7 @@ function duplicateRow(section, index) {
       <div className="space-y-4">
         <Toast message={toast?.message} type={toast?.type} />
 
-        <section className="sticky top-20 z-30 rounded-2xl border border-slate-200/80 bg-white/95 px-4 py-3 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/95">
+        <section className="sticky top-20 z-30 rounded-2xl border border-slate-200/80 bg-white/95 px-4 py-3 shadow-[0_10px_30px_rgba(15,23,42,0.08)] ring-1 ring-white/70 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/95 dark:ring-white/5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
               <button type="button" onClick={handleBackToQueue} className="focus-ring mb-2 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-600 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
@@ -1752,7 +1752,7 @@ function duplicateRow(section, index) {
         </section>
 
         <main className="mx-auto max-w-6xl space-y-4">
-          <section className="enterprise-card p-5">
+          <section className="enterprise-card-compact p-5">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2">
                 <ClipboardCheck className="h-5 w-5 text-qpms-600" />
@@ -1885,25 +1885,24 @@ function duplicateRow(section, index) {
     <div className="space-y-7">
       <PageHeader
         title="Site Visit & Estimation"
-        description="Assessment queue."
       />
 
         <Toast message={toast?.message} type={toast?.type} />
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {queueKpis.map((item) => (
-          <div key={item.label} className={`rounded-2xl border p-5 shadow-sm ${item.tone}`}>
-            <p className="text-sm font-semibold">{item.label}</p>
-            <p className="mt-3 text-3xl font-semibold leading-none text-slate-950 dark:text-white">{item.value}</p>
+          <div key={item.label} className={`rounded-2xl border p-4 shadow-sm ${item.tone}`}>
+            <p className="text-[11px] font-bold uppercase tracking-wide">{item.label}</p>
+            <p className="mt-2 text-3xl font-bold leading-none text-slate-950 dark:text-white">{item.value}</p>
           </div>
         ))}
       </section>
 
       <section className="grid gap-6">
-        <div className="enterprise-card p-5">
+        <div className="enterprise-card p-4 sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-xs font-bold uppercase text-qpms-600 dark:text-qpms-300">Assessment Queue</p>
+              <p className="section-kicker text-qpms-600 dark:text-qpms-300">Assessment Queue</p>
               <h2 className="mt-1 text-xl font-semibold leading-7 text-slate-950 dark:text-white">Scheduled Visits / Assessment List</h2>
             </div>
             <div className="relative w-full lg:w-80">

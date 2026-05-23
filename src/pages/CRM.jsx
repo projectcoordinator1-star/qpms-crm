@@ -682,7 +682,7 @@ export default function CRM() {
   if (!canManageLeads(user)) {
     return (
       <div className="space-y-7">
-        <PageHeader title="Lead Management" description="Restricted access." />
+        <PageHeader title="Lead Management" />
         <section className="enterprise-card p-8 text-center">
           <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Use your approval dashboard to review records pending with your team.</p>
         </section>
@@ -694,7 +694,6 @@ export default function CRM() {
     <div className="space-y-7">
       <PageHeader
         title="Lead Management"
-        description="Lead pipeline."
         actions={canManageLeads(user) ? (
           <button
             type="button"
@@ -708,9 +707,9 @@ export default function CRM() {
 
       <Toast message={toast?.message || workflowError} type={toast?.type || (workflowError ? 'error' : 'success')} />
 
-      <section className="enterprise-card flex flex-wrap items-center justify-between gap-3 p-3">
+      <section className="enterprise-card-compact flex flex-wrap items-center justify-between gap-3 p-3">
         <div>
-          <p className="text-sm font-bold text-slate-950 dark:text-white">Lead queue</p>
+          <p className="text-sm font-bold text-slate-950 dark:text-white">Lead Queue</p>
         </div>
         <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-950">
           {[
@@ -730,11 +729,11 @@ export default function CRM() {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-4">
+      <section className="grid gap-3 md:grid-cols-4">
         {stats.map(([label, value]) => (
-          <div key={label} className="enterprise-card p-5">
-            <p className="text-sm font-medium leading-5 text-slate-500 dark:text-slate-400">{label}</p>
-            <p className="mt-3 text-3xl font-semibold leading-none text-slate-950 dark:text-white">{value}</p>
+          <div key={label} className="enterprise-card-compact p-4">
+            <p className="text-[11px] font-bold uppercase tracking-wide leading-5 text-slate-500 dark:text-slate-400">{label}</p>
+            <p className="mt-2 text-3xl font-bold leading-none text-slate-950 dark:text-white">{value}</p>
           </div>
         ))}
       </section>
@@ -753,9 +752,6 @@ export default function CRM() {
             <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-5 dark:border-slate-800">
               <div>
                 <h2 className="text-2xl font-semibold leading-tight text-slate-950 dark:text-white">Add New Lead</h2>
-                <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
-                  Initial lead collection only. Additional workflow details are handled after the Lead MOM is sent.
-                </p>
               </div>
               <button
                 type="button"

@@ -28,18 +28,18 @@ function serviceScope(visit) {
 }
 
 const stageWaitingCopy = {
-  'Operations Review': 'Records appear here immediately after BD submits the site assessment for review.',
-  'Coordinator Costing Review': 'Records appear here after Operations approves the assessment.',
-  'HR Validation': 'Records appear here immediately after BD submits the assessment for review.',
-  'Commercial Review': 'Records appear here after HR approves the assessment.',
-  'Finance Review': 'Records appear here after Commercial Review is approved.',
+  'Operations Review': 'No pending operations reviews.',
+  'Coordinator Costing Review': 'No pending coordinator reviews.',
+  'HR Validation': 'No pending HR reviews.',
+  'Commercial Review': 'No pending commercial reviews.',
+  'Finance Review': 'No pending finance reviews.',
 };
 
 const reviewerCopy = {
   'Operations Review': {
-    title: 'Operations Review Command Center',
+    title: 'Operations Review',
     eyebrow: 'Execution readiness',
-    description: 'Execution readiness queue.',
+    description: '',
     panelTitle: 'Operations Action Panel',
     remark: 'Add operations remarks',
     sections: [
@@ -49,9 +49,9 @@ const reviewerCopy = {
     ],
   },
   'Coordinator Costing Review': {
-    title: 'Coordinator Costing Command Center',
+    title: 'Coordinator Review',
     eyebrow: 'Costing readiness',
-    description: 'Costing readiness queue.',
+    description: '',
     panelTitle: 'Coordinator Action Panel',
     remark: 'Add coordinator remarks',
     sections: [
@@ -61,9 +61,9 @@ const reviewerCopy = {
     ],
   },
   'HR Validation': {
-    title: 'HR Review Command Center',
+    title: 'HR Review',
     eyebrow: 'Manpower validation',
-    description: 'Manpower validation queue.',
+    description: '',
     panelTitle: 'HR Action Panel',
     remark: 'Add HR remarks',
     sections: [
@@ -73,9 +73,9 @@ const reviewerCopy = {
     ],
   },
   'Commercial Review': {
-    title: 'Commercial Review Command Center',
+    title: 'Commercial Review',
     eyebrow: 'Pricing and contract readiness',
-    description: 'Commercial approval queue.',
+    description: '',
     panelTitle: 'Commercial Action Panel',
     remark: 'Add commercial remarks',
     sections: [
@@ -86,9 +86,9 @@ const reviewerCopy = {
     ],
   },
   'Finance Review': {
-    title: 'Finance Review Command Center',
+    title: 'Finance Review',
     eyebrow: 'Financial approval',
-    description: 'Finance approval queue.',
+    description: '',
     panelTitle: 'Reviewer Action Panel',
     remark: 'Add finance remarks',
     sections: [
@@ -113,7 +113,7 @@ function ReviewMetricCard({ label, value, icon, tone = 'blue' }) {
     red: 'bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:ring-rose-500/25',
   }[tone];
   return (
-    <div className="enterprise-card flex items-center justify-between gap-4 p-4">
+    <div className="enterprise-card-compact flex items-center justify-between gap-4 p-4">
       <div>
         <p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
         <p className="mt-2 text-2xl font-semibold leading-none text-slate-950 dark:text-white">{value}</p>
@@ -128,7 +128,7 @@ function ReviewMetricCard({ label, value, icon, tone = 'blue' }) {
 function ReviewSectionCard({ title, description, icon }) {
   const SectionIcon = icon;
   return (
-    <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-950/55">
+    <div className="workspace-panel p-3">
       <div className="flex items-start gap-3">
         <div className="rounded-xl bg-white p-2 text-qpms-600 shadow-sm ring-1 ring-slate-100 dark:bg-slate-900 dark:text-qpms-300 dark:ring-slate-800">
           <SectionIcon className="h-4 w-4" />
@@ -150,7 +150,7 @@ function EmptyReviewState({ stage }) {
           <BadgeCheck className="h-7 w-7" />
         </div>
         <h3 className="mt-4 text-lg font-semibold text-slate-950 dark:text-white">No pending records in {stage}</h3>
-        <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500 dark:text-slate-400">{stageWaitingCopy[stage]}</p>
+        <p className="mx-auto mt-2 max-w-xl text-sm font-semibold leading-6 text-slate-500 dark:text-slate-400">{stageWaitingCopy[stage]}</p>
       </div>
     </section>
   );
@@ -233,17 +233,13 @@ export default function Tasks() {
   return (
     <div className="space-y-7">
       <Toast message={toast?.message} type={toast?.type} />
-      <PageHeader
-        title={pageTitle}
-        description={meta.description}
-      />
+      <PageHeader title={pageTitle} />
 
       <section className="enterprise-card overflow-hidden">
         <div className="flex flex-col gap-4 bg-gradient-to-r from-slate-950 to-qpms-700 px-5 py-5 text-white sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-qpms-100">{meta.eyebrow}</p>
             <h2 className="mt-2 text-2xl font-semibold leading-tight">{stage}</h2>
-            <p className="mt-1 text-sm text-qpms-100">Controlled review inbox.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <span className="rounded-full bg-white/12 px-3 py-1.5 text-xs font-bold ring-1 ring-white/20">Stage: {stage}</span>
@@ -296,10 +292,9 @@ export default function Tasks() {
                   ))}
                 </div>
               </div>
-              <div className="w-full shrink-0 space-y-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/55">
+              <div className="w-full shrink-0 space-y-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 shadow-inner dark:border-slate-800 dark:bg-slate-950/55">
                 <div>
                   <p className="text-sm font-semibold text-slate-950 dark:text-white">{meta.panelTitle}</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">Reviewer decision.</p>
                 </div>
                 <textarea
                   value={remarks[visit.id] || ''}
