@@ -8,9 +8,11 @@ export const roleGroups = {
   HR: ['HR', 'HR Reviewer'],
   Commercial: ['Commercial', 'Commercial Team', 'Commercial Reviewer'],
   Finance: ['Finance', 'Finance Team', 'Finance Reviewer'],
-  Management: ['Management', 'COO', 'BD Head'],
+  Management: ['Management', 'COO'],
   Admin: ['Admin'],
 };
+
+export const protectedNavRoutes = ['/dashboard', '/crm', '/sites', '/site-visit', '/tasks', '/tickets', '/reports', '/employees', '/settings'];
 
 export function normalizeAppRole(role = '') {
   const match = Object.entries(roleGroups).find(([, aliases]) => aliases.includes(role));
@@ -25,11 +27,14 @@ export function hasAnyRole(user, allowedRoles = []) {
 }
 
 export function routeAllowedRoles(pathname = '') {
+  if (pathname.startsWith('/dashboard')) return [];
+  if (pathname.startsWith('/settings')) return [];
   if (pathname.startsWith('/crm')) return ['Admin', 'Management', 'BD'];
-  if (pathname.startsWith('/sites') || pathname.startsWith('/site-visit')) return ['Admin', 'Management', 'BD', 'Operations', 'Coordinator', 'HR', 'Commercial', 'Finance'];
-  if (pathname.startsWith('/tasks')) return ['Admin', 'Management', 'Operations', 'Coordinator', 'HR', 'Commercial', 'Finance'];
+  if (pathname.startsWith('/sites') || pathname.startsWith('/site-visit')) return ['Admin', 'BD'];
+  if (pathname.startsWith('/tasks')) return ['Admin', 'Operations', 'Coordinator', 'HR', 'Commercial', 'Finance'];
   if (pathname.startsWith('/employees')) return ['Admin', 'Management'];
   if (pathname.startsWith('/reports')) return ['Admin', 'Management'];
+  if (pathname.startsWith('/tickets')) return ['Admin', 'BD'];
   return [];
 }
 
@@ -37,3 +42,7 @@ export function canAccessRoute(user, pathname) {
   return hasAnyRole(user, routeAllowedRoles(pathname));
 }
 
+export function canAccessNavRoute(user, pathname) {
+  if (!protectedNavRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))) return true;
+  return canAccessRoute(user, pathname);
+}

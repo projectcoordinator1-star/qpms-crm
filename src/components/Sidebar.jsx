@@ -13,7 +13,8 @@ import {
 import { NavLink } from 'react-router-dom';
 import { isDemoMode } from '../config/demoMode.js';
 import { useAuth } from '../context/auth-context.js';
-import { canManageLeads, isApprovalReviewer } from '../data/mockUsers.js';
+import { isApprovalReviewer, isCoordinator, isFinanceTeam, isHrReviewer, isOperationsTeam } from '../data/mockUsers.js';
+import { canAccessNavRoute } from '../utils/authRoles.js';
 import Logo from './Logo.jsx';
 
 const navItems = [
@@ -27,6 +28,15 @@ const navItems = [
   { label: 'Settings', to: '/settings', icon: Settings },
 ];
 
+function navLabelForRole(item, user) {
+  if (item.to !== '/tasks') return item.label;
+  if (isFinanceTeam(user)) return 'Finance Review';
+  if (isHrReviewer(user)) return 'HR Review';
+  if (isOperationsTeam(user)) return 'Operations Review';
+  if (isCoordinator(user)) return 'Coordinator Review';
+  return 'Commercial Review';
+}
+
 export default function Sidebar({ isOpen, onClose }) {
   const { user } = useAuth();
   const roleLabel = user?.role || 'Workflow User';
@@ -39,11 +49,7 @@ export default function Sidebar({ isOpen, onClose }) {
         : 'CRM Workspace';
   const visibleNavItems = navItems.filter((item) => {
     if (isDemoMode && item.demoHidden) return false;
-    if (user?.role === 'Admin') return true;
-    if (['BD Executive', 'BD Head'].includes(user?.role)) return ['/dashboard', '/crm', '/sites', '/settings'].includes(item.to);
-    if (isApprovalReviewer(user)) return ['/dashboard', '/tasks', '/reports', '/sites', '/settings'].includes(item.to);
-    if (!canManageLeads(user) && item.to === '/crm') return false;
-    return true;
+    return canAccessNavRoute(user, item.to);
   });
 
   return (
@@ -90,7 +96,7 @@ export default function Sidebar({ isOpen, onClose }) {
               }
             >
               <item.icon className="h-5 w-5 shrink-0" strokeWidth={2.2} />
-              <span>{item.label}</span>
+              <span>{navLabelForRole(item, user)}</span>
             </NavLink>
           ))}
         </nav>
