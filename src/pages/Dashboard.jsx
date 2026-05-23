@@ -1350,6 +1350,7 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
         <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <p className="text-sm font-semibold text-slate-950 dark:text-white">Existing Business Operations</p>
+            <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">Filter operational performance by business and region.</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-[minmax(180px,220px)_minmax(180px,220px)_auto] sm:items-end">
             <label className="space-y-1">
@@ -1404,12 +1405,12 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
         />
       ) : (
         <div className="space-y-6 animate-[login-fade-up_220ms_ease-out]">
-          <ChartCard title="Business Performance Snapshot">
+          <ChartCard title="Business Performance Snapshot" description="Compact comparison of attendance, escalations, site visits, and SLA health.">
             <DataTable columns={businessSnapshotColumns} rows={snapshotRows} embedded />
           </ChartCard>
 
           <section className="grid gap-6 xl:grid-cols-2">
-            <ChartCard title="State-wise Site Performance">
+            <ChartCard title="State-wise Site Performance" description="Active site coverage and field officer distribution.">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={filteredSummary}>
@@ -1425,7 +1426,7 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
               </ChartFrame>
             </ChartCard>
 
-            <ChartCard title="Attendance by State">
+            <ChartCard title="Attendance by State" description="Captured attendance percentage against today site visits.">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={filteredSummary}>
@@ -1443,7 +1444,7 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
           </section>
 
           <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-            <ChartCard title="Ticket Volume by State">
+            <ChartCard title="Ticket Volume by State" description="Open operational tickets requiring field or branch action.">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={filteredSummary}>
@@ -1457,7 +1458,7 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
               </ChartFrame>
             </ChartCard>
 
-            <ChartCard title="Task Completion Distribution">
+            <ChartCard title="Task Completion Distribution" description="Completed, pending, and overdue task visibility.">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -1475,7 +1476,7 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
           </section>
 
           <section className="grid gap-6 xl:grid-cols-2">
-            <ChartCard title="Site Visit Trend">
+            <ChartCard title="Site Visit Trend" description="Planned visits versus completed visits across the current week.">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={siteVisitTrend}>
@@ -1491,7 +1492,7 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
               </ChartFrame>
             </ChartCard>
 
-            <ChartCard title="SLA Performance by State">
+            <ChartCard title="SLA Performance by State" description="Service-level health across operating regions.">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
                   <RadarChart data={filteredSummary}>
@@ -1506,11 +1507,11 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
             </ChartCard>
           </section>
 
-          <ChartCard title="State-wise Operations Summary">
+          <ChartCard title="State-wise Operations Summary" description="Management view of sites, officers, attendance, tickets, tasks, SLA, and operating status.">
             <DataTable columns={operationsColumns} rows={filteredSummary} embedded />
           </ChartCard>
 
-          <ChartCard title="Field Officer Activity">
+          <ChartCard title="Field Officer Activity" description="Live-style mock activity feed for officers working across QPMS branches and assigned sites.">
             <DataTable columns={officerColumns} rows={filteredOfficers} embedded />
           </ChartCard>
         </div>
