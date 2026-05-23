@@ -1656,7 +1656,7 @@ function duplicateRow(section, index) {
     if (!selectedVisit || !surveyDraft) {
       return (
         <div className="space-y-7">
-          <PageHeader title="Site Visit Assessment" description="Loading assessment workspace." />
+          <PageHeader title="Site Visit Assessment" description="Loading workspace." />
           <section className="enterprise-card p-8 text-center">
             <ClipboardCheck className="mx-auto h-8 w-8 text-slate-400" />
             <p className="mt-3 text-sm font-semibold text-slate-700 dark:text-slate-200">Assessment is not available</p>
@@ -1932,7 +1932,7 @@ function duplicateRow(section, index) {
     <div className="space-y-7">
       <PageHeader
         title="Site Visit & Estimation"
-        description="Assessment queue for scheduled site visits and commercial readiness."
+        description="Assessment queue."
       />
 
         <Toast message={toast?.message} type={toast?.type} />
@@ -1952,9 +1952,6 @@ function duplicateRow(section, index) {
             <div>
               <p className="text-xs font-bold uppercase text-qpms-600 dark:text-qpms-300">Assessment Queue</p>
               <h2 className="mt-1 text-xl font-semibold leading-7 text-slate-950 dark:text-white">Scheduled Visits / Assessment List</h2>
-              <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
-                Select a card to open the full assessment page. Use the MOM button to open the email composer modal.
-              </p>
             </div>
             <div className="relative w-full lg:w-80">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />

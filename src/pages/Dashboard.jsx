@@ -657,7 +657,6 @@ function TodayOperations({ items }) {
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-[15px] font-semibold leading-5 text-slate-950 dark:text-white">Today's Operations</h2>
-          <p className="text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">Current operational pulse</p>
         </div>
       </div>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
@@ -685,7 +684,6 @@ function ActionCenter({ actions }) {
     <section className="enterprise-card p-4">
       <div className="mb-3">
         <h2 className="text-[15px] font-semibold leading-5 text-slate-950 dark:text-white">Pending Alerts</h2>
-        <p className="text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">Items requiring COO/management attention.</p>
       </div>
       <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
         {actions.map((action) => (
@@ -713,7 +711,6 @@ function RecentActivityFeed({ items }) {
     <section className="enterprise-card p-4">
       <div className="mb-3">
         <h2 className="text-[15px] font-semibold leading-5 text-slate-950 dark:text-white">Recent Activity Feed</h2>
-        <p className="text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">Latest CRM and operational movements.</p>
       </div>
       <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
         {items.map((item) => (
@@ -733,7 +730,7 @@ function RecentActivityFeed({ items }) {
 
 function OperationalHealth({ items }) {
   return (
-    <ChartCard title="Operational Health / SLA Insights" description="Management indicators for turnaround, compliance, conversion, and risk.">
+    <ChartCard title="Operational Health / SLA Insights">
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         {items.map((item) => (
           <div key={item.label} className={`rounded-xl p-3 ring-1 ${healthTone[item.tone]}`}>
@@ -783,9 +780,6 @@ function DemoStatusPanel({ leads, siteVisits, backendStatus, workflowError, work
             </span>
             {isDemoMode ? <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ${compactTone('blue')}`}>DEMO MODE</span> : null}
           </div>
-          <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-            Live Supabase-backed demo counters for Postman and CRM-created workflow records.
-          </p>
         </div>
         {workflowError ? <p className="max-w-xl text-xs font-semibold text-rose-600 dark:text-rose-300">{workflowError}</p> : null}
       </div>
@@ -1111,7 +1105,6 @@ function PipelineFlow({ stages }) {
     <section className="enterprise-card p-4">
       <div className="mb-3">
         <h2 className="text-[16px] font-semibold text-slate-950 dark:text-white">Pipeline Stage Flow</h2>
-        <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Lead movement, pending volume, conversion, and delay indicators.</p>
       </div>
       <div className="overflow-x-auto pb-1">
         <div className="flex min-w-[980px] items-stretch gap-2">
@@ -1200,7 +1193,6 @@ function PipelineActionActivity({ actions, activity }) {
       <div className="enterprise-card p-4">
         <div className="mb-3">
           <h2 className="text-[16px] font-semibold text-slate-950 dark:text-white">Recent Pipeline Activity</h2>
-          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Business-focused lead and proposal movement.</p>
         </div>
         <div className="max-h-64 space-y-3 overflow-y-auto pr-1">
           {activity.map((item) => (
@@ -1276,11 +1268,10 @@ function NewBusinessPipeline({ visibleLeads, visibleSiteVisits, user }) {
       <section className="space-y-3">
         <div>
           <h2 className="text-[17px] font-semibold text-slate-950 dark:text-white">Revenue & Conversion Insights</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Commercial value, proposal movement, and closure quality.</p>
         </div>
         <PipelineInsightGrid items={pipelineData.insights} />
         <section className="grid gap-4 xl:grid-cols-2">
-          <ChartCard title="Monthly Pipeline Trend" description="Lead inflow and site visit readiness.">
+          <ChartCard title="Monthly Pipeline Trend">
             <ChartFrame height="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={monthlyLeadTrend}>
@@ -1296,7 +1287,7 @@ function NewBusinessPipeline({ visibleLeads, visibleSiteVisits, user }) {
             </ChartFrame>
           </ChartCard>
 
-          <ChartCard title="Proposal Conversion Trend" description="Proposal volume compared with converted wins.">
+          <ChartCard title="Proposal Conversion Trend">
             <ChartFrame height="h-48">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={proposalConversionTrend}>
@@ -1328,7 +1319,7 @@ function NewBusinessPipeline({ visibleLeads, visibleSiteVisits, user }) {
       <PipelineActionActivity actions={pipelineData.actions} activity={pipelineData.activity} />
 
       {['Admin', 'BD Head'].includes(user?.role) ? (
-        <ChartCard title="BD Team Performance" description="Executive-wise leads, conversion, pending load, and revenue generation.">
+        <ChartCard title="BD Team Performance">
           <DataTable columns={bdPerformanceColumns} rows={pipelineData.performance} embedded />
         </ChartCard>
       ) : null}
@@ -1359,7 +1350,6 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
         <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
           <div>
             <p className="text-sm font-semibold text-slate-950 dark:text-white">Existing Business Operations</p>
-            <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">Filter operational performance by business and region.</p>
           </div>
           <div className="grid gap-3 sm:grid-cols-[minmax(180px,220px)_minmax(180px,220px)_auto] sm:items-end">
             <label className="space-y-1">
@@ -1414,12 +1404,12 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
         />
       ) : (
         <div className="space-y-6 animate-[login-fade-up_220ms_ease-out]">
-          <ChartCard title="Business Performance Snapshot" description="Compact comparison of attendance, escalations, site visits, and SLA health.">
+          <ChartCard title="Business Performance Snapshot">
             <DataTable columns={businessSnapshotColumns} rows={snapshotRows} embedded />
           </ChartCard>
 
           <section className="grid gap-6 xl:grid-cols-2">
-            <ChartCard title="State-wise Site Performance" description="Active site coverage and field officer distribution.">
+            <ChartCard title="State-wise Site Performance">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={filteredSummary}>
@@ -1435,7 +1425,7 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
               </ChartFrame>
             </ChartCard>
 
-            <ChartCard title="Attendance by State" description="Captured attendance percentage against today site visits.">
+            <ChartCard title="Attendance by State">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={filteredSummary}>
@@ -1453,7 +1443,7 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
           </section>
 
           <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-            <ChartCard title="Ticket Volume by State" description="Open operational tickets requiring field or branch action.">
+            <ChartCard title="Ticket Volume by State">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={filteredSummary}>
@@ -1467,7 +1457,7 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
               </ChartFrame>
             </ChartCard>
 
-            <ChartCard title="Task Completion Distribution" description="Completed, pending, and overdue task visibility.">
+            <ChartCard title="Task Completion Distribution">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -1485,7 +1475,7 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
           </section>
 
           <section className="grid gap-6 xl:grid-cols-2">
-            <ChartCard title="Site Visit Trend" description="Planned visits versus completed visits across the current week.">
+            <ChartCard title="Site Visit Trend">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={siteVisitTrend}>
@@ -1501,7 +1491,7 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
               </ChartFrame>
             </ChartCard>
 
-            <ChartCard title="SLA Performance by State" description="Service-level health across operating regions.">
+            <ChartCard title="SLA Performance by State">
               <ChartFrame>
                 <ResponsiveContainer width="100%" height="100%">
                   <RadarChart data={filteredSummary}>
@@ -1516,11 +1506,11 @@ function ExistingBusinessOperations({ activeOperationsSection, onSectionChange }
             </ChartCard>
           </section>
 
-          <ChartCard title="State-wise Operations Summary" description="Management view of sites, officers, attendance, tickets, tasks, SLA, and operating status.">
+          <ChartCard title="State-wise Operations Summary">
             <DataTable columns={operationsColumns} rows={filteredSummary} embedded />
           </ChartCard>
 
-          <ChartCard title="Field Officer Activity" description="Live-style mock activity feed for officers working across QPMS branches and assigned sites.">
+          <ChartCard title="Field Officer Activity">
             <DataTable columns={officerColumns} rows={filteredOfficers} embedded />
           </ChartCard>
         </div>
@@ -1570,7 +1560,7 @@ function ApprovalDashboard({ title, description, stage, siteVisits, leads, user 
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
-        <ChartCard title={`${title} Scope Matrix`} description="Editable, view-only, and hidden sections for the current reviewer role.">
+        <ChartCard title={`${title} Scope Matrix`}>
           <ChartFrame>
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -1586,7 +1576,7 @@ function ApprovalDashboard({ title, description, stage, siteVisits, leads, user 
           </ChartFrame>
         </ChartCard>
 
-        <ChartCard title="Workflow Stage Matrix" description="Cross-stage approval health across the pre-operational workflow.">
+        <ChartCard title="Workflow Stage Matrix">
           <ChartFrame>
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={stageMatrix} margin={{ left: 4 }}>
@@ -1605,7 +1595,7 @@ function ApprovalDashboard({ title, description, stage, siteVisits, leads, user 
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
-        <ChartCard title="Review Aging" description="Queue aging overview for review SLA awareness.">
+        <ChartCard title="Review Aging">
           <ChartFrame height="h-48">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={agingData}>
@@ -1619,7 +1609,7 @@ function ApprovalDashboard({ title, description, stage, siteVisits, leads, user 
           </ChartFrame>
         </ChartCard>
 
-        <ChartCard title="Role Access Coverage" description="Scope areas visible to this function before AWS IAM separation.">
+        <ChartCard title="Role Access Coverage">
           <div className="space-y-3">
             {scope.rows.map((row) => (
               <div key={row.area} className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/55">
@@ -1691,41 +1681,41 @@ export default function Dashboard() {
   const reviewerDashboard = isOperationsTeam(user)
     ? {
         title: 'Operations Command Center',
-        description: 'Operations review scope, execution readiness queue, SLA matrix, and existing business visibility.',
+        description: 'Operations review.',
         queueTitle: 'Operations Review Queue',
-        queueDescription: 'Records submitted for tools, equipment, consumables, machinery, and site readiness validation.',
+        queueDescription: 'Review queue.',
         stage: 'Operations Review',
       }
     : isCoordinator(user)
       ? {
           title: 'Coordinator Command Center',
-          description: 'Costing readiness, reliever logic, zone logic, manpower consolidation, and review workload visibility.',
+          description: 'Costing readiness.',
           queueTitle: 'Coordinator Costing Queue',
-          queueDescription: 'Records pending manpower consolidation, reliever logic, zone logic, and costing readiness.',
+          queueDescription: 'Review queue.',
           stage: 'Coordinator Costing Review',
         }
       : isHrReviewer(user)
         ? {
             title: 'HR Command Center',
-            description: 'HR manpower, wage, shift, gender, uniform, and validation workload dashboard.',
+            description: 'HR validation.',
             queueTitle: 'HR Review Queue',
-            queueDescription: 'Records submitted for manpower, wage, reliever, gender, shift, and uniform validation.',
+            queueDescription: 'Review queue.',
             stage: 'HR Validation',
           }
         : isCommercialTeam(user)
           ? {
               title: 'Commercial Command Center',
-              description: 'Commercial review queue, pricing scope, margin matrix, approval aging, and operations visibility.',
+              description: 'Commercial review.',
               queueTitle: 'Commercial Review Queue',
-              queueDescription: 'Records submitted for commercial statement, pricing, management fee, and margin approval.',
+              queueDescription: 'Review queue.',
               stage: 'Commercial Review',
             }
           : isFinanceTeam(user)
             ? {
                 title: 'Finance Command Center',
-                description: 'Finance review queue, payment terms, feasibility, risk, SLA aging, and operations visibility.',
+                description: 'Finance review.',
                 queueTitle: 'Finance Review Queue',
-                queueDescription: 'Records approved by Commercial for billing, expense, margin, and payment validation.',
+                queueDescription: 'Review queue.',
                 stage: 'Finance Review',
               }
             : null;
@@ -1746,7 +1736,7 @@ export default function Dashboard() {
     <div className="space-y-7">
       <PageHeader
         title={reviewerDashboard?.title || 'Operations Command Center'}
-        description={reviewerDashboard?.description || 'Management dashboard for new business pipeline health, site operations, attendance, tickets, tasks, field officers, and SLA visibility.'}
+        description={reviewerDashboard?.description || 'Executive command center.'}
         actions={canSeeOperations ? <DashboardTabs tabs={reviewerDashboard ? reviewTabs : tabs} activeTab={activeTab} onChange={setActiveTab} /> : null}
       />
 

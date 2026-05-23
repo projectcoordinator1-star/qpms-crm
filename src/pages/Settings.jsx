@@ -16,7 +16,7 @@ export default function Settings() {
     <div className="space-y-6">
       <PageHeader
         title="Settings"
-        description="Configure workspace-level preferences and prepare frontend settings surfaces for future backend integration."
+        description="Workspace controls."
       />
 
       <section className="grid gap-4 md:grid-cols-2">

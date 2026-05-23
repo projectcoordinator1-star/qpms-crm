@@ -682,7 +682,7 @@ export default function CRM() {
   if (!canManageLeads(user)) {
     return (
       <div className="space-y-7">
-        <PageHeader title="Lead Management" description="Lead creation and lead administration are restricted for your current role." />
+        <PageHeader title="Lead Management" description="Restricted access." />
         <section className="enterprise-card p-8 text-center">
           <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Use your approval dashboard to review records pending with your team.</p>
         </section>
@@ -694,7 +694,7 @@ export default function CRM() {
     <div className="space-y-7">
       <PageHeader
         title="Lead Management"
-        description="Capture initial business leads, manage client details, and create the Lead MOM."
+        description="Lead pipeline."
         actions={canManageLeads(user) ? (
           <button
             type="button"
@@ -711,7 +711,6 @@ export default function CRM() {
       <section className="enterprise-card flex flex-wrap items-center justify-between gap-3 p-3">
         <div>
           <p className="text-sm font-bold text-slate-950 dark:text-white">Lead queue</p>
-          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Default view shows only pre-conversion active leads.</p>
         </div>
         <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-950">
           {[

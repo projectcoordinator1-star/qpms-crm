@@ -41,7 +41,7 @@ const reviewerCopy = {
   'Operations Review': {
     title: 'Operations Review Command Center',
     eyebrow: 'Execution readiness',
-    description: 'Validate site readiness, tools, machinery, consumables, and operational feasibility.',
+    description: 'Execution readiness queue.',
     panelTitle: 'Operations Action Panel',
     remark: 'Add operations remarks',
     sections: [
@@ -53,7 +53,7 @@ const reviewerCopy = {
   'Coordinator Costing Review': {
     title: 'Coordinator Costing Command Center',
     eyebrow: 'Costing readiness',
-    description: 'Consolidate manpower, reliever logic, zone logic, and assessment readiness before HR validation.',
+    description: 'Costing readiness queue.',
     panelTitle: 'Coordinator Action Panel',
     remark: 'Add coordinator remarks',
     sections: [
@@ -65,7 +65,7 @@ const reviewerCopy = {
   'HR Validation': {
     title: 'HR Review Command Center',
     eyebrow: 'Manpower validation',
-    description: 'Review manpower, wage, shift, gender, reliever, and uniform readiness without commercial exposure.',
+    description: 'Manpower validation queue.',
     panelTitle: 'HR Action Panel',
     remark: 'Add HR remarks',
     sections: [
@@ -77,7 +77,7 @@ const reviewerCopy = {
   'Commercial Review': {
     title: 'Commercial Review Command Center',
     eyebrow: 'Pricing and contract readiness',
-    description: 'Review BD submitted assessments for scope, pricing, margins, management fee, and risk readiness.',
+    description: 'Commercial approval queue.',
     panelTitle: 'Commercial Action Panel',
     remark: 'Add commercial remarks',
     sections: [
@@ -90,7 +90,7 @@ const reviewerCopy = {
   'Finance Review': {
     title: 'Finance Review Command Center',
     eyebrow: 'Financial approval',
-    description: 'Review financial feasibility, billing, margins, payment terms, and commercial risk before BD handback.',
+    description: 'Finance approval queue.',
     panelTitle: 'Reviewer Action Panel',
     remark: 'Add finance remarks',
     sections: [
@@ -213,7 +213,7 @@ export default function Tasks() {
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-qpms-100">{meta.eyebrow}</p>
             <h2 className="mt-2 text-2xl font-semibold leading-tight">{stage}</h2>
-            <p className="mt-1 text-sm text-qpms-100">Enterprise review inbox with controlled reviewer actions and audit-ready remarks.</p>
+            <p className="mt-1 text-sm text-qpms-100">Controlled review inbox.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <span className="rounded-full bg-white/12 px-3 py-1.5 text-xs font-bold ring-1 ring-white/20">Stage: {stage}</span>
@@ -268,7 +268,7 @@ export default function Tasks() {
               <div className="w-full shrink-0 space-y-3 rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950/55">
                 <div>
                   <p className="text-sm font-semibold text-slate-950 dark:text-white">{meta.panelTitle}</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">Decision buttons use the existing approval workflow action.</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">Reviewer decision.</p>
                 </div>
                 <textarea
                   value={remarks[visit.id] || ''}
