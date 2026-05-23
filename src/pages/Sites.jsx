@@ -811,6 +811,7 @@ export default function Sites() {
   const [proposalDraft, setProposalDraft] = useState(null);
   const [showWorkflowTimeline, setShowWorkflowTimeline] = useState(false);
   const [sectionsCollapsed, setSectionsCollapsed] = useState(false);
+  const [validationErrors, setValidationErrors] = useState([]);
   usePageTitle('Site Visit & Estimation');
 
   const visibleSiteVisits = useMemo(() => {
@@ -835,7 +836,9 @@ export default function Sites() {
   const activeSectionAudit = sectionAudit[activeSection];
   const isSectionSaved = Boolean(activeSectionAudit);
   const isEditingActiveSection = editingSection === activeSection;
-  const isActiveSectionLocked = (isSectionSaved && !isEditingActiveSection) || !roleCanEditActiveSection;
+  const isActiveSectionLocked = !roleCanEditActiveSection;
+  const isFirstStep = activeSectionIndex === 0;
+  const isFinalStep = activeSectionIndex === roleVisibleSections.length - 1;
   const proposalMetadata = getProposalTemplateMetadata();
   const selectedVisitReadyForProposal = isProposalReady(selectedVisit);
 
@@ -923,6 +926,47 @@ export default function Sites() {
   function cancelEditSection() {
     setEditingSection('');
     setAutoSaveLabel('Draft saved');
+  }
+
+  function selectedScopeCount(scope = {}) {
+    return Object.values(scope || {}).filter((item) => item?.selected || item === true).length;
+  }
+
+  function validateSection(section = activeSection) {
+    const errors = [];
+    if (section === 'Basic Site Information') {
+      if (!surveyDraft?.siteAddress?.trim()) errors.push('Site Address is required.');
+      if (!surveyDraft?.siteType?.trim()) errors.push('Site Type is required.');
+      if (!surveyDraft?.siteSurveyDate?.trim()) errors.push('Site Survey Date is required.');
+      if (!surveyDraft?.assessedBy?.trim()) errors.push('Assessed By is required.');
+    }
+    if (section === 'Scope of IFM Services' && !selectedScopeCount(surveyDraft?.ifmScope)) {
+      errors.push('Select at least one IFM service scope.');
+    }
+    if (section === 'Manpower Requirement' && !(surveyDraft?.manpowerPlan || []).length) {
+      errors.push('Add at least one manpower requirement row.');
+    }
+    if (section === 'Commercial Statement' && !(surveyDraft?.commercial?.billingComponents || []).length) {
+      errors.push('Add at least one billing component.');
+    }
+    if (section === 'Final Remarks & Sign-Off') {
+      if (!surveyDraft?.finalRemarks?.trim()) errors.push('Final Remarks are required.');
+      if (!surveyDraft?.signOffName?.trim()) errors.push('Assessor / Sign-Off Name is required.');
+    }
+    setValidationErrors(errors);
+    return errors.length === 0;
+  }
+
+  function handlePreviousStep() {
+    setValidationErrors([]);
+    setActiveSectionIndex((index) => Math.max(0, index - 1));
+  }
+
+  function handleNextStep() {
+    if (!validateSection()) return;
+    setActiveSectionIndex((index) => Math.min(roleVisibleSections.length - 1, index + 1));
+    setValidationErrors([]);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   useEffect(() => {
@@ -1084,6 +1128,11 @@ function duplicateRow(section, index) {
   }
 
   async function handleSubmitCommercialReview() {
+    if (!validateSection('Final Remarks & Sign-Off')) {
+      setActiveSectionIndex(roleVisibleSections.findIndex((section) => section === 'Final Remarks & Sign-Off'));
+      showToast('Complete required final step fields before submitting.', 'error');
+      return;
+    }
     setPendingAction('submitReview');
     setAutoSaveLabel('Saving...');
     showToast('Saving...', 'info');
@@ -1681,180 +1730,75 @@ function duplicateRow(section, index) {
       <div className="space-y-4">
         <Toast message={toast?.message} type={toast?.type} />
 
-        <section className="sticky top-20 z-30 rounded-2xl border border-slate-200/80 bg-white/95 px-3 py-2.5 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/95">
-          <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
-              <button type="button" onClick={handleBackToQueue} className="focus-ring inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-600 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
-                <ArrowLeft className="h-3.5 w-3.5" /> Queue
+        <section className="sticky top-20 z-30 rounded-2xl border border-slate-200/80 bg-white/95 px-4 py-3 shadow-[0_10px_30px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/95">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <button type="button" onClick={handleBackToQueue} className="focus-ring mb-2 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-bold text-slate-600 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+                <ArrowLeft className="h-3.5 w-3.5" /> Back to Queue
               </button>
-              <span className="max-w-[220px] truncate text-sm font-bold text-slate-950 dark:text-white">{selectedVisit.company}</span>
-              <CompactStatusBadge label="Stage" value={selectedStage} tone="blue" />
-              <CompactStatusBadge label="Pending With" value={selectedVisit.pendingWith || 'BD Executive'} />
-              <StatusBadge status={selectedVisit.status || 'Draft'} />
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{autoSaveLabel}</span>
+              <h2 className="truncate text-xl font-semibold text-slate-950 dark:text-white">{selectedVisit.company}</h2>
+              <p className="mt-1 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Step {activeSectionIndex + 1} of {roleVisibleSections.length}</p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={activeSectionIndex}
-                onChange={(event) => setActiveSectionIndex(Number(event.target.value))}
-                className="focus-ring h-9 min-w-56 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-              >
-                {roleVisibleSections.map((section, index) => (
-                  <option key={section} value={index}>{section}</option>
-                ))}
-              </select>
-              <button type="button" onClick={() => setSectionsCollapsed(true)} className="focus-ring rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
-                Collapse All Sections
-              </button>
-              <button type="button" onClick={() => setSectionsCollapsed(false)} className="focus-ring rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
-                Expand All Sections
-              </button>
-              <button type="button" onClick={() => setShowWorkflowTimeline(true)} className="focus-ring rounded-xl bg-slate-950 px-3 py-2 text-xs font-bold text-white shadow-sm hover:bg-slate-800 dark:bg-white dark:text-slate-950">
-                View Workflow Timeline
-              </button>
+            <div className="min-w-0 lg:w-96">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400">
+                <span>{activeSection}</span>
+                <span>{autoSaveLabel}</span>
+              </div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                <div className="h-full rounded-full bg-qpms-600 transition-all" style={{ width: `${((activeSectionIndex + 1) / roleVisibleSections.length) * 100}%` }} />
+              </div>
             </div>
           </div>
         </section>
 
-        <div className={`grid gap-4 ${sectionsCollapsed ? 'xl:grid-cols-1' : 'xl:grid-cols-[252px_minmax(0,1fr)]'}`}>
-          <section className={`enterprise-card sticky top-36 h-fit p-4 ${sectionsCollapsed ? 'hidden' : ''}`}>
-            <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-bold uppercase text-slate-500 dark:text-slate-400">Sections</h3>
-              <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500 dark:bg-slate-800">{activeSectionIndex + 1}/{roleVisibleSections.length}</span>
-            </div>
-            <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-              <div className="h-full rounded-full bg-qpms-600 transition-all" style={{ width: `${((activeSectionIndex + 1) / roleVisibleSections.length) * 100}%` }} />
-            </div>
-            <div className="mt-4 max-h-[72vh] space-y-1 overflow-y-auto pr-2">
-              {roleVisibleSections.map((section, index) => (
-                <button
-                  type="button"
-                  key={section}
-                  onClick={() => setActiveSectionIndex(index)}
-                  className={[
-                    'flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-xs font-bold transition',
-                    activeSectionIndex === index
-                      ? 'bg-qpms-600 text-white shadow-lg shadow-qpms-600/20'
-                      : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
-                  ].join(' ')}
-                >
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/20 text-xs">{index + 1}</span>
-                  {section}
-                </button>
-              ))}
+        <main className="mx-auto max-w-6xl space-y-4">
+          <section className="enterprise-card p-5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
+                <ClipboardCheck className="h-5 w-5 text-qpms-600" />
+                <h3 className="text-xl font-semibold leading-7 text-slate-950 dark:text-white">{activeSection}</h3>
+              </div>
+              <span className="rounded-full bg-qpms-50 px-3 py-1.5 text-xs font-bold text-qpms-700 ring-1 ring-qpms-200 dark:bg-qpms-500/15 dark:text-qpms-300 dark:ring-qpms-500/25">
+                Step {activeSectionIndex + 1} / {roleVisibleSections.length}
+              </span>
             </div>
           </section>
 
-          <main className="mx-auto min-w-0 max-w-7xl space-y-4">
-            <section className="enterprise-card p-4">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-2">
-                  <ClipboardCheck className="h-5 w-5 text-qpms-600" />
-                  <h3 className="text-lg font-semibold leading-6 text-slate-950 dark:text-white">{activeSection}</h3>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {isActiveSectionLocked ? (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-200 dark:ring-emerald-500/25">
-                      <Lock className="h-3.5 w-3.5" /> Locked / Saved
-                    </span>
-                  ) : isEditingActiveSection ? (
-                    <StatusBadge status="Editing Mode" />
-                  ) : (
-                    <StatusBadge status={autoSaveLabel === 'Unsaved changes' ? 'Draft' : 'Active'} />
-                  )}
-                  {isSectionSaved ? (
-                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                      Last saved {new Date(activeSectionAudit.savedAt).toLocaleString()} by {activeSectionAudit.savedBy}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-              <div className="mt-4 flex flex-wrap justify-end gap-2">
-                {isActiveSectionLocked && roleCanEditActiveSection ? (
-                  <button type="button" onClick={beginEditSection} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
-                    <Edit3 className="h-4 w-4" /> Edit Section
-                  </button>
-                ) : isEditingActiveSection ? (
-                  <>
-                    <button type="button" onClick={handleSaveDraft} disabled={pendingAction === 'saveSiteDraft'} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-qpms-600 px-3.5 py-2 text-sm font-semibold text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700">
-                      <ButtonContent loading={pendingAction === 'saveSiteDraft'} icon={Save}>Save Changes</ButtonContent>
-                    </button>
-                    <button type="button" onClick={cancelEditSection} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
-                      Cancel Edit
-                    </button>
-                  </>
-                ) : null}
-              </div>
+          {validationErrors.length ? (
+            <section className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 dark:border-rose-500/25 dark:bg-rose-500/10 dark:text-rose-200">
+              <p>Missing required fields:</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5">
+                {validationErrors.map((error) => <li key={error}>{error}</li>)}
+              </ul>
             </section>
+          ) : null}
 
-            <fieldset disabled={isActiveSectionLocked} className={isActiveSectionLocked ? 'opacity-80' : ''}>
-              {renderActiveSection()}
-            </fieldset>
+          <fieldset disabled={isActiveSectionLocked} className={isActiveSectionLocked ? 'opacity-80' : ''}>
+            {renderActiveSection()}
+          </fieldset>
+        </main>
 
-          </main>
-        </div>
-
-        <div className="sticky bottom-0 z-20 rounded-2xl border border-slate-200 bg-white/95 p-5 shadow-[0_-14px_40px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/95">
+        <div className="sticky bottom-0 z-20 rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-[0_-14px_40px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/95">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-sm font-semibold text-slate-500 dark:text-slate-400">{autoSaveLabel}</div>
-            <div className="flex flex-wrap justify-end gap-3.5">
+            <button type="button" onClick={handlePreviousStep} disabled={isFirstStep} className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
+              Previous
+            </button>
+            <div className="flex flex-wrap justify-end gap-3">
               <button type="button" onClick={handleSaveDraft} disabled={pendingAction === 'saveSiteDraft'} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
                 <ButtonContent loading={pendingAction === 'saveSiteDraft'} icon={Save}>Save Draft</ButtonContent>
               </button>
-              <button type="button" onClick={handleGenerateMom} disabled={pendingAction === 'generateSiteMom'} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
-                <ButtonContent loading={pendingAction === 'generateSiteMom'} icon={FileText}>Generate Site Visit MOM</ButtonContent>
-              </button>
-              <button type="button" onClick={() => setMomComposerVisit(selectedVisit)} disabled={!siteMomDraft} className="focus-ring inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:text-slate-950 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
-                <FileText className="h-4 w-4" /> Open MOM Composer
-              </button>
-              <button type="button" onClick={handleSubmitCommercialReview} disabled={pendingAction === 'submitReview'} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 hover:bg-slate-800 dark:bg-white dark:text-slate-950">
-                <ButtonContent loading={pendingAction === 'submitReview'}>Submit for Reviews</ButtonContent>
-              </button>
-              {selectedVisitReadyForProposal ? (
-                <button type="button" onClick={() => handleGenerateProposal(selectedVisit)} disabled={pendingAction === 'generateProposal'} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-qpms-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 hover:from-emerald-700 hover:to-qpms-700">
-                  <ButtonContent loading={pendingAction === 'generateProposal'} icon={FileText}>Generate Proposal</ButtonContent>
+              {isFinalStep ? (
+                <button type="button" onClick={handleSubmitCommercialReview} disabled={pendingAction === 'submitReview'} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 hover:bg-slate-800 dark:bg-white dark:text-slate-950">
+                  <ButtonContent loading={pendingAction === 'submitReview'}>Submit for Reviews</ButtonContent>
                 </button>
-              ) : null}
+              ) : (
+                <button type="button" onClick={handleNextStep} className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl bg-qpms-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-qpms-600/20 hover:bg-qpms-700">
+                  Next
+                </button>
+              )}
             </div>
           </div>
         </div>
-
-        {showWorkflowTimeline ? (
-          <div className="fixed inset-0 z-[66] flex items-center justify-center bg-slate-950/60 px-4 py-6 backdrop-blur-sm" onClick={() => setShowWorkflowTimeline(false)}>
-            <Motion.section
-              initial={{ opacity: 0, y: 18, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              className="max-h-[86vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-white/70 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4 dark:border-slate-800">
-                <div>
-                  <p className="text-xs font-bold uppercase text-qpms-600 dark:text-qpms-300">Workflow Timeline</p>
-                  <h3 className="mt-1 text-xl font-semibold text-slate-950 dark:text-white">{selectedVisit.company}</h3>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Current stage: {selectedStage} - Pending with: {selectedVisit.pendingWith || 'BD Executive'}</p>
-                </div>
-                <button type="button" onClick={() => setShowWorkflowTimeline(false)} className="focus-ring rounded-xl p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white">
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              <div className="mt-5 space-y-3">
-                {workflowStages.map((label, index) => {
-                  const completed = (selectedVisit.activity || []).some((item) => String(item).includes(label)) || (selectedVisit.approvalTimeline || []).some((item) => String(item.label).includes(label));
-                  const active = selectedStage === label || selectedVisit.currentStage === label;
-                  return (
-                    <div key={label} className={`flex items-center gap-3 rounded-2xl border px-4 py-3 ${completed || active ? 'border-qpms-200 bg-qpms-50 text-qpms-800 dark:border-qpms-500/25 dark:bg-qpms-500/10 dark:text-qpms-200' : 'border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300'}`}>
-                      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${completed || active ? 'bg-qpms-600 text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300'}`}>{index + 1}</span>
-                      <div>
-                        <p className="text-sm font-bold">{label}</p>
-                        <p className="text-xs opacity-70">{active ? 'Current workflow stage' : completed ? 'Completed or logged' : 'Pending'}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </Motion.section>
-          </div>
-        ) : null}
 
         {momComposerVisit && siteMomDraft ? (
           <div className="fixed inset-0 z-[66] flex items-center justify-center bg-slate-950/60 px-4 py-6 backdrop-blur-sm" onClick={() => setMomComposerVisit(null)}>
