@@ -765,24 +765,55 @@ export async function recordApprovalDecision({
 }
 
 export async function createNotification(notification) {
-  return callWorkflowRpc(
-    'rpc_create_notification',
-    {
-      p_recipient_user_id: notification.recipientUserId || null,
-      p_recipient_role: notification.recipientRole || null,
-      p_workflow_instance_id: notification.workflowInstanceId || null,
-      p_lead_id: notification.leadId || null,
-      p_site_visit_id: notification.siteVisitId || null,
-      p_notification_type: notification.type || 'Workflow Alert',
-      p_title: notification.title || 'Workflow alert',
-      p_message: notification.message || null,
-      p_priority: notification.priority || 'Medium',
-      p_action_url: notification.actionUrl || null,
-      p_action_label: notification.actionLabel || null,
-      p_metadata: notification.metadata || {},
-    },
-    'Create notification',
-  );
+  try {
+    return await callWorkflowRpc(
+      'rpc_create_notification',
+      {
+        p_recipient_user_id: notification.recipientUserId || null,
+        p_recipient_role: notification.recipientRole || null,
+        p_workflow_instance_id: notification.workflowInstanceId || null,
+        p_lead_id: notification.leadId || null,
+        p_site_visit_id: notification.siteVisitId || null,
+        p_notification_type: notification.type || 'Workflow Alert',
+        p_title: notification.title || 'Workflow alert',
+        p_message: notification.message || null,
+        p_priority: notification.priority || 'Medium',
+        p_action_url: notification.actionUrl || null,
+        p_action_label: notification.actionLabel || null,
+        p_metadata: notification.metadata || {},
+      },
+      'Create notification',
+    );
+  } catch (error) {
+    if (!error?.isRpcMissing) throw error;
+    assertConfigured();
+    const { data, error: insertError } = await supabase
+      .from('notifications')
+      .insert({
+        recipient_user_id: notification.recipientUserId || null,
+        recipient_role: notification.recipientRole || null,
+        workflow_instance_id: notification.workflowInstanceId || null,
+        lead_id: notification.leadId || null,
+        site_visit_id: notification.siteVisitId || null,
+        notification_type: notification.type || 'Workflow Alert',
+        title: notification.title || 'Workflow alert',
+        message: notification.message || null,
+        priority: notification.priority || 'Medium',
+        action_url: notification.actionUrl || null,
+        action_label: notification.actionLabel || null,
+        metadata: notification.metadata || {},
+      })
+      .select('*')
+      .single();
+    if (insertError) {
+      if (tableMissing(insertError)) {
+        console.warn('[QPMS Workflow] Notifications table unavailable; notification skipped', insertError.message);
+        return null;
+      }
+      throw insertError;
+    }
+    return data;
+  }
 }
 
 export async function markNotificationRead(notificationId, readerUserId = null) {
@@ -1102,7 +1133,32 @@ export async function saveSiteMomRemote(siteVisitId, mom, status = 'Draft') {
 
 export async function submitApprovalRemote(visit, assessmentId) {
   assertConfigured();
-  const rows = ['Operations Review', 'Coordinator Costing Review', 'HR Validation', 'Commercial Review', 'Finance Review'].map((stage) => ({
+  const existing = await supabase
+    .from('approval_requests')
+    .select('id, approval_stage, status')
+    .eq('site_visit_id', visit.id);
+  if (existing.error && !tableMissing(existing.error)) throw existing.error;
+  const existingStages = new Set((existing.data || []).map((row) => row.approval_stage));
+  if ((existing.data || []).some((row) => row.status === 'Pending')) {
+    console.warn('[QPMS Supabase] Duplicate review submit prevented', { siteVisitId: visit.id });
+    return existing.data;
+  }
+  const reworkStage = (existing.data || []).find((row) => row.status === 'Rework Requested')?.approval_stage;
+  if (reworkStage) {
+    const { error: reworkError } = await supabase
+      .from('approval_requests')
+      .update({ status: 'Pending', pending_with: reworkStage === 'Operations Review' ? 'Operations Team' : reworkStage === 'Coordinator Costing Review' ? 'Coordinator' : reworkStage === 'HR Validation' ? 'HR Reviewer' : `${reworkStage.replace(' Review', '')} Reviewer`, remarks: null })
+      .eq('site_visit_id', visit.id)
+      .eq('approval_stage', reworkStage)
+      .eq('status', 'Rework Requested');
+    if (reworkError) throw reworkError;
+    await supabase.from('site_visits').update({ current_stage: reworkStage, pending_with: reworkStage === 'Operations Review' ? 'Operations Team' : reworkStage === 'Coordinator Costing Review' ? 'Coordinator' : reworkStage === 'HR Validation' ? 'HR Reviewer' : `${reworkStage.replace(' Review', '')} Reviewer`, status: 'Pending Review', updated_at: new Date().toISOString() }).eq('id', visit.id);
+    return existing.data;
+  }
+
+  const rows = ['Operations Review', 'Coordinator Costing Review', 'HR Validation', 'Commercial Review', 'Finance Review']
+    .filter((stage) => !existingStages.has(stage))
+    .map((stage) => ({
       lead_id: visit.leadId,
       site_visit_id: visit.id,
       assessment_id: assessmentId,
@@ -1110,9 +1166,12 @@ export async function submitApprovalRemote(visit, assessmentId) {
       pending_with: stage === 'Operations Review' ? 'Operations Team' : stage === 'Coordinator Costing Review' ? 'Coordinator' : stage === 'HR Validation' ? 'HR Reviewer' : `${stage.replace(' Review', '')} Reviewer`,
       status: stage === 'Operations Review' ? 'Pending' : 'Not Started',
     }));
-  const { error } = await supabase.from('approval_requests').insert(rows);
-  if (error) throw error;
-  await supabase.from('site_visits').update({ current_stage: 'Operations Review', status: 'Pending Review', updated_at: new Date().toISOString() }).eq('id', visit.id);
+  if (rows.length) {
+    const { error } = await supabase.from('approval_requests').insert(rows);
+    if (error) throw error;
+  }
+  await supabase.from('site_visits').update({ current_stage: 'Operations Review', pending_with: 'Operations Team', status: 'Pending Review', updated_at: new Date().toISOString() }).eq('id', visit.id);
+  return rows;
 }
 
 export async function recordApprovalDecisionRemote({ visit, stage, status, pendingWith, remarks, user }) {
@@ -1130,29 +1189,58 @@ export async function recordApprovalDecisionRemote({ visit, stage, status, pendi
   const nextPendingWith = status === 'Approved'
     ? pendingOwnerByStage[nextStage] || 'BD Executive'
     : pendingWith;
-  const { error } = await supabase.from('approval_requests').insert({
-    lead_id: visit.leadId,
-    site_visit_id: visit.id,
-    assessment_id: visit.assessmentId || null,
-    approval_stage: stage,
+  const decisionPayload = {
     pending_with: pendingWith,
     status,
     remarks: remarks || null,
     approved_by: user?.email || user?.name || null,
     approved_at: new Date().toISOString(),
-  });
-  if (error) throw error;
-  if (status === 'Approved' && pendingOwnerByStage[nextStage]) {
-    const { error: nextError } = await supabase.from('approval_requests').insert({
+  };
+  const existing = await supabase
+    .from('approval_requests')
+    .select('id, status')
+    .eq('site_visit_id', visit.id)
+    .eq('approval_stage', stage)
+    .in('status', ['Pending', 'Not Started'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (existing.error && !tableMissing(existing.error)) throw existing.error;
+  if (existing.data?.id) {
+    const { error } = await supabase.from('approval_requests').update(decisionPayload).eq('id', existing.data.id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from('approval_requests').insert({
       lead_id: visit.leadId,
       site_visit_id: visit.id,
       assessment_id: visit.assessmentId || null,
-      approval_stage: nextStage,
-      pending_with: nextPendingWith,
-      status: 'Pending',
-      remarks: null,
+      approval_stage: stage,
+      ...decisionPayload,
     });
-    if (nextError) throw nextError;
+    if (error) throw error;
+  }
+  if (status === 'Approved' && pendingOwnerByStage[nextStage]) {
+    const nextExisting = await supabase
+      .from('approval_requests')
+      .select('id, status')
+      .eq('site_visit_id', visit.id)
+      .eq('approval_stage', nextStage)
+      .in('status', ['Pending', 'Approved'])
+      .limit(1)
+      .maybeSingle();
+    if (nextExisting.error && !tableMissing(nextExisting.error)) throw nextExisting.error;
+    if (!nextExisting.data?.id) {
+      const { error: nextError } = await supabase.from('approval_requests').insert({
+        lead_id: visit.leadId,
+        site_visit_id: visit.id,
+        assessment_id: visit.assessmentId || null,
+        approval_stage: nextStage,
+        pending_with: nextPendingWith,
+        status: 'Pending',
+        remarks: null,
+      });
+      if (nextError) throw nextError;
+    }
   }
   await supabase
     .from('site_visits')
@@ -1163,6 +1251,54 @@ export async function recordApprovalDecisionRemote({ visit, stage, status, pendi
       updated_at: new Date().toISOString(),
     })
     .eq('id', visit.id);
+}
+
+export async function markProposalSentRemote(visit, proposal = {}) {
+  assertConfigured();
+  const sentAt = new Date().toISOString();
+  const siteVisitUpdate = await supabase
+    .from('site_visits')
+    .update({
+      current_stage: 'Proposal Sent',
+      pending_with: 'Existing Business Operations',
+      status: 'Proposal Sent',
+      updated_at: sentAt,
+    })
+    .eq('id', visit.id);
+  if (siteVisitUpdate.error) throw siteVisitUpdate.error;
+
+  if (visit.leadId) {
+    const leadUpdate = await supabase
+      .from('leads')
+      .update({ lead_stage: 'Proposal Sent', status: 'Converted to Existing Business', updated_at: sentAt })
+      .eq('id', visit.leadId);
+    if (leadUpdate.error && !tableMissing(leadUpdate.error)) throw leadUpdate.error;
+  }
+
+  const proposalId = proposal.id || visit.proposal?.id;
+  if (proposalId) {
+    const proposalUpdate = await supabase
+      .from('proposals')
+      .update({
+        proposal_status: 'Sent',
+        sent_at: sentAt,
+        metadata: {
+          ...(visit.proposal?.metadata || {}),
+          ...(proposal.metadata || {}),
+          proposalPayload: proposal,
+        },
+      })
+      .eq('id', proposalId);
+    if (proposalUpdate.error && !tableMissing(proposalUpdate.error)) throw proposalUpdate.error;
+  }
+
+  await logActivity({
+    leadId: visit.leadId,
+    siteVisitId: visit.id,
+    type: 'Proposal Sent',
+    message: 'Proposal sent to client and moved to Existing Business Pipeline',
+    createdBy: proposal.sentBy || proposal.generatedByName || null,
+  });
 }
 
 export async function uploadSiteImageRemote({ visit, assessmentId, category, file, uploadedBy }) {

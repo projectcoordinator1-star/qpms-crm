@@ -302,8 +302,10 @@ function buildSiteVisitMom(visit, survey) {
 }
 
 function isProposalReady(visit) {
+  const statuses = visit?.reviewStatus || {};
   return ['Returned to BD', 'Ready for Proposal', 'Proposal Generated'].includes(visit?.status)
-    || ['Returned to BD', 'Ready for Proposal'].includes(visit?.currentStage);
+    || ['Returned to BD', 'Ready for Proposal'].includes(visit?.currentStage)
+    || ['Operations Review', 'Coordinator Costing Review', 'HR Validation', 'Commercial Review', 'Finance Review'].every((stage) => statuses[stage] === 'Approved');
 }
 
 function getCommercialTotals(survey) {
@@ -1095,12 +1097,12 @@ function duplicateRow(section, index) {
         user,
         oldValue: sectionSnapshot(activeSection, selectedVisit.survey),
         newValue: sectionSnapshot(activeSection, surveyDraft),
-        remarks: 'Assessment submitted to HR, Commercial, and Finance review workflow.',
+        remarks: 'Assessment submitted to approval matrix workflow.',
       });
       rememberSectionAudit('Submitted for Review Workflow');
       setEditingSection('');
       setAutoSaveLabel('Submitted for Review');
-      showToast('Submitted for Review. Pending with HR Reviewer.', 'success');
+      showToast('Submitted for Review. Approval matrix updated.', 'success');
     } catch (error) {
       setAutoSaveLabel('Failed to save');
       showToast(`Failed to submit: ${error.message}`, 'error');
@@ -1134,14 +1136,21 @@ function duplicateRow(section, index) {
     const nextProposal = proposalDraft || buildProposalPayload(targetVisit, surveyDraft || mergeSurvey(targetVisit?.survey), proposalMetadata);
     if (!targetVisit) return;
     setPendingAction('sendProposal');
+    let mailSimulated = false;
     try {
-      await sendProposalEmail(nextProposal, targetVisit);
+      try {
+        const mailResult = await sendProposalEmail(nextProposal, targetVisit);
+        mailSimulated = Boolean(mailResult?.simulated);
+      } catch (mailError) {
+        mailSimulated = true;
+        console.warn('[QPMS Proposal Mail] SMTP/API unavailable; continuing proposal workflow', mailError.message);
+      }
       await Promise.resolve(markProposalSent(targetVisit.id, nextProposal));
       setProposalPreviewVisit(null);
       setProposalDraft(null);
-      showToast('Proposal mail sent. Record moved to Existing Business Pipeline.', 'success');
+      showToast(mailSimulated ? 'Proposal recorded. Mail simulation used because SMTP is unavailable.' : 'Proposal mail sent. Record moved to Existing Business Pipeline.', mailSimulated ? 'warning' : 'success');
     } catch (error) {
-      showToast(`Proposal mail failed: ${error.response?.data?.message || error.message}`, 'error');
+      showToast(`Proposal workflow failed: ${error.response?.data?.message || error.message}`, 'error');
     } finally {
       setPendingAction('');
     }

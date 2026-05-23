@@ -7,13 +7,11 @@ import {
   CheckCircle2,
   ClipboardList,
   Clock3,
-  ExternalLink,
   FileCheck2,
   RotateCcw,
   ShieldCheck,
   WalletCards,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import PageHeader from '../components/PageHeader.jsx';
 import StatusBadge from '../components/StatusBadge.jsx';
 import Toast from '../components/Toast.jsx';
@@ -158,10 +156,42 @@ function EmptyReviewState({ stage }) {
   );
 }
 
+function AssessmentSnapshot({ visit, stage }) {
+  const manpowerRows = visit.survey?.manpowerPlan?.length || 0;
+  const commercial = visit.survey?.commercial || {};
+  const financeStage = stage === 'Finance Review';
+  const hrStage = stage === 'HR Validation';
+  const items = hrStage
+    ? [
+        ['Manpower rows', manpowerRows],
+        ['Applicable zone', visit.survey?.applicableZone || 'Pending'],
+        ['Reliever required', visit.survey?.relieverCostRequired || 'Pending'],
+        ['Wage notes', visit.survey?.wageComputationNotes || 'Pending'],
+      ]
+    : [
+        ['Site', [visit.location, visit.city, visit.state].filter(Boolean).join(', ') || 'Pending'],
+        ['Scope', serviceScope(visit)],
+        ['Manpower rows', manpowerRows],
+        [financeStage ? 'Payment terms' : 'Commercial statement', visit.survey?.paymentTerms || visit.survey?.commercialStatement || commercial.notes || 'Pending'],
+        ['Management fee', commercial.managementFee || commercial.management_fee || 'Pending'],
+        ['Proposal value', commercial.proposalValue || commercial.proposal_value || 'Pending'],
+      ];
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+      {items.map(([label, value]) => (
+        <div key={label} className="rounded-xl border border-slate-100 bg-white px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{label}</p>
+          <p className="mt-1 line-clamp-2 text-xs font-semibold text-slate-800 dark:text-slate-100">{value}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Tasks() {
   const { user } = useAuth();
   const { siteVisits, decideApproval } = useWorkflow();
-  const navigate = useNavigate();
   const [remarks, setRemarks] = useState({});
   const [pendingDecision, setPendingDecision] = useState('');
   const [toast, setToast] = useState(null);
@@ -259,6 +289,7 @@ export default function Tasks() {
                     <p className="mt-1 text-xs">{visit.survey?.marginAgreed || visit.survey?.paymentTerms || 'Pending reviewer validation'}</p>
                   </div>
                 </div>
+                <AssessmentSnapshot visit={visit} stage={stage} />
                 <div className="grid gap-3 md:grid-cols-2">
                   {meta.sections.map(([title, description, Icon]) => (
                     <ReviewSectionCard key={title} title={title} description={description} icon={Icon} />
@@ -276,9 +307,6 @@ export default function Tasks() {
                   placeholder={meta.remark}
                   className="focus-ring min-h-24 w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-white"
                 />
-                <button type="button" onClick={() => navigate(`/site-visit/${visit.id}`)} className="focus-ring inline-flex w-full items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm hover:text-slate-950 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
-                  <ExternalLink className="h-4 w-4" /> Open submitted record
-                </button>
                 <div className={financeMode ? 'grid grid-cols-3 gap-2' : 'grid grid-cols-2 gap-2'}>
                   <button type="button" disabled={Boolean(pendingDecision)} onClick={() => handleDecision(visit, 'approve')} className="focus-ring inline-flex items-center justify-center gap-1 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60">
                     <CheckCircle2 className="h-4 w-4" /> Approve

@@ -4,6 +4,7 @@ import { bdExecutives, getExecutiveByName } from '../data/mockUsers.js';
 import {
   canUseLocalWorkflowStorage,
   convertLeadToAssessment,
+  createNotification,
   createLeadRemote,
   createSiteVisitRemote,
   deleteLeadRemote,
@@ -20,6 +21,7 @@ import {
   submitForReview,
   submitApprovalRemote,
   recordApprovalDecisionRemote,
+  markProposalSentRemote,
   updateLeadRemote,
   uploadSiteImageRemote,
 } from '../services/workflowRepository.js';
@@ -28,6 +30,15 @@ import { WorkflowContext } from './workflow-context.js';
 const leadsStorageKey = 'qpms-crm-workflow-leads';
 const siteVisitsStorageKey = 'qpms-crm-workflow-site-visits';
 const appMode = getWorkflowAppMode();
+
+const reviewStages = ['Operations Review', 'Coordinator Costing Review', 'HR Validation', 'Commercial Review', 'Finance Review'];
+const pendingOwnerByStage = {
+  'Operations Review': 'Operations Team',
+  'Coordinator Costing Review': 'Coordinator',
+  'HR Validation': 'HR Reviewer',
+  'Commercial Review': 'Commercial Reviewer',
+  'Finance Review': 'Finance Reviewer',
+};
 
 const defaultLeadDetails = {
   industry: 'Facility Management',
@@ -80,6 +91,19 @@ function hasMeaningfulSurveyData(survey = {}) {
     if (value && typeof value === 'object') return Object.keys(value).length > 0;
     return value !== undefined && value !== null && value !== '';
   });
+}
+
+function isReviewCompleteForProposal(visit = {}) {
+  if (['Returned to BD', 'Proposal Generated', 'Proposal Sent'].includes(visit.status) || visit.currentStage === 'Returned to BD') return true;
+  const statuses = visit.reviewStatus || {};
+  return reviewStages.every((stage) => statuses[stage] === 'Approved');
+}
+
+function nextSubmissionStageForVisit(visit = {}) {
+  const statuses = visit.reviewStatus || {};
+  return reviewStages.find((stage) => statuses[stage] === 'Rework Requested')
+    || reviewStages.find((stage) => statuses[stage] !== 'Approved')
+    || 'Operations Review';
 }
 
 function getPrimaryContact(lead) {
@@ -203,6 +227,31 @@ function buildApprovalTimeline(visit, event) {
     },
     ...(visit.approvalTimeline || []),
   ].slice(0, 12);
+}
+
+async function notifyPendingRole(visit, recipientRole, title, message) {
+  if (!isRemoteWorkflowEnabled() || !recipientRole) return null;
+  try {
+    return await createNotification({
+      recipientRole,
+      workflowInstanceId: visit.workflowInstanceId || null,
+      leadId: visit.leadId,
+      siteVisitId: visit.id,
+      type: 'Workflow Assignment',
+      title,
+      message,
+      priority: 'High',
+      actionUrl: '/tasks',
+      actionLabel: 'Open Review',
+      metadata: {
+        currentStage: visit.currentStage,
+        client: visit.company,
+      },
+    });
+  } catch (error) {
+    console.warn('[QPMS Workflow] Notification skipped', error.message);
+    return null;
+  }
 }
 
 function upsertById(items, nextItem) {
@@ -587,38 +636,51 @@ export function WorkflowProvider({ children }) {
   async function submitCommercialReview(siteVisitId) {
     const visit = siteVisits.find((item) => item.id === siteVisitId);
     if (!visit) throw new Error('Site visit not found.');
+    if (visit.status === 'Pending Review' || ['Returned to BD', 'Proposal Generated', 'Proposal Sent'].includes(visit.status)) {
+      throw new Error('This assessment is already submitted into the approval workflow.');
+    }
+    const nextSubmitStage = nextSubmissionStageForVisit(visit);
+    const nextPendingWith = pendingOwnerByStage[nextSubmitStage] || 'Operations Team';
     updateSiteVisit(siteVisitId, (visit) => ({
       status: 'Pending Review',
-      currentStage: 'HR Validation',
-      pendingWith: 'HR Reviewer',
+      currentStage: nextSubmitStage,
+      pendingWith: nextPendingWith,
       approvalStatus: 'Pending',
       approvalRemarks: '',
-      reviewStatus: {
-        ...(visit.reviewStatus || {}),
-        'Operations Review': 'Not Required',
-        'Coordinator Costing Review': 'Not Required',
-        'HR Validation': 'Pending',
-        'Commercial Review': 'Not Started',
-        'Finance Review': 'Not Started',
-      },
-      approvalTimeline: buildApprovalTimeline(visit, 'Site Visit Started'),
-      activity: ['Submitted to HR Review', ...(visit.activity || [])].slice(0, 8),
+      reviewStatus: reviewStages.reduce((statusMap, stage) => ({
+        ...statusMap,
+        [stage]: stage === nextSubmitStage ? 'Pending' : statusMap[stage] === 'Approved' ? 'Approved' : 'Not Started',
+      }), { ...(visit.reviewStatus || {}) }),
+      approvalTimeline: buildApprovalTimeline(visit, `Submitted to ${nextSubmitStage}`),
+      activity: [`Submitted to ${nextSubmitStage}`, ...(visit.activity || [])].slice(0, 8),
     }));
     if (isRemoteWorkflowEnabled() && visit) {
       try {
         await submitForReview({
           visit,
-          targetStage: 'hr_validation',
+          targetStage: nextSubmitStage,
           user: { name: visit.created_by_name, email: visit.assigned_bd_email, role: 'BD Team' },
           idempotencyKey: rpcIdempotencyKey('submit-review', siteVisitId),
-          remarks: 'Assessment submitted for HR, Commercial, and Finance review demo flow',
+          remarks: 'Assessment submitted for approval matrix review',
         });
+        await notifyPendingRole(
+          { ...visit, currentStage: nextSubmitStage },
+          nextPendingWith,
+          `Assessment pending ${nextSubmitStage}`,
+          `${visit.company} is pending ${nextSubmitStage}.`,
+        );
         await refreshWorkflowData();
       } catch (error) {
         if (shouldUseLegacyRemoteFallback(error)) {
           console.warn('[QPMS Workflow] Submit for review RPC unavailable; using legacy demo approval fallback', error.message);
           try {
             await submitApprovalRemote(visit, visit.assessmentId);
+            await notifyPendingRole(
+              { ...visit, currentStage: nextSubmitStage },
+              nextPendingWith,
+              `Assessment pending ${nextSubmitStage}`,
+              `${visit.company} is pending ${nextSubmitStage}.`,
+            );
             await refreshWorkflowData();
             return;
           } catch (legacyError) {
@@ -640,11 +702,17 @@ export function WorkflowProvider({ children }) {
     if (!visit) throw new Error('Site visit not found.');
 
     const stage = reviewStage || visit.currentStage || 'Commercial Review';
+    const expectedOwner = pendingOwnerByStage[stage];
+    if (expectedOwner && user?.role && ![expectedOwner, 'Admin'].includes(user.role)) {
+      throw new Error(`${user.role} cannot act on ${stage}.`);
+    }
+    if ((visit.reviewStatus || {})[stage] && (visit.reviewStatus || {})[stage] !== 'Pending' && visit.currentStage !== stage) {
+      throw new Error(`${stage} has already been reviewed.`);
+    }
     const normalizedDecision = decision === 'rework' ? 'Rework Requested' : decision === 'reject' ? 'Rejected' : decision === 'return' ? 'Approved' : 'Approved';
-    const orderedStages = ['HR Validation', 'Commercial Review', 'Finance Review'];
     const nextReviewStatus = {
-      'Operations Review': 'Not Required',
-      'Coordinator Costing Review': 'Not Required',
+      'Operations Review': 'Not Started',
+      'Coordinator Costing Review': 'Not Started',
       'HR Validation': 'Not Started',
       'Commercial Review': 'Not Started',
       'Finance Review': 'Not Started',
@@ -652,22 +720,16 @@ export function WorkflowProvider({ children }) {
       [stage]: normalizedDecision,
     };
     if (normalizedDecision === 'Approved') {
-      const nextStageIndex = orderedStages.indexOf(stage) + 1;
-      const nextStageName = orderedStages[nextStageIndex];
+      const nextStageIndex = reviewStages.indexOf(stage) + 1;
+      const nextStageName = reviewStages[nextStageIndex];
       if (nextStageName && nextReviewStatus[nextStageName] === 'Not Started') {
         nextReviewStatus[nextStageName] = 'Pending';
       }
     }
-    const nextPendingStage = orderedStages.find((name) => nextReviewStatus[name] === 'Pending');
-    const allApproved = orderedStages.every((name) => nextReviewStatus[name] === 'Approved') || decision === 'return';
+    const nextPendingStage = reviewStages.find((name) => nextReviewStatus[name] === 'Pending');
+    const allApproved = reviewStages.every((name) => nextReviewStatus[name] === 'Approved') || decision === 'return';
     const nextStage = allApproved ? 'Returned to BD' : nextPendingStage;
-    const pendingOwner = {
-      'Operations Review': 'Operations Team',
-      'Coordinator Costing Review': 'Coordinator',
-      'HR Validation': 'HR Reviewer',
-      'Commercial Review': 'Commercial Reviewer',
-      'Finance Review': 'Finance Reviewer',
-    }[nextPendingStage];
+    const pendingOwner = pendingOwnerByStage[nextPendingStage];
     const pendingWith = normalizedDecision === 'Rejected'
       ? `${stage.replace(' Review', '').replace(' Validation', '')} rejected`
       : normalizedDecision === 'Rework Requested'
@@ -695,12 +757,27 @@ export function WorkflowProvider({ children }) {
     if (isRemoteWorkflowEnabled()) {
       try {
         await recordApprovalDecision({
-        visit,
-        stage,
-        decision: normalizedDecision,
-        remarks,
-        user,
+          visit,
+          stage,
+          decision: normalizedDecision,
+          remarks,
+          user,
         });
+        if (nextPendingStage) {
+          await notifyPendingRole(
+            { ...visit, currentStage: nextPendingStage },
+            pendingOwner,
+            `${nextPendingStage} pending`,
+            `${visit.company} is pending with ${pendingOwner}.`,
+          );
+        } else if (allApproved) {
+          await notifyPendingRole(
+            { ...visit, currentStage: 'Returned to BD' },
+            'BD Team',
+            'Assessment ready for proposal',
+            `${visit.company} is ready for proposal generation.`,
+          );
+        }
         await refreshWorkflowData();
       } catch (error) {
         if (shouldUseLegacyRemoteFallback(error) || (!isProductionWorkflowMode() && !visit.workflowInstanceId)) {
@@ -714,6 +791,21 @@ export function WorkflowProvider({ children }) {
               remarks,
               user,
             });
+            if (nextPendingStage) {
+              await notifyPendingRole(
+                { ...visit, currentStage: nextPendingStage },
+                pendingOwner,
+                `${nextPendingStage} pending`,
+                `${visit.company} is pending with ${pendingOwner}.`,
+              );
+            } else if (allApproved) {
+              await notifyPendingRole(
+                { ...visit, currentStage: 'Returned to BD' },
+                'BD Team',
+                'Assessment ready for proposal',
+                `${visit.company} is ready for proposal generation.`,
+              );
+            }
             await refreshWorkflowData();
             return;
           } catch (legacyError) {
@@ -733,6 +825,12 @@ export function WorkflowProvider({ children }) {
   async function generateProposal(siteVisitId, proposal, user) {
     const visit = siteVisits.find((item) => item.id === siteVisitId);
     if (!visit) throw new Error('Site visit not found.');
+    if (visit.proposal || ['Proposal Generated', 'Proposal Sent'].includes(visit.status)) {
+      throw new Error('Proposal is already generated for this assessment.');
+    }
+    if (!isReviewCompleteForProposal(visit)) {
+      throw new Error('Proposal can be generated only after all reviews return to BD.');
+    }
     updateSiteVisit(siteVisitId, (visit) => ({
       proposal: { ...(visit.proposal || {}), ...proposal, generatedAt: new Date().toISOString() },
       status: 'Proposal Generated',
@@ -749,6 +847,12 @@ export function WorkflowProvider({ children }) {
           user,
           idempotencyKey: rpcIdempotencyKey('proposal', siteVisitId),
         });
+        await notifyPendingRole(
+          { ...visit, currentStage: 'Returned to BD' },
+          'BD Team',
+          'Proposal generated',
+          `${visit.company} proposal is generated and ready to send.`,
+        );
         await refreshWorkflowData();
       } catch (error) {
         if (shouldUseLegacyRemoteFallback(error) || (!isProductionWorkflowMode() && !visit.workflowInstanceId)) {
@@ -766,6 +870,9 @@ export function WorkflowProvider({ children }) {
   async function markProposalSent(siteVisitId, proposalPatch = {}) {
     const visit = siteVisits.find((item) => item.id === siteVisitId);
     if (!visit) throw new Error('Site visit not found.');
+    if (visit.status === 'Proposal Sent' || visit.proposal?.status === 'Sent') {
+      throw new Error('Proposal is already marked as sent.');
+    }
     updateSiteVisit(siteVisitId, (visit) => ({
       proposal: { ...(visit.proposal || {}), ...proposalPatch, sentAt: new Date().toISOString(), status: 'Sent' },
       status: 'Proposal Sent',
@@ -774,6 +881,23 @@ export function WorkflowProvider({ children }) {
       approvalStatus: 'Completed',
       activity: ['Proposal sent to client', 'Moved to Existing Business Pipeline', ...(visit.activity || [])].slice(0, 8),
     }));
+    if (isRemoteWorkflowEnabled()) {
+      try {
+        await markProposalSentRemote(visit, proposalPatch);
+        await notifyPendingRole(
+          { ...visit, currentStage: 'Proposal Sent' },
+          'Management',
+          'Proposal sent',
+          `${visit.company} moved to Existing Business Pipeline.`,
+        );
+        await refreshWorkflowData();
+      } catch (error) {
+        console.warn('[QPMS Workflow] Proposal sent persistence failed', error.message);
+        setBackendStatus(isProductionWorkflowMode() ? 'error' : 'fallback');
+        setWorkflowError(`Proposal sent update failed: ${error.message}`);
+        throw error;
+      }
+    }
   }
 
   async function uploadSiteImage(payload) {
