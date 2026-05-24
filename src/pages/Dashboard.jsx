@@ -749,119 +749,6 @@ function OperationalHealth({ items }) {
   );
 }
 
-function DemoStatusPanel({ leads, siteVisits, backendStatus, workflowError, workflowDebug }) {
-  const pendingByStage = (stage) => siteVisits.filter((visit) => (visit.reviewStatus?.[stage] || (visit.currentStage === stage ? 'Pending' : '')) === 'Pending').length;
-  const generatedProposals = siteVisits.filter((visit) => visit.proposal || ['Proposal Generated', 'Proposal Sent'].includes(visit.status)).length;
-  const approvedProposals = siteVisits.filter((visit) => {
-    const statuses = Object.values(visit.reviewStatus || {});
-    const allApprovalsApproved = statuses.length && statuses.every((status) => status === 'Approved');
-    return ['Proposal Sent', 'Ready for Proposal', 'Proposal Generated'].includes(visit.status) || visit.approvalStatus === 'Approved' || allApprovalsApproved;
-  }).length;
-  const isLoading = backendStatus === 'connecting' || backendStatus === 'saving';
-  const isError = backendStatus === 'error';
-  const latestLead = leads[0] || {};
-  const items = [
-    { label: 'Total leads', value: leads.length, tone: 'blue' },
-    { label: 'Pending Commercial', value: pendingByStage('Commercial Review'), tone: 'amber' },
-    { label: 'Pending Finance', value: pendingByStage('Finance Review'), tone: 'violet' },
-    { label: 'Pending HR', value: pendingByStage('HR Validation'), tone: 'green' },
-    { label: 'Approved proposals', value: approvedProposals, tone: 'green' },
-    { label: 'Generated proposals', value: generatedProposals, tone: 'blue' },
-  ];
-
-  return (
-    <section className="enterprise-card-compact overflow-hidden">
-      <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/80 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/60 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-[15px] font-semibold text-slate-950 dark:text-white">Demo Workflow Status</h2>
-            <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ${isError ? compactTone('red') : isLoading ? compactTone('amber') : compactTone('green')}`}>
-              {isError ? 'Data issue' : isLoading ? 'Loading' : 'Ready'}
-            </span>
-            {isDemoMode ? <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ${compactTone('blue')}`}>DEMO MODE</span> : null}
-          </div>
-        </div>
-        {workflowError ? <p className="max-w-xl text-xs font-semibold text-rose-600 dark:text-rose-300">{workflowError}</p> : null}
-      </div>
-      {isError ? (
-        <div className="m-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 dark:border-rose-500/25 dark:bg-rose-500/10 dark:text-rose-200">
-          Unable to load workflow data. Check Supabase environment and API health before the demo.
-        </div>
-      ) : null}
-      {!isLoading && !isError && !leads.length && !siteVisits.length ? (
-        <div className="m-4 rounded-xl border border-slate-200 bg-white px-4 py-4 text-sm font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300">
-          No demo records yet. Run the Postman approval flow or create a lead from Lead Management to populate this status board.
-        </div>
-      ) : null}
-      <div className="grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
-        {items.map((item) => (
-          <div key={item.label} className="rounded-xl border border-slate-100 bg-white px-3 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-950">
-            <p className="truncate text-[10px] font-bold uppercase text-slate-500 dark:text-slate-400">{item.label}</p>
-            <p className="mt-1 text-2xl font-semibold leading-none text-slate-950 dark:text-white">{isLoading ? '...' : item.value}</p>
-          </div>
-        ))}
-      </div>
-      <ExecutiveWorkflowStepper leads={leads} siteVisits={siteVisits} />
-      <div className="border-t border-slate-100 bg-slate-50/70 px-3 py-3 dark:border-slate-800 dark:bg-slate-900/40">
-        <div className="grid gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl bg-white px-3 py-2 ring-1 ring-slate-100 dark:bg-slate-950 dark:ring-slate-800">
-            <span className="block text-[10px] font-bold uppercase text-slate-400">DEMO DEBUG: leads fetched</span>
-            {workflowDebug?.totalLeadsFetched ?? leads.length}
-          </div>
-          <div className="rounded-xl bg-white px-3 py-2 ring-1 ring-slate-100 dark:bg-slate-950 dark:ring-slate-800">
-            <span className="block text-[10px] font-bold uppercase text-slate-400">Latest lead id</span>
-            {workflowDebug?.latestLeadId || latestLead.id || '-'}
-          </div>
-          <div className="rounded-xl bg-white px-3 py-2 ring-1 ring-slate-100 dark:bg-slate-950 dark:ring-slate-800">
-            <span className="block text-[10px] font-bold uppercase text-slate-400">Latest client</span>
-            {workflowDebug?.latestClientName || latestLead.company || '-'}
-          </div>
-          <div className="rounded-xl bg-white px-3 py-2 ring-1 ring-slate-100 dark:bg-slate-950 dark:ring-slate-800">
-            <span className="block text-[10px] font-bold uppercase text-slate-400">API source</span>
-            {workflowDebug?.apiSource || (backendStatus === 'connected' ? 'supabase.public.leads' : 'local')}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function ExecutiveWorkflowStepper({ leads, siteVisits }) {
-  const countStage = (name) => siteVisits.filter((visit) => visit.currentStage === name || visit.reviewStatus?.[name]).length;
-  const stages = [
-    { label: 'Lead', count: leads.length },
-    { label: 'Site Visit', count: siteVisits.length },
-    { label: 'Assessment', count: siteVisits.filter((visit) => visit.assessmentStatus || visit.survey).length },
-    { label: 'Commercial', count: countStage('Commercial Review') },
-    { label: 'Finance', count: countStage('Finance Review') },
-    { label: 'HR', count: countStage('HR Validation') },
-    { label: 'Approved', count: siteVisits.filter((visit) => visit.approvalStatus === 'Approved' || Object.values(visit.reviewStatus || {}).includes('Approved')).length },
-    { label: 'Proposal', count: siteVisits.filter((visit) => visit.proposal || ['Proposal Generated', 'Proposal Sent'].includes(visit.status)).length },
-  ];
-
-  return (
-    <div className="border-t border-slate-100 px-3 py-3 dark:border-slate-800">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Workflow Status</p>
-      </div>
-      <div className="overflow-x-auto pb-1">
-        <div className="flex min-w-[860px] items-stretch gap-2">
-          {stages.map((stage, index) => (
-            <div key={stage.label} className="relative flex-1 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
-              {index < stages.length - 1 ? <div className="absolute -right-2 top-1/2 h-0.5 w-2 bg-slate-200 dark:bg-slate-800" /> : null}
-              <div className="flex items-center justify-between gap-2">
-                <p className="truncate text-xs font-bold text-slate-900 dark:text-white">{stage.label}</p>
-                <CheckCircle2 className={`h-3.5 w-3.5 ${stage.count ? 'text-emerald-500' : 'text-slate-300 dark:text-slate-700'}`} />
-              </div>
-              <p className="mt-1 text-xl font-semibold leading-none text-slate-950 dark:text-white">{stage.count}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function CommandCenterOverview({ user, leads, siteVisits, stage }) {
   const data = useMemo(() => buildCommandCenterData({ user, leads, siteVisits, stage }), [user, leads, siteVisits, stage]);
   const isExecutiveView = ['Admin', 'COO'].includes(user?.role);
@@ -1670,7 +1557,7 @@ function ApprovalDashboard({ title, description, stage, siteVisits, leads, user 
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { leads, siteVisits, backendStatus, workflowError, workflowDebug } = useWorkflow();
+  const { leads, siteVisits } = useWorkflow();
   const [activeTab, setActiveTab] = useState('new-business');
   const [activeOperationsSection, setActiveOperationsSection] = useState(null);
   usePageTitle('Dashboard');
@@ -1735,14 +1622,6 @@ export default function Dashboard() {
         title={reviewerDashboard?.title || 'Dashboard'}
         description={reviewerDashboard?.description}
         actions={canSeeOperations ? <DashboardTabs tabs={reviewerDashboard ? reviewTabs : tabs} activeTab={activeTab} onChange={setActiveTab} /> : null}
-      />
-
-      <DemoStatusPanel
-        leads={visibleLeads}
-        siteVisits={visibleSiteVisits}
-        backendStatus={backendStatus}
-        workflowError={workflowError}
-        workflowDebug={workflowDebug}
       />
 
       {reviewerDashboard && effectiveTab === 'new-business' ? (
