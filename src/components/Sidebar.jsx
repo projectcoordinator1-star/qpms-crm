@@ -4,26 +4,48 @@ import {
   ClipboardCheck,
   FileText,
   Home,
+  ListChecks,
   Settings,
   Users,
   Workflow,
 } from 'lucide-react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { isDemoMode } from '../config/demoMode.js';
 import { useAuth } from '../context/auth-context.js';
 import { isCoordinator, isFinanceTeam, isHrReviewer, isOperationsTeam } from '../data/mockUsers.js';
 import { canAccessNavRoute } from '../utils/authRoles.js';
 import Logo from './Logo.jsx';
 
-const navItems = [
-  { label: 'Dashboard', to: '/dashboard', icon: Home },
-  { label: 'Lead Management', to: '/crm', icon: Workflow },
-  { label: 'Site Visit & Estimation', to: '/sites', icon: ClipboardCheck },
-  { label: 'MOM Draft', to: '/tickets', icon: FileText, demoHidden: true },
-  { label: 'Commercial Review', to: '/tasks', icon: CheckSquare },
-  { label: 'Approval Workflow', to: '/reports', icon: BarChart3, demoHidden: true },
-  { label: 'Employee IAM', to: '/employees', icon: Users, demoHidden: true },
-  { label: 'Settings', to: '/settings', icon: Settings },
+const navGroups = [
+  {
+    title: 'Workspace',
+    items: [
+      { label: 'Dashboard', to: '/dashboard', icon: Home },
+      { label: 'Lead Management', to: '/crm', icon: Workflow },
+      { label: 'Site Visit & Estimation', to: '/sites', icon: ClipboardCheck },
+    ],
+  },
+  {
+    title: 'Reviews',
+    items: [
+      { label: 'Review Workbench', to: '/tasks', icon: CheckSquare },
+      { label: 'Approval Workflow', to: '/reports', icon: BarChart3, demoHidden: true },
+    ],
+  },
+  {
+    title: 'Operations',
+    items: [
+      { label: 'Existing Business Operations', to: '/dashboard?workspace=operations', icon: ListChecks },
+      { label: 'Tickets', to: '/tickets', icon: FileText, demoHidden: true },
+    ],
+  },
+  {
+    title: 'Admin',
+    items: [
+      { label: 'Settings', to: '/settings', icon: Settings },
+      { label: 'IAM', to: '/employees', icon: Users, demoHidden: true },
+    ],
+  },
 ];
 
 function navLabelForRole(item, user) {
@@ -37,10 +59,27 @@ function navLabelForRole(item, user) {
 
 export default function Sidebar({ isOpen, onClose }) {
   const { user } = useAuth();
-  const visibleNavItems = navItems.filter((item) => {
-    if (isDemoMode && item.demoHidden) return false;
-    return canAccessNavRoute(user, item.to);
-  });
+  const location = useLocation();
+  const currentTarget = `${location.pathname}${location.search}`;
+  const visibleNavGroups = navGroups.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => {
+      const routePath = item.to.split('?')[0];
+      const role = user?.role || '';
+      if (group.title === 'Operations' && !['Admin', 'COO', 'Management', 'Operations Team'].includes(role)) return false;
+      if (isDemoMode && item.demoHidden) return false;
+      return canAccessNavRoute(user, routePath);
+    }),
+  })).filter((group) => group.items.length);
+
+  const visibleNavItems = visibleNavGroups.flatMap((group) => group.items);
+  const hasVisibleNav = visibleNavItems.length > 0;
+  if (!hasVisibleNav) {
+    visibleNavGroups.push({
+      title: 'Admin',
+      items: [{ label: 'Settings', to: '/settings', icon: Settings }],
+    });
+  }
 
   return (
     <>
@@ -62,25 +101,32 @@ export default function Sidebar({ isOpen, onClose }) {
           </div>
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto px-4 py-5">
-          <p className="px-3 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">Navigation</p>
-          {visibleNavItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              onClick={onClose}
-              className={({ isActive }) =>
-                [
-                  'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition',
-                  isActive
-                    ? 'bg-gradient-to-r from-qpms-700 to-qpms-500 text-white shadow-lg shadow-qpms-600/20'
-                    : 'text-slate-600 hover:bg-qpms-50 hover:text-qpms-700 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white',
-                ].join(' ')
-              }
-            >
-              <item.icon className="h-5 w-5 shrink-0" strokeWidth={2.2} />
-              <span>{navLabelForRole(item, user)}</span>
-            </NavLink>
+        <nav className="flex-1 space-y-5 overflow-y-auto px-4 py-5">
+          {visibleNavGroups.map((group) => (
+            <div key={group.title} className="space-y-1">
+              <p className="px-3 pb-2 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-500">{group.title}</p>
+              {group.items.map((item) => {
+                const active = item.to.includes('?')
+                  ? currentTarget === item.to
+                  : location.pathname === item.to && !currentTarget.startsWith(`${item.to}?workspace=`);
+                return (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    onClick={onClose}
+                    className={[
+                      'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition',
+                      active
+                        ? 'bg-gradient-to-r from-qpms-700 to-qpms-500 text-white shadow-lg shadow-qpms-600/20'
+                        : 'text-slate-600 hover:bg-qpms-50 hover:text-qpms-700 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-white',
+                    ].join(' ')}
+                  >
+                    <item.icon className="h-5 w-5 shrink-0" strokeWidth={2.2} />
+                    <span>{navLabelForRole(item, user)}</span>
+                  </NavLink>
+                );
+              })}
+            </div>
           ))}
         </nav>
       </aside>

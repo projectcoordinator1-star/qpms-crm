@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
@@ -40,6 +40,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { useLocation } from 'react-router-dom';
 import ChartCard from '../components/ChartCard.jsx';
 import DashboardTabs from '../components/DashboardTabs.jsx';
 import DataTable from '../components/DataTable.jsx';
@@ -230,11 +231,6 @@ const healthTone = {
   red: 'bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:ring-rose-500/20',
 };
 
-function positiveCount(value, fallback) {
-  const number = Number(value || 0);
-  return number > 0 ? number : fallback;
-}
-
 function roleScope(user) {
   if (['Admin', 'COO'].includes(user?.role)) return 'admin';
   if (['BD Head', 'BD Executive'].includes(user?.role)) return 'bd';
@@ -261,73 +257,65 @@ function buildCommandCenterData({ user, leads, siteVisits, stage }) {
   const pendingApprovals = pendingCommercial + pendingFinance + pendingOperations + pendingHr + reviewCount(siteVisits, 'Coordinator Costing Review');
   const siteVisitsToday = siteVisits.filter((visit) => ['Scheduled', 'Pending Review', 'Site Visit MOM Sent'].includes(visit.status)).length;
   const operationalVisits = stage ? reviewCount(siteVisits, stage) : pendingApprovals;
-  const employeeFocus = scope === 'hr';
-  const commercialFocus = scope === 'commercial';
-  const financeFocus = scope === 'finance';
   const operationsFocus = scope === 'operations';
 
   const baseTodayOperations = [
-    { label: 'Site Visits Today', value: positiveCount(siteVisitsToday, operationsFocus ? 8 : 6), icon: CalendarCheck2, tone: 'blue' },
-    { label: 'Approvals Pending', value: positiveCount(stage ? reviewCount(siteVisits, stage) : pendingApprovals, commercialFocus || financeFocus ? 4 : 9), icon: Clock3, tone: 'amber' },
-    { label: 'Proposals Due', value: positiveCount(proposalsDue, financeFocus ? 7 : 3), icon: FileText, tone: 'violet' },
-    { label: 'Employee Check-ins', value: employeeFocus ? 286 : 238, icon: UserCheck, tone: 'green' },
-    { label: 'Field Tasks Pending', value: operationsFocus ? positiveCount(operationalVisits, 12) : 18, icon: ClipboardList, tone: 'amber' },
-    { label: 'Client Escalations', value: operationsFocus ? 5 : 3, icon: MessageSquareWarning, tone: 'red' },
+    { label: 'Site Visits Today', value: siteVisitsToday, icon: CalendarCheck2, tone: 'blue' },
+    { label: 'Approvals Pending', value: stage ? reviewCount(siteVisits, stage) : pendingApprovals, icon: Clock3, tone: 'amber' },
+    { label: 'Proposals Due', value: proposalsDue, icon: FileText, tone: 'violet' },
+    { label: 'Employee Check-ins', value: 0, icon: UserCheck, tone: 'green' },
+    { label: 'Field Tasks Pending', value: operationsFocus ? operationalVisits : 0, icon: ClipboardList, tone: 'amber' },
+    { label: 'Client Escalations', value: 0, icon: MessageSquareWarning, tone: 'red' },
   ];
   const todayOperationsByScope = {
     commercial: [
-      { label: 'Commercial Reviews', value: positiveCount(pendingCommercial, 4), icon: BriefcaseBusiness, tone: 'amber' },
-      { label: 'Pricing Due', value: 6, icon: FileText, tone: 'violet' },
-      { label: 'Margin Exceptions', value: 2, icon: AlertTriangle, tone: 'red' },
-      { label: 'Proposals Due', value: positiveCount(proposalsDue, 5), icon: ClipboardList, tone: 'blue' },
-      { label: 'Approved Today', value: 3, icon: CheckCircle2, tone: 'green' },
-      { label: 'Client Escalations', value: 2, icon: MessageSquareWarning, tone: 'red' },
+      { label: 'Commercial Reviews', value: pendingCommercial, icon: BriefcaseBusiness, tone: 'amber' },
+      { label: 'Pricing Due', value: pendingCommercial, icon: FileText, tone: 'violet' },
+      { label: 'Margin Exceptions', value: 0, icon: AlertTriangle, tone: 'red' },
+      { label: 'Proposals Due', value: proposalsDue, icon: ClipboardList, tone: 'blue' },
+      { label: 'Approved Today', value: siteVisits.filter((visit) => visit.reviewStatus?.['Commercial Review'] === 'Approved').length, icon: CheckCircle2, tone: 'green' },
+      { label: 'Client Escalations', value: 0, icon: MessageSquareWarning, tone: 'red' },
     ],
     finance: [
-      { label: 'Finance Approvals', value: positiveCount(pendingFinance, 3), icon: Clock3, tone: 'amber' },
-      { label: 'Proposal Value Queue', value: formatInr(8400000), icon: FileText, tone: 'blue' },
-      { label: 'Payment Terms Due', value: 5, icon: ClipboardList, tone: 'violet' },
-      { label: 'Budget Exceptions', value: 2, icon: AlertTriangle, tone: 'red' },
-      { label: 'Approved Today', value: 4, icon: CheckCircle2, tone: 'green' },
-      { label: 'Escalations', value: 1, icon: MessageSquareWarning, tone: 'amber' },
+      { label: 'Finance Approvals', value: pendingFinance, icon: Clock3, tone: 'amber' },
+      { label: 'Proposal Value Queue', value: formatInr(0), icon: FileText, tone: 'blue' },
+      { label: 'Payment Terms Due', value: pendingFinance, icon: ClipboardList, tone: 'violet' },
+      { label: 'Budget Exceptions', value: 0, icon: AlertTriangle, tone: 'red' },
+      { label: 'Approved Today', value: siteVisits.filter((visit) => visit.reviewStatus?.['Finance Review'] === 'Approved').length, icon: CheckCircle2, tone: 'green' },
+      { label: 'Escalations', value: 0, icon: MessageSquareWarning, tone: 'amber' },
     ],
     hr: [
-      { label: 'Manpower Reviews', value: positiveCount(pendingHr, 4), icon: Users, tone: 'amber' },
-      { label: 'Employee Check-ins', value: 286, icon: UserCheck, tone: 'green' },
-      { label: 'Wage Validations', value: 7, icon: ClipboardList, tone: 'blue' },
-      { label: 'Shift Exceptions', value: 3, icon: AlertTriangle, tone: 'red' },
-      { label: 'Uniform Checks', value: 9, icon: FileText, tone: 'violet' },
-      { label: 'Pending Escalations', value: 2, icon: MessageSquareWarning, tone: 'amber' },
+      { label: 'Manpower Reviews', value: pendingHr, icon: Users, tone: 'amber' },
+      { label: 'Employee Check-ins', value: 0, icon: UserCheck, tone: 'green' },
+      { label: 'Wage Validations', value: pendingHr, icon: ClipboardList, tone: 'blue' },
+      { label: 'Shift Exceptions', value: 0, icon: AlertTriangle, tone: 'red' },
+      { label: 'Uniform Checks', value: pendingHr, icon: FileText, tone: 'violet' },
+      { label: 'Pending Escalations', value: 0, icon: MessageSquareWarning, tone: 'amber' },
     ],
   };
   const todayOperations = todayOperationsByScope[scope] || baseTodayOperations;
 
   const actions = [
-    { label: 'Commercial reviews pending', count: positiveCount(pendingCommercial, commercialFocus ? 4 : 2), priority: 'High', cta: 'Review', scope: ['admin', 'commercial'] },
-    { label: 'Finance approvals pending', count: positiveCount(pendingFinance, financeFocus ? 3 : 2), priority: 'High', cta: 'Review', scope: ['admin', 'finance'] },
-    { label: 'COO approvals pending', count: 2, priority: 'Medium', cta: 'Open', scope: ['admin', 'bd', 'finance'] },
-    { label: 'Site visits overdue', count: operationsFocus ? 5 : 3, priority: 'High', cta: 'Assign', scope: ['admin', 'bd', 'operations'] },
-    { label: 'Proposals not sent', count: positiveCount(proposalsDue, 6), priority: 'Medium', cta: 'Open', scope: ['admin', 'bd', 'commercial', 'finance'] },
-    { label: 'Leads stuck in same stage', count: positiveCount(leads.filter((lead) => ['Contacted', 'MOM Pending'].includes(lead.stage)).length, 5), priority: 'Low', cta: 'Assign', scope: ['admin', 'bd'] },
-    { label: 'Manpower validation pending', count: positiveCount(pendingHr, 4), priority: 'High', cta: 'Review', scope: ['admin', 'hr', 'coordinator'] },
-  ].filter((item) => item.scope.includes(scope)).slice(0, 6);
+    { label: 'Commercial reviews pending', count: pendingCommercial, priority: 'High', cta: 'Review', scope: ['admin', 'commercial'] },
+    { label: 'Finance approvals pending', count: pendingFinance, priority: 'High', cta: 'Review', scope: ['admin', 'finance'] },
+    { label: 'Site visits overdue', count: siteVisits.filter((visit) => visit.status === 'Overdue').length, priority: 'High', cta: 'Assign', scope: ['admin', 'bd', 'operations'] },
+    { label: 'Proposals not sent', count: proposalsDue, priority: 'Medium', cta: 'Open', scope: ['admin', 'bd', 'commercial', 'finance'] },
+    { label: 'Leads stuck in same stage', count: leads.filter((lead) => ['Contacted', 'MOM Pending'].includes(lead.stage)).length, priority: 'Low', cta: 'Assign', scope: ['admin', 'bd'] },
+    { label: 'Manpower validation pending', count: pendingHr, priority: 'High', cta: 'Review', scope: ['admin', 'hr', 'coordinator'] },
+  ].filter((item) => item.scope.includes(scope) && item.count > 0).slice(0, 6);
 
   const recentActivity = [
-    { event: 'Lead moved to Site Visit', detail: leads[0]?.company || 'Metro Retail Parks', time: '10 mins ago' },
-    { event: 'MOM generated', detail: siteVisits[0]?.company || 'Aster Medcity', time: '22 mins ago' },
-    { event: `${stage || 'Commercial Review'} updated`, detail: siteVisits[1]?.company || 'Port Admin Block', time: '38 mins ago' },
-    { event: 'Finance approved', detail: 'Emirates Facility Zone', time: '1 hr ago' },
-    { event: 'Proposal sent', detail: leads.find((lead) => lead.stage === 'Proposal Sent')?.company || 'Nova Tech Park', time: '2 hrs ago' },
-    { event: employeeFocus ? 'Employee checked in' : 'Lead converted', detail: employeeFocus ? 'South Zone supervisor' : leads.find((lead) => lead.stage === 'Converted')?.company || 'Green Square Mall', time: '3 hrs ago' },
-  ];
+    ...leads.slice(0, 3).map((lead) => ({ event: lead.stage || 'Lead updated', detail: lead.company, time: 'Recent' })),
+    ...siteVisits.slice(0, 3).map((visit) => ({ event: visit.currentStage || visit.status || 'Assessment updated', detail: visit.company, time: 'Recent' })),
+  ].slice(0, 6);
 
   const operationalHealth = [
-    { label: 'Proposal TAT', value: '2.4 days', tone: 'green', helper: 'Target 3 days' },
-    { label: 'Approval TAT', value: '18 hrs', tone: pendingApprovals > 8 ? 'yellow' : 'green', helper: 'Current workflow' },
-    { label: 'Site Visit Completion', value: '86%', tone: 'green', helper: 'Weekly run rate' },
-    { label: 'Lead Conversion', value: `${Math.max(12, Math.round((converted / Math.max(leads.length, 1)) * 100))}%`, tone: 'yellow', helper: 'Pipeline quality' },
-    { label: 'Attendance Compliance', value: employeeFocus ? '94%' : '91%', tone: 'green', helper: 'Today check-ins' },
-    { label: 'Pending Escalations', value: operationsFocus ? '5' : '3', tone: operationsFocus ? 'yellow' : 'green', helper: 'Client actions' },
+    { label: 'Proposal TAT', value: '-', tone: 'green', helper: 'Pending data' },
+    { label: 'Approval TAT', value: '-', tone: pendingApprovals > 8 ? 'yellow' : 'green', helper: 'Pending data' },
+    { label: 'Site Visit Completion', value: `${siteVisits.length ? Math.round((siteVisits.filter((visit) => ['Completed', 'Proposal Sent', 'Returned to BD'].includes(visit.status)).length / siteVisits.length) * 100) : 0}%`, tone: 'green', helper: 'Current records' },
+    { label: 'Lead Conversion', value: `${leads.length ? Math.round((converted / leads.length) * 100) : 0}%`, tone: 'yellow', helper: 'Current records' },
+    { label: 'Attendance Compliance', value: '-', tone: 'green', helper: 'Pending data' },
+    { label: 'Pending Escalations', value: 0, tone: operationsFocus ? 'yellow' : 'green', helper: 'Current records' },
   ];
 
   return { todayOperations, actions, recentActivity, operationalHealth };
@@ -520,8 +508,7 @@ function filterPipelineLeads(leads, { business, region, owner }) {
 }
 
 function stageCount(leads, siteVisits, matcher, fallback) {
-  const count = matcher(leads, siteVisits);
-  return leads.length || siteVisits.length ? count : fallback;
+  return matcher(leads, siteVisits) || Number(fallback || 0);
 }
 
 function buildPipelineCommandData(leads, siteVisits, bdRows) {
@@ -535,68 +522,65 @@ function buildPipelineCommandData(leads, siteVisits, bdRows) {
   const siteVisitCount = siteVisits.length || leads.filter((lead) => lead.stage === 'Site Visit Scheduled').length;
   const estimationCount = siteVisits.filter((visit) => ['Scheduled', 'Site Visit MOM Created', 'Site Visit MOM Sent', 'Pending Review'].includes(visit.status)).length;
   const totalLeadBase = Math.max(leads.length, 1);
-  const proposalValue = Math.max(6800000, proposals * 2450000 + siteVisitCount * 850000);
-  const projectedRevenue = Math.max(18470000, openLeads.length * 1850000 + converted * 4200000);
+  const proposalValue = proposals * 2450000 + siteVisitCount * 850000;
+  const projectedRevenue = openLeads.length * 1850000 + converted * 4200000;
 
   const kpis = [
-    { id: 'openLeads', title: 'Open Leads', value: stageCount(leads, siteVisits, () => openLeads.length, 18), tone: 'blue' },
-    { id: 'siteVisitsPlanned', title: 'Site Visits', value: stageCount(leads, siteVisits, () => siteVisitCount, 8), tone: 'green' },
-    { id: 'estimationsPending', title: 'Estimations Pending', value: stageCount(leads, siteVisits, () => estimationCount, 6), tone: 'violet' },
-    { id: 'commercialReviews', title: 'Commercial Reviews', value: stageCount(leads, siteVisits, () => commercialPending, 4), tone: 'amber' },
-    { id: 'approvalPending', title: 'Approvals Pending', value: stageCount(leads, siteVisits, () => approvalPending, 5), tone: 'red' },
-    { id: 'proposalsSent', title: 'Proposals Sent', value: stageCount(leads, siteVisits, () => proposals, 5), tone: 'blue' },
-    { id: 'convertedLeads', title: 'Converted Leads', value: stageCount(leads, siteVisits, () => converted, 2), tone: 'green' },
+    { id: 'openLeads', title: 'Open Leads', value: stageCount(leads, siteVisits, () => openLeads.length, 0), tone: 'blue' },
+    { id: 'siteVisitsPlanned', title: 'Site Visits', value: stageCount(leads, siteVisits, () => siteVisitCount, 0), tone: 'green' },
+    { id: 'estimationsPending', title: 'Estimations Pending', value: stageCount(leads, siteVisits, () => estimationCount, 0), tone: 'violet' },
+    { id: 'commercialReviews', title: 'Commercial Reviews', value: stageCount(leads, siteVisits, () => commercialPending, 0), tone: 'amber' },
+    { id: 'approvalPending', title: 'Approvals Pending', value: stageCount(leads, siteVisits, () => approvalPending, 0), tone: 'red' },
+    { id: 'proposalsSent', title: 'Proposals Sent', value: stageCount(leads, siteVisits, () => proposals, 0), tone: 'blue' },
+    { id: 'convertedLeads', title: 'Converted Leads', value: stageCount(leads, siteVisits, () => converted, 0), tone: 'green' },
   ];
 
   const flow = [
-    { stage: 'Lead', count: kpis[0].value, pending: Math.max(2, Math.round(kpis[0].value * 0.32)), conversion: 100, delayed: false },
-    { stage: 'Contacted', count: stageCount(leads, siteVisits, (items) => items.filter((lead) => ['Contacted', 'In Discussion'].includes(lead.stage)).length, 12), pending: 4, conversion: 72, delayed: false },
-    { stage: 'Site Visit', count: kpis[1].value, pending: 3, conversion: 54, delayed: false },
+    { stage: 'Lead', count: kpis[0].value, pending: Math.round(kpis[0].value * 0.32), conversion: leads.length ? 100 : 0, delayed: false },
+    { stage: 'Contacted', count: stageCount(leads, siteVisits, (items) => items.filter((lead) => ['Contacted', 'In Discussion'].includes(lead.stage)).length, 0), pending: 0, conversion: leads.length ? 72 : 0, delayed: false },
+    { stage: 'Site Visit', count: kpis[1].value, pending: 0, conversion: leads.length ? 54 : 0, delayed: false },
     { stage: 'Estimation', count: kpis[2].value, pending: kpis[2].value, conversion: 42, delayed: true },
     { stage: 'Commercial Review', count: kpis[3].value, pending: kpis[3].value, conversion: 34, delayed: true },
     { stage: 'Approval', count: kpis[4].value, pending: kpis[4].value, conversion: 28, delayed: true },
-    { stage: 'Proposal', count: kpis[5].value, pending: 2, conversion: 22, delayed: false },
-    { stage: 'Converted', count: kpis[6].value, pending: 0, conversion: Math.max(12, Math.round((converted / totalLeadBase) * 100)), delayed: false },
+    { stage: 'Proposal', count: kpis[5].value, pending: 0, conversion: leads.length ? 22 : 0, delayed: false },
+    { stage: 'Converted', count: kpis[6].value, pending: 0, conversion: leads.length ? Math.round((converted / totalLeadBase) * 100) : 0, delayed: false },
   ];
 
   const insights = [
     { label: 'Projected Revenue', value: formatInr(projectedRevenue), helper: 'Weighted active pipeline', tone: 'blue' },
     { label: 'Proposal Value', value: formatInr(proposalValue), helper: 'Sent + draft proposals', tone: 'green' },
-    { label: 'Conversion %', value: `${Math.max(12, Math.round((converted / totalLeadBase) * 100))}%`, helper: 'Lead to converted', tone: 'amber' },
-    { label: 'Avg Approval TAT', value: '18 hrs', helper: 'Commercial + finance', tone: 'green' },
-    { label: 'Avg Lead Closure', value: '21 days', helper: 'From first contact', tone: 'violet' },
-    { label: 'Proposal Success', value: '38%', helper: 'Rolling 90 days', tone: 'blue' },
+    { label: 'Conversion %', value: `${leads.length ? Math.round((converted / totalLeadBase) * 100) : 0}%`, helper: 'Lead to converted', tone: 'amber' },
+    { label: 'Avg Approval TAT', value: '-', helper: 'Pending data', tone: 'green' },
+    { label: 'Avg Lead Closure', value: '-', helper: 'Pending data', tone: 'violet' },
+    { label: 'Proposal Success', value: '-', helper: 'Pending data', tone: 'blue' },
   ];
 
   const bottlenecks = [
-    { issue: 'Commercial Review delayed', delay: '2.8 days', affected: stageCount(leads, siteVisits, () => commercialPending, 4), priority: 'High' },
-    { issue: 'Proposal approval pending', delay: '1.6 days', affected: stageCount(leads, siteVisits, () => approvalPending, 3), priority: 'High' },
-    { issue: 'Site visit scheduling delay', delay: '1.2 days', affected: 2, priority: 'Medium' },
-    { issue: 'Leads inactive > 3 days', delay: '3.4 days', affected: 4, priority: 'Medium' },
-  ];
+    { issue: 'Commercial Review delayed', delay: '-', affected: stageCount(leads, siteVisits, () => commercialPending, 0), priority: 'High' },
+    { issue: 'Proposal approval pending', delay: '-', affected: stageCount(leads, siteVisits, () => approvalPending, 0), priority: 'High' },
+    { issue: 'Site visit scheduling delay', delay: '-', affected: siteVisits.filter((visit) => visit.status === 'Overdue').length, priority: 'Medium' },
+    { issue: 'Leads inactive > 3 days', delay: '-', affected: leads.filter((lead) => ['Contacted', 'MOM Pending'].includes(lead.stage)).length, priority: 'Medium' },
+  ].filter((item) => item.affected > 0);
 
   const actions = [
     { label: 'Estimations pending', count: kpis[2].value, priority: 'High' },
-    { label: 'Proposals awaiting approval', count: Math.max(3, approvalPending), priority: 'High' },
-    { label: 'Site visits overdue', count: 2, priority: 'Medium' },
-    { label: 'Leads inactive', count: 4, priority: 'Medium' },
-  ];
+    { label: 'Proposals awaiting approval', count: approvalPending, priority: 'High' },
+    { label: 'Site visits overdue', count: siteVisits.filter((visit) => visit.status === 'Overdue').length, priority: 'Medium' },
+    { label: 'Leads inactive', count: leads.filter((lead) => ['Contacted', 'MOM Pending'].includes(lead.stage)).length, priority: 'Medium' },
+  ].filter((item) => item.count > 0);
 
   const activity = [
-    { event: 'Lead moved to Site Visit', detail: leads[0]?.company || 'Metro Retail Parks', time: '10 mins ago' },
-    { event: 'Proposal approved', detail: 'BluePeak Business Tower', time: '28 mins ago' },
-    { event: 'Commercial review completed', detail: siteVisits[0]?.company || 'Aster Medcity', time: '45 mins ago' },
-    { event: 'Proposal sent', detail: leads.find((lead) => lead.stage === 'Proposal Sent')?.company || 'Nova Tech Park', time: '1 hr ago' },
-    { event: 'Lead converted', detail: leads.find((lead) => lead.stage === 'Converted')?.company || 'Green Square Mall', time: '3 hrs ago' },
+    ...leads.slice(0, 3).map((lead) => ({ event: lead.stage || 'Lead updated', detail: lead.company, time: 'Recent' })),
+    ...siteVisits.slice(0, 2).map((visit) => ({ event: visit.currentStage || visit.status || 'Assessment updated', detail: visit.company, time: 'Recent' })),
   ];
 
   const performance = bdRows.map((row, index) => ({
     id: row.id,
     executive: row.executive,
-    leads: row.totalLeads || [8, 6, 5][index] || 4,
-    conversion: `${Math.max(14, Math.min(42, 18 + (row.siteVisitsScheduled || index + 1) * 4))}%`,
-    pending: row.commercialPending + row.financePending + row.cooPending || index + 2,
-    revenue: formatInr(Math.max(2400000, (row.siteVisitsScheduled || index + 2) * 1850000)),
+    leads: row.totalLeads || 0,
+    conversion: `${row.totalLeads ? Math.round((row.siteVisitsScheduled / row.totalLeads) * 100) : 0}%`,
+    pending: row.commercialPending + row.financePending + row.cooPending,
+    revenue: formatInr((row.siteVisitsScheduled || 0) * 1850000),
   }));
 
   return { kpis, flow, insights, bottlenecks, actions, activity, performance };
@@ -686,7 +670,7 @@ function ActionCenter({ actions }) {
         <h2 className="text-[15px] font-semibold leading-5 text-slate-950 dark:text-white">Pending Alerts</h2>
       </div>
       <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-        {actions.map((action) => (
+        {actions.length ? actions.map((action) => (
           <div key={action.label} className="flex flex-col gap-2 rounded-xl border border-slate-100 bg-white px-3 py-2 shadow-sm dark:border-slate-800 dark:bg-slate-950 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -700,7 +684,11 @@ function ActionCenter({ actions }) {
               <ArrowRight className="h-3.5 w-3.5" />
             </button>
           </div>
-        ))}
+        )) : (
+          <div className="rounded-xl border border-slate-100 bg-white px-3 py-6 text-center text-sm font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
+            No pending alerts.
+          </div>
+        )}
       </div>
     </section>
   );
@@ -713,7 +701,7 @@ function RecentActivityFeed({ items }) {
         <h2 className="text-[15px] font-semibold leading-5 text-slate-950 dark:text-white">Recent Activity Feed</h2>
       </div>
       <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
-        {items.map((item) => (
+        {items.length ? items.map((item) => (
           <div key={`${item.event}-${item.time}`} className="flex gap-2.5">
             <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-qpms-500 shadow-[0_0_0_3px_rgba(79,130,251,0.12)]" />
             <div className="min-w-0">
@@ -722,7 +710,11 @@ function RecentActivityFeed({ items }) {
               <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{item.time}</p>
             </div>
           </div>
-        ))}
+        )) : (
+          <div className="rounded-xl border border-slate-100 bg-white px-3 py-6 text-center text-sm font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
+            No recent workflow activity.
+          </div>
+        )}
       </div>
     </section>
   );
@@ -751,11 +743,11 @@ function OperationalHealth({ items }) {
 
 function CommandCenterOverview({ user, leads, siteVisits, stage }) {
   const data = useMemo(() => buildCommandCenterData({ user, leads, siteVisits, stage }), [user, leads, siteVisits, stage]);
-  const isExecutiveView = ['Admin', 'COO'].includes(user?.role);
+  const showQuickActions = roleScope(user) === 'bd';
 
   return (
     <div className="space-y-4">
-      {isExecutiveView ? null : <QuickActionBar user={user} />}
+      {showQuickActions ? <QuickActionBar user={user} /> : null}
       <TodayOperations items={data.todayOperations} />
       <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
         <ActionCenter actions={data.actions} />
@@ -1558,10 +1550,13 @@ function ApprovalDashboard({ title, description, stage, siteVisits, leads, user 
 export default function Dashboard() {
   const { user } = useAuth();
   const { leads, siteVisits } = useWorkflow();
-  const [activeTab, setActiveTab] = useState('new-business');
+  const location = useLocation();
+  const requestedWorkspace = new URLSearchParams(location.search).get('workspace');
+  const [activeTab, setActiveTab] = useState(requestedWorkspace === 'operations' ? 'operations' : 'new-business');
   const [activeOperationsSection, setActiveOperationsSection] = useState(null);
   usePageTitle('Dashboard');
   const restrictedToPipeline = ['BD Head', 'BD Executive'].includes(user?.role);
+  const isExecutiveUser = ['Admin', 'COO', 'Management'].includes(user?.role);
   const reviewerDashboard = isOperationsTeam(user)
     ? {
         title: 'Operations Review',
@@ -1603,8 +1598,16 @@ export default function Dashboard() {
                 stage: 'Finance Review',
               }
             : null;
-  const canSeeOperations = ['Admin', 'COO'].includes(user?.role) || isCommercialTeam(user) || isFinanceTeam(user) || isOperationsTeam(user);
+  const canSeeOperations = isExecutiveUser || isOperationsTeam(user);
   const effectiveTab = canSeeOperations ? activeTab : 'new-business';
+
+  useEffect(() => {
+    if (requestedWorkspace === 'operations' && canSeeOperations) {
+      setActiveTab('operations');
+    } else if (requestedWorkspace === 'new-business') {
+      setActiveTab('new-business');
+    }
+  }, [requestedWorkspace, canSeeOperations]);
 
   const visibleLeads = useMemo(() => {
     if (canViewBdTeam(user) || user?.role === 'COO') return leads;
@@ -1634,11 +1637,16 @@ export default function Dashboard() {
           user={user}
         />
       ) : effectiveTab === 'new-business' || restrictedToPipeline ? (
-        <NewBusinessPipeline
-          visibleLeads={visibleLeads}
-          visibleSiteVisits={visibleSiteVisits}
-          user={user}
-        />
+        <div className="space-y-6">
+          {isExecutiveUser ? (
+            <CommandCenterOverview user={user} leads={leads} siteVisits={siteVisits} />
+          ) : null}
+          <NewBusinessPipeline
+            visibleLeads={visibleLeads}
+            visibleSiteVisits={visibleSiteVisits}
+            user={user}
+          />
+        </div>
       ) : (
         <ExistingBusinessOperations
           activeOperationsSection={activeOperationsSection}
