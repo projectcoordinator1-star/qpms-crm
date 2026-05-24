@@ -1519,16 +1519,11 @@ export default function Dashboard() {
           user={user}
         />
       ) : effectiveTab === 'new-business' || restrictedToPipeline ? (
-        <div className="space-y-6">
-          {isExecutiveUser ? (
-            <CommandCenterOverview user={user} leads={leads} siteVisits={siteVisits} />
-          ) : null}
-          <NewBusinessPipeline
-            visibleLeads={visibleLeads}
-            visibleSiteVisits={visibleSiteVisits}
-            user={user}
-          />
-        </div>
+        <NewBusinessPipeline
+          visibleLeads={visibleLeads}
+          visibleSiteVisits={visibleSiteVisits}
+          user={user}
+        />
       ) : (
         <ExistingBusinessOperations
           activeOperationsSection={activeOperationsSection}
