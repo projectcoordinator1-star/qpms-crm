@@ -18,8 +18,6 @@ import {
   Users,
 } from 'lucide-react';
 import {
-  Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -50,9 +48,7 @@ import StatusBadge from '../components/StatusBadge.jsx';
 import {
   existingOperationsKpis,
   fieldOfficerActivity,
-  monthlyLeadTrend,
   operationsDetailSections,
-  proposalConversionTrend,
   siteVisitTrend,
   stateOperationsSummary,
 } from '../data/qpmsWorkflowData.js';
@@ -960,68 +956,6 @@ function PipelineFilterBar({ filters, onChange, ownerOptions }) {
   );
 }
 
-function PipelineKpiStrip({ items }) {
-  return (
-    <section className="enterprise-card-compact p-3 sm:p-4">
-      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-7">
-        {items.map((item) => (
-          <div key={item.id} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950/55">
-            <p className="truncate text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{item.title}</p>
-            <div className="mt-1 flex items-center justify-between gap-2">
-              <p className="text-xl font-semibold leading-none text-slate-950 dark:text-white">{item.value}</p>
-              <span className={`h-2.5 w-2.5 rounded-full ${item.tone === 'red' ? 'bg-rose-500' : item.tone === 'amber' ? 'bg-amber-500' : item.tone === 'green' ? 'bg-emerald-500' : item.tone === 'violet' ? 'bg-violet-500' : 'bg-qpms-500'}`} />
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function PipelineFlow({ stages }) {
-  return (
-    <section className="enterprise-card-compact p-4">
-      <div className="mb-3">
-        <h2 className="text-[16px] font-semibold text-slate-950 dark:text-white">Pipeline Stage Flow</h2>
-      </div>
-      <div className="overflow-x-auto pb-1">
-        <div className="flex min-w-[980px] items-stretch gap-2">
-          {stages.map((stage, index) => (
-          <div key={stage.stage} className="relative flex-1 rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 shadow-sm dark:border-slate-800 dark:bg-slate-950/55">
-              {index < stages.length - 1 ? <div className="absolute -right-2 top-1/2 h-0.5 w-2 bg-slate-200 dark:bg-slate-800" /> : null}
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-bold text-slate-900 dark:text-white">{stage.stage}</p>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${stage.delayed ? 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'}`}>
-                  {stage.delayed ? 'Delay' : 'OK'}
-                </span>
-              </div>
-              <p className="mt-2 text-2xl font-semibold leading-none text-slate-950 dark:text-white">{stage.count}</p>
-              <div className="mt-3 space-y-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                <div className="flex justify-between"><span>Pending</span><span>{stage.pending}</span></div>
-                <div className="flex justify-between"><span>Conversion</span><span>{stage.conversion}%</span></div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function PipelineInsightGrid({ items }) {
-  return (
-    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
-      {items.map((item) => (
-        <div key={item.label} className="enterprise-card-compact p-3">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{item.label}</p>
-          <p className="mt-1 text-xl font-semibold leading-none text-slate-950 dark:text-white">{item.value}</p>
-          <p className="mt-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400">{item.helper}</p>
-        </div>
-      ))}
-    </section>
-  );
-}
-
 function PipelineBottlenecks({ items }) {
   return (
     <section className="enterprise-card-compact p-4">
@@ -1138,58 +1072,6 @@ function NewBusinessPipeline({ visibleLeads, visibleSiteVisits, user }) {
   return (
     <div className="space-y-5">
       <PipelineFilterBar filters={filters} onChange={updateFilter} ownerOptions={ownerOptions} />
-      <PipelineKpiStrip items={pipelineData.kpis} />
-      <PipelineFlow stages={pipelineData.flow} />
-
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-[17px] font-semibold text-slate-950 dark:text-white">Revenue & Conversion Insights</h2>
-        </div>
-        <PipelineInsightGrid items={pipelineData.insights} />
-        <section className="grid gap-4 xl:grid-cols-2">
-          <ChartCard title="Monthly Pipeline Trend">
-            <ChartFrame height="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={monthlyLeadTrend}>
-                  <CartesianGrid stroke={chartGrid} vertical={false} />
-                  <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
-                  <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
-                  <Tooltip contentStyle={tooltipStyle} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Line type="monotone" dataKey="leads" stroke="#2444a4" strokeWidth={3} dot={{ r: 3 }} name="Leads" />
-                  <Line type="monotone" dataKey="visits" stroke="#10b981" strokeWidth={3} dot={{ r: 3 }} name="Site Visits" />
-                </LineChart>
-              </ResponsiveContainer>
-            </ChartFrame>
-          </ChartCard>
-
-          <ChartCard title="Proposal Conversion Trend">
-            <ChartFrame height="h-48">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={proposalConversionTrend}>
-                  <defs>
-                    <linearGradient id="pipelineProposalSent" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#4f82fb" stopOpacity={0.45} />
-                      <stop offset="95%" stopColor="#4f82fb" stopOpacity={0.03} />
-                    </linearGradient>
-                    <linearGradient id="pipelineProposalConverted" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.42} />
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0.03} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke={chartGrid} vertical={false} />
-                  <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
-                  <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
-                  <Tooltip contentStyle={tooltipStyle} />
-                  <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Area type="monotone" dataKey="sent" stroke="#4f82fb" strokeWidth={2.5} fill="url(#pipelineProposalSent)" name="Proposals Sent" />
-                  <Area type="monotone" dataKey="converted" stroke="#10b981" strokeWidth={2.5} fill="url(#pipelineProposalConverted)" name="Converted" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </ChartFrame>
-          </ChartCard>
-        </section>
-      </section>
 
       <PipelineBottlenecks items={pipelineData.bottlenecks} />
       <PipelineActionActivity actions={pipelineData.actions} activity={pipelineData.activity} />
