@@ -13,11 +13,14 @@ import {
   MessageSquareWarning,
   Search,
   TimerReset,
+  TrendingUp,
   UserCheck,
   UserPlus,
   Users,
 } from 'lucide-react';
 import {
+  Area,
+  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -140,14 +143,6 @@ const businessSnapshotColumns = [
   { key: 'siteVisits', label: 'Site Visits' },
   { key: 'slaHealth', label: 'SLA Health' },
   { key: 'status', label: 'Status', render: (row) => <StatusBadge status={row.status} /> },
-];
-
-const bdPerformanceColumns = [
-  { key: 'executive', label: 'BD Executive' },
-  { key: 'leads', label: 'Leads' },
-  { key: 'conversion', label: 'Conversion %' },
-  { key: 'pending', label: 'Pending' },
-  { key: 'revenue', label: 'Revenue Generated' },
 ];
 
 const workflowStageOwners = {
@@ -507,6 +502,88 @@ function stageCount(leads, siteVisits, matcher, fallback) {
   return matcher(leads, siteVisits) || Number(fallback || 0);
 }
 
+function numericValue(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const parsed = Number(String(value ?? '').replace(/[^\d.-]/g, ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function proposalValueForRecord(record) {
+  return numericValue(
+    record?.proposalValue
+      || record?.proposal_value
+      || record?.commercial_value
+      || record?.contract_value
+      || record?.proposal?.value
+      || record?.survey?.commercial?.proposalValue
+      || record?.survey?.commercial?.proposal_value
+      || record?.survey?.commercial?.contractValue
+      || record?.survey?.commercialStatementValue,
+  );
+}
+
+function recordDate(record) {
+  const value = record?.proposalSentAt
+    || record?.proposal_sent_at
+    || record?.updated_at
+    || record?.created_at
+    || record?.lastApprovalAt
+    || record?.converted_at
+    || record?.date;
+  const date = value ? new Date(value) : new Date();
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+function stagePercent(count, total) {
+  if (!total) return 0;
+  return Math.round((Number(count || 0) / total) * 100);
+}
+
+function buildProposalTrend(leads, siteVisits) {
+  const records = [...leads, ...siteVisits];
+  const monthKeys = Array.from({ length: 6 }, (_, index) => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - (5 - index));
+    return {
+      key: `${date.getFullYear()}-${date.getMonth()}`,
+      label: date.toLocaleString('en-IN', { month: 'short' }),
+      pipelineValue: 0,
+      approvedValue: 0,
+      convertedValue: 0,
+    };
+  });
+  const lookup = Object.fromEntries(monthKeys.map((row) => [row.key, row]));
+
+  records.forEach((record) => {
+    const value = proposalValueForRecord(record);
+    if (!value) return;
+    const date = recordDate(record);
+    const key = `${date.getFullYear()}-${date.getMonth()}`;
+    if (!lookup[key]) return;
+    const status = record.stage || record.status || record.currentStage || '';
+    lookup[key].pipelineValue += value;
+    if (String(status).includes('Approved') || record.reviewStatus?.['Finance Review'] === 'Approved') lookup[key].approvedValue += value;
+    if (String(status).includes('Converted') || String(status).includes('Proposal Sent')) lookup[key].convertedValue += value;
+  });
+
+  return monthKeys;
+}
+
+function buildApprovalBottleneckData(siteVisits) {
+  const stageRows = [
+    ['Commercial', 'Commercial Review'],
+    ['Finance', 'Finance Review'],
+    ['HR', 'HR Validation'],
+  ];
+
+  return stageRows.map(([label, stage]) => ({
+    stage: label,
+    Pending: siteVisits.filter((visit) => (visit.reviewStatus?.[stage] || (visit.currentStage === stage ? 'Pending' : '')) === 'Pending').length,
+    Rework: siteVisits.filter((visit) => visit.reviewStatus?.[stage] === 'Rework Requested').length,
+    Delayed: siteVisits.filter((visit) => (visit.currentStage === stage || visit.reviewStatus?.[stage] === 'Pending') && (visit.slaStatus === 'Delayed' || visit.status === 'Overdue' || visit.priority === 'High')).length,
+  }));
+}
+
 function buildPipelineCommandData(leads, siteVisits, bdRows) {
   const openLeads = leads.filter((lead) => !['Converted', 'Lost'].includes(lead.stage));
   const commercialPending = leads.filter((lead) => lead.stage === 'Commercial Review').length + siteVisits.filter((visit) => (visit.reviewStatus?.['Commercial Review'] || (visit.currentStage === 'Commercial Review' ? 'Pending' : '')) === 'Pending').length;
@@ -517,69 +594,64 @@ function buildPipelineCommandData(leads, siteVisits, bdRows) {
   const converted = leads.filter((lead) => lead.stage === 'Converted' || lead.status === 'Converted to Assessment').length;
   const siteVisitCount = siteVisits.length || leads.filter((lead) => lead.stage === 'Site Visit Scheduled').length;
   const estimationCount = siteVisits.filter((visit) => ['Scheduled', 'Site Visit MOM Created', 'Site Visit MOM Sent', 'Pending Review'].includes(visit.status)).length;
+  const proposalValue = [...leads, ...siteVisits].reduce((total, record) => total + proposalValueForRecord(record), 0);
   const totalLeadBase = Math.max(leads.length, 1);
-  const proposalValue = proposals * 2450000 + siteVisitCount * 850000;
-  const projectedRevenue = openLeads.length * 1850000 + converted * 4200000;
+  const conversionPercent = leads.length ? Math.round((converted / totalLeadBase) * 100) : 0;
 
   const kpis = [
-    { id: 'openLeads', title: 'Open Leads', value: stageCount(leads, siteVisits, () => openLeads.length, 0), tone: 'blue' },
-    { id: 'siteVisitsPlanned', title: 'Site Visits', value: stageCount(leads, siteVisits, () => siteVisitCount, 0), tone: 'green' },
+    { id: 'openLeads', title: 'Open Leads', value: stageCount(leads, siteVisits, () => openLeads.length, 0), icon: BriefcaseBusiness, tone: 'blue' },
+    { id: 'siteVisitsPlanned', title: 'Site Visits Scheduled', value: stageCount(leads, siteVisits, () => siteVisitCount, 0), icon: CalendarCheck2, tone: 'green' },
     { id: 'estimationsPending', title: 'Estimations Pending', value: stageCount(leads, siteVisits, () => estimationCount, 0), tone: 'violet' },
-    { id: 'commercialReviews', title: 'Commercial Reviews', value: stageCount(leads, siteVisits, () => commercialPending, 0), tone: 'amber' },
-    { id: 'approvalPending', title: 'Approvals Pending', value: stageCount(leads, siteVisits, () => approvalPending, 0), tone: 'red' },
-    { id: 'proposalsSent', title: 'Proposals Sent', value: stageCount(leads, siteVisits, () => proposals, 0), tone: 'blue' },
-    { id: 'convertedLeads', title: 'Converted Leads', value: stageCount(leads, siteVisits, () => converted, 0), tone: 'green' },
+    { id: 'proposalValue', title: 'Proposal Value', value: formatInr(proposalValue), icon: TrendingUp, tone: 'blue' },
+    { id: 'conversion', title: 'Conversion %', value: `${conversionPercent}%`, icon: CheckCircle2, tone: 'amber' },
+    { id: 'approvalPending', title: 'Pending Approvals', value: stageCount(leads, siteVisits, () => approvalPending, 0), icon: Clock3, tone: 'red' },
   ];
 
+  const leadStageCount = stageCount(leads, siteVisits, () => openLeads.length, 0);
+  const contactedCount = stageCount(leads, siteVisits, (items) => items.filter((lead) => ['Contacted', 'In Discussion'].includes(lead.stage)).length, 0);
+  const proposalCount = stageCount(leads, siteVisits, () => proposals, 0);
   const flow = [
-    { stage: 'Lead', count: kpis[0].value, pending: Math.round(kpis[0].value * 0.32), conversion: leads.length ? 100 : 0, delayed: false },
-    { stage: 'Contacted', count: stageCount(leads, siteVisits, (items) => items.filter((lead) => ['Contacted', 'In Discussion'].includes(lead.stage)).length, 0), pending: 0, conversion: leads.length ? 72 : 0, delayed: false },
-    { stage: 'Site Visit', count: kpis[1].value, pending: 0, conversion: leads.length ? 54 : 0, delayed: false },
-    { stage: 'Estimation', count: kpis[2].value, pending: kpis[2].value, conversion: 42, delayed: true },
-    { stage: 'Commercial Review', count: kpis[3].value, pending: kpis[3].value, conversion: 34, delayed: true },
-    { stage: 'Approval', count: kpis[4].value, pending: kpis[4].value, conversion: 28, delayed: true },
-    { stage: 'Proposal', count: kpis[5].value, pending: 0, conversion: leads.length ? 22 : 0, delayed: false },
-    { stage: 'Converted', count: kpis[6].value, pending: 0, conversion: leads.length ? Math.round((converted / totalLeadBase) * 100) : 0, delayed: false },
+    { stage: 'Lead', count: leadStageCount, conversion: stagePercent(leadStageCount, totalLeadBase), tone: 'blue' },
+    { stage: 'Contacted', count: contactedCount, conversion: stagePercent(contactedCount, totalLeadBase), tone: 'slate' },
+    { stage: 'Site Visit', count: siteVisitCount, conversion: stagePercent(siteVisitCount, totalLeadBase), tone: 'green' },
+    { stage: 'Estimation', count: estimationCount, conversion: stagePercent(estimationCount, totalLeadBase), tone: 'violet' },
+    { stage: 'Commercial', count: commercialPending, conversion: stagePercent(commercialPending, totalLeadBase), tone: 'amber' },
+    { stage: 'Finance', count: financePending, conversion: stagePercent(financePending, totalLeadBase), tone: 'red' },
+    { stage: 'Proposal', count: proposalCount, conversion: stagePercent(proposalCount, totalLeadBase), tone: 'blue' },
+    { stage: 'Converted', count: converted, conversion: conversionPercent, tone: 'green' },
   ];
-
-  const insights = [
-    { label: 'Projected Revenue', value: formatInr(projectedRevenue), helper: 'Weighted active pipeline', tone: 'blue' },
-    { label: 'Proposal Value', value: formatInr(proposalValue), helper: 'Sent + draft proposals', tone: 'green' },
-    { label: 'Conversion %', value: `${leads.length ? Math.round((converted / totalLeadBase) * 100) : 0}%`, helper: 'Lead to converted', tone: 'amber' },
-    { label: 'Avg Approval TAT', value: '-', helper: 'Pending data', tone: 'green' },
-    { label: 'Avg Lead Closure', value: '-', helper: 'Pending data', tone: 'violet' },
-    { label: 'Proposal Success', value: '-', helper: 'Pending data', tone: 'blue' },
-  ];
-
-  const bottlenecks = [
-    { issue: 'Commercial Review delayed', delay: '-', affected: stageCount(leads, siteVisits, () => commercialPending, 0), priority: 'High' },
-    { issue: 'Proposal approval pending', delay: '-', affected: stageCount(leads, siteVisits, () => approvalPending, 0), priority: 'High' },
-    { issue: 'Site visit scheduling delay', delay: '-', affected: siteVisits.filter((visit) => visit.status === 'Overdue').length, priority: 'Medium' },
-    { issue: 'Leads inactive > 3 days', delay: '-', affected: leads.filter((lead) => ['Contacted', 'MOM Pending'].includes(lead.stage)).length, priority: 'Medium' },
-  ].filter((item) => item.affected > 0);
 
   const actions = [
-    { label: 'Estimations pending', count: kpis[2].value, priority: 'High' },
-    { label: 'Proposals awaiting approval', count: approvalPending, priority: 'High' },
-    { label: 'Site visits overdue', count: siteVisits.filter((visit) => visit.status === 'Overdue').length, priority: 'Medium' },
-    { label: 'Leads inactive', count: leads.filter((lead) => ['Contacted', 'MOM Pending'].includes(lead.stage)).length, priority: 'Medium' },
+    { label: 'Estimations pending', count: estimationCount, priority: 'High', aging: 'Current', owner: 'BD Team', stage: 'Estimation' },
+    { label: 'Approvals delayed', count: approvalPending, priority: 'High', aging: 'Current', owner: 'Review Teams', stage: 'Approval' },
+    { label: 'Overdue site visits', count: siteVisits.filter((visit) => visit.status === 'Overdue').length, priority: 'Medium', aging: 'Overdue', owner: 'BD Team', stage: 'Site Visit' },
+    { label: 'Rework returned', count: siteVisits.filter((visit) => Object.values(visit.reviewStatus || {}).includes('Rework Requested')).length, priority: 'Medium', aging: 'Needs action', owner: 'BD Team', stage: 'Rework' },
   ].filter((item) => item.count > 0);
 
   const activity = [
-    ...leads.slice(0, 3).map((lead) => ({ event: lead.stage || 'Lead updated', detail: lead.company, time: 'Recent' })),
-    ...siteVisits.slice(0, 2).map((visit) => ({ event: visit.currentStage || visit.status || 'Assessment updated', detail: visit.company, time: 'Recent' })),
+    ...leads.slice(0, 5).map((lead) => ({ event: lead.stage || 'Lead updated', client: lead.company, time: 'Recent', status: lead.status || lead.stage || 'Updated', type: 'lead' })),
+    ...siteVisits.slice(0, 5).map((visit) => ({ event: visit.currentStage || visit.status || 'Assessment updated', client: visit.company, time: 'Recent', status: visit.approvalStatus || visit.status || 'Updated', type: 'site' })),
   ];
 
-  const performance = bdRows.map((row, index) => ({
+  const performance = bdRows.map((row) => ({
     id: row.id,
     executive: row.executive,
     leads: row.totalLeads || 0,
-    conversion: `${row.totalLeads ? Math.round((row.siteVisitsScheduled / row.totalLeads) * 100) : 0}%`,
+    conversion: row.totalLeads ? Math.round((row.siteVisitsScheduled / row.totalLeads) * 100) : 0,
     pending: row.commercialPending + row.financePending + row.cooPending,
-    revenue: formatInr((row.siteVisitsScheduled || 0) * 1850000),
+    revenue: (row.siteVisitsScheduled || 0) * 1850000,
   }));
 
-  return { kpis, flow, insights, bottlenecks, actions, activity, performance };
+  return {
+    kpis,
+    flow,
+    actions,
+    activity,
+    performance,
+    proposalTrend: buildProposalTrend(leads, siteVisits),
+    approvalBottlenecks: buildApprovalBottleneckData(siteVisits),
+    proposalValue,
+  };
 }
 
 function compactTone(tone) {
@@ -956,27 +1028,115 @@ function PipelineFilterBar({ filters, onChange, ownerOptions }) {
   );
 }
 
-function PipelineBottlenecks({ items }) {
+function PipelineKpiStrip({ items }) {
+  return (
+    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+      {items.map((item) => {
+        const Icon = item.icon || ClipboardList;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            className="focus-ring group flex min-h-20 items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-qpms-200 hover:shadow-lg hover:shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-qpms-500/35 dark:hover:shadow-none"
+          >
+            <div className="min-w-0">
+              <p className="truncate text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{item.title}</p>
+              <p className="mt-1 truncate text-xl font-semibold leading-none text-slate-950 dark:text-white">{item.value}</p>
+            </div>
+            <span className={`shrink-0 rounded-xl p-2 ring-1 transition group-hover:scale-105 ${compactTone(item.tone)}`}>
+              <Icon className="h-4 w-4" />
+            </span>
+          </button>
+        );
+      })}
+    </section>
+  );
+}
+
+function PipelineConversionFunnel({ stages }) {
   return (
     <section className="enterprise-card-compact p-4">
-      <div className="mb-3">
-        <h2 className="text-[16px] font-semibold text-slate-950 dark:text-white">Pipeline Bottlenecks</h2>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="text-[16px] font-semibold text-slate-950 dark:text-white">Pipeline Conversion Funnel</h2>
       </div>
-      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-        {items.map((item) => (
-          <div key={item.issue} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-950/55">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold leading-5 text-slate-950 dark:text-white">{item.issue}</p>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ${priorityClass(item.priority)}`}>{item.priority}</span>
-            </div>
-            <div className="mt-2 flex items-center justify-between text-xs font-semibold text-slate-500 dark:text-slate-400">
-              <span>{item.delay} avg delay</span>
-              <span>{item.affected} affected</span>
-            </div>
-          </div>
-        ))}
+      <div className="overflow-x-auto pb-1">
+        <div className="grid min-w-[1040px] grid-cols-8 gap-2">
+          {stages.map((stage, index) => (
+            <button
+              key={stage.stage}
+              type="button"
+              className="focus-ring relative overflow-hidden rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-qpms-200 hover:bg-white dark:border-slate-800 dark:bg-slate-950/55 dark:hover:border-qpms-500/35"
+            >
+              {index < stages.length - 1 ? <span className="absolute right-0 top-1/2 h-8 w-px -translate-y-1/2 bg-slate-200 dark:bg-slate-800" /> : null}
+              <div className="flex items-center justify-between gap-2">
+                <p className="truncate text-xs font-bold text-slate-900 dark:text-white">{stage.stage}</p>
+                <span className={`h-2.5 w-2.5 rounded-full ${stage.tone === 'green' ? 'bg-emerald-500' : stage.tone === 'amber' ? 'bg-amber-500' : stage.tone === 'red' ? 'bg-rose-500' : stage.tone === 'violet' ? 'bg-violet-500' : 'bg-qpms-500'}`} />
+              </div>
+              <p className="mt-3 text-2xl font-semibold leading-none text-slate-950 dark:text-white">{stage.count}</p>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                <div className="h-full rounded-full bg-qpms-600" style={{ width: `${Math.min(100, stage.conversion)}%` }} />
+              </div>
+              <p className="mt-2 text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">{stage.conversion}% conversion</p>
+            </button>
+          ))}
+        </div>
       </div>
     </section>
+  );
+}
+
+function ProposalValueTrend({ data }) {
+  return (
+    <ChartCard
+      title="Proposal Value Trend"
+      action={<span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">Monthly</span>}
+    >
+      <ChartFrame height="h-64">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data}>
+            <defs>
+              <linearGradient id="pipelineValue" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#2444a4" stopOpacity={0.35} />
+                <stop offset="95%" stopColor="#2444a4" stopOpacity={0.03} />
+              </linearGradient>
+              <linearGradient id="approvedValue" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                <stop offset="95%" stopColor="#10b981" stopOpacity={0.03} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke={chartGrid} vertical={false} />
+            <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+            <YAxis tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} tickFormatter={(value) => `₹${Math.round(value / 100000)}L`} />
+            <Tooltip contentStyle={tooltipStyle} formatter={(value) => formatInr(value)} />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Area type="monotone" dataKey="pipelineValue" stroke="#2444a4" strokeWidth={2.5} fill="url(#pipelineValue)" name="Pipeline Value" />
+            <Area type="monotone" dataKey="approvedValue" stroke="#10b981" strokeWidth={2.5} fill="url(#approvedValue)" name="Approved Value" />
+            <Line type="monotone" dataKey="convertedValue" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 3 }} name="Converted Value" />
+          </AreaChart>
+        </ResponsiveContainer>
+      </ChartFrame>
+    </ChartCard>
+  );
+}
+
+function ApprovalBottleneckChart({ data }) {
+  return (
+    <ChartCard title="Approval Bottleneck Chart">
+      <ChartFrame height="h-64">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data}>
+            <CartesianGrid stroke={chartGrid} vertical={false} />
+            <XAxis dataKey="stage" tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+            <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fill: chartText, fontSize: 12 }} />
+            <Tooltip contentStyle={tooltipStyle} />
+            <Legend wrapperStyle={{ fontSize: 12 }} />
+            <Bar dataKey="Pending" stackId="approval" fill="#2444a4" radius={[8, 8, 0, 0]} />
+            <Bar dataKey="Rework" stackId="approval" fill="#f59e0b" radius={[8, 8, 0, 0]} />
+            <Bar dataKey="Delayed" stackId="approval" fill="#ef4444" radius={[8, 8, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartFrame>
+    </ChartCard>
   );
 }
 
@@ -987,16 +1147,29 @@ function PipelineActionActivity({ actions, activity }) {
         <div className="mb-3">
           <h2 className="text-[16px] font-semibold text-slate-950 dark:text-white">Pending Actions</h2>
         </div>
-        <div className="max-h-64 space-y-2 overflow-y-auto pr-1">
-          {actions.map((item) => (
-            <div key={item.label} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/55">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-slate-950 dark:text-white">{item.count} {item.label}</p>
-                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400">Needs owner follow-up</p>
+        <div className="max-h-80 space-y-2 overflow-y-auto pr-1">
+          {actions.length ? actions.map((item) => (
+            <div key={item.label} className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3 transition hover:border-qpms-200 hover:bg-white dark:border-slate-800 dark:bg-slate-950/55">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-slate-950 dark:text-white">{item.count} {item.label}</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ${priorityClass(item.priority)}`}>{item.priority}</span>
+                    <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600 ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-800">{item.stage}</span>
+                  </div>
+                </div>
+                <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-slate-400" />
               </div>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ring-1 ${priorityClass(item.priority)}`}>{item.priority}</span>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                <span>Owner: {item.owner}</span>
+                <span className="text-right">Aging: {item.aging}</span>
+              </div>
             </div>
-          ))}
+          )) : (
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-8 text-center text-sm font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-950/55 dark:text-slate-400">
+              No pending pipeline actions.
+            </div>
+          )}
         </div>
       </div>
 
@@ -1004,20 +1177,61 @@ function PipelineActionActivity({ actions, activity }) {
         <div className="mb-3">
           <h2 className="text-[16px] font-semibold text-slate-950 dark:text-white">Recent Pipeline Activity</h2>
         </div>
-        <div className="max-h-64 space-y-3 overflow-y-auto pr-1">
-          {activity.map((item) => (
-            <div key={`${item.event}-${item.time}`} className="flex gap-2.5 border-b border-slate-100 pb-2 last:border-0 last:pb-0 dark:border-slate-800">
-              <div className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-qpms-500 shadow-[0_0_0_3px_rgba(79,130,251,0.12)]" />
+        <div className="max-h-80 space-y-3 overflow-y-auto pr-1">
+          {activity.length ? activity.map((item) => (
+            <div key={`${item.event}-${item.client}-${item.time}`} className="flex gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3 dark:border-slate-800 dark:bg-slate-950/55">
+              <div className={`mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ring-1 ${item.type === 'site' ? compactTone('green') : compactTone('blue')}`}>
+                {item.type === 'site' ? <CalendarCheck2 className="h-4 w-4" /> : <BriefcaseBusiness className="h-4 w-4" />}
+              </div>
               <div className="min-w-0">
-                <p className="text-sm font-semibold leading-5 text-slate-950 dark:text-white">{item.event}</p>
-                <p className="truncate text-xs text-slate-500 dark:text-slate-400">{item.detail}</p>
-                <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{item.time}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-semibold leading-5 text-slate-950 dark:text-white">{item.event}</p>
+                  <StatusBadge status={item.status} />
+                </div>
+                <p className="truncate text-xs font-semibold text-slate-500 dark:text-slate-400">{item.client || 'Client pending'}</p>
+                <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">{item.time}</p>
               </div>
             </div>
-          ))}
+          )) : (
+            <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-8 text-center text-sm font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-950/55 dark:text-slate-400">
+              No recent pipeline activity.
+            </div>
+          )}
         </div>
       </div>
     </section>
+  );
+}
+
+function BdPerformanceLeaderboard({ rows }) {
+  const maxRevenue = Math.max(...rows.map((row) => row.revenue), 1);
+  return (
+    <ChartCard title="BD Team Performance">
+      <div className="space-y-3">
+        {rows.map((row) => (
+          <div key={row.id} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/55">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-950 dark:text-white">{row.executive}</p>
+                <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">{row.leads} leads / {row.pending} pending</p>
+              </div>
+              <div className="grid gap-1 text-xs font-bold text-slate-600 dark:text-slate-300 md:min-w-72">
+                <div className="flex justify-between"><span>Conversion</span><span>{row.conversion}%</span></div>
+                <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                  <div className="h-full rounded-full bg-qpms-600" style={{ width: `${Math.min(100, row.conversion)}%` }} />
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-sm font-semibold text-slate-950 dark:text-white">{formatInr(row.revenue)}</p>
+                <div className="mt-1 h-1.5 w-28 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                  <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(100, Math.round((row.revenue / maxRevenue) * 100))}%` }} />
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </ChartCard>
   );
 }
 
@@ -1073,13 +1287,16 @@ function NewBusinessPipeline({ visibleLeads, visibleSiteVisits, user }) {
     <div className="space-y-5">
       <PipelineFilterBar filters={filters} onChange={updateFilter} ownerOptions={ownerOptions} />
 
-      <PipelineBottlenecks items={pipelineData.bottlenecks} />
+      <PipelineKpiStrip items={pipelineData.kpis} />
+      <PipelineConversionFunnel stages={pipelineData.flow} />
+      <section className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+        <ProposalValueTrend data={pipelineData.proposalTrend} />
+        <ApprovalBottleneckChart data={pipelineData.approvalBottlenecks} />
+      </section>
       <PipelineActionActivity actions={pipelineData.actions} activity={pipelineData.activity} />
 
       {['Admin', 'BD Head'].includes(user?.role) ? (
-        <ChartCard title="BD Team Performance">
-          <DataTable columns={bdPerformanceColumns} rows={pipelineData.performance} embedded />
-        </ChartCard>
+        <BdPerformanceLeaderboard rows={pipelineData.performance} />
       ) : null}
     </div>
   );
