@@ -2,6 +2,6 @@ import { useEffect } from 'react';
 
 export function usePageTitle(title) {
   useEffect(() => {
-    document.title = title ? `${title} | QPMS CRM` : 'QPMS CRM';
+    document.title = title ? `${title} | myQPMS` : 'myQPMS';
   }, [title]);
 }

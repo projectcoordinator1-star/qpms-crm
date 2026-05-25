@@ -291,7 +291,7 @@ function buildSiteVisitMom(visit, survey) {
   return {
     to: visit.email || '',
     cc: 'bdhead@qpms.in, commercial@qpms.in, operations@qpms.in',
-    subject: `Site Visit Minutes of Meeting - ${visit.company} - QPMS`,
+    subject: `Site Visit Minutes of Meeting - ${visit.company} - myQPMS`,
     summary: `Pre-operational facility assessment completed for ${visit.company} at ${visit.location || visit.city}.`,
     scope: [...Object.keys(survey.ifmScope || {}).filter((key) => survey.ifmScope[key]?.selected), ...selectedHard, ...selectedSoft].join(', ') || 'IFM service scope to be finalized from survey inputs.',
     requirements: `Manpower rows: ${survey.manpowerPlan.length}. Equipment items: ${survey.equipment.length}. Tools: ${survey.tools.length}. Chemicals: ${survey.chemicals.length}.`,
@@ -350,7 +350,7 @@ function buildProposalPayload(visit, survey, metadata) {
   const annualValue = lineItems.reduce((sum, row) => sum + Number(row.contractValue || 0), 0) || proposalValue || monthlyValue * 12;
 
   return {
-    proposalNumber: `QPMS-PROP-${String(Date.now()).slice(-6)}`,
+    proposalNumber: `myQPMS-PROP-${String(Date.now()).slice(-6)}`,
     clientName: visit?.company || '',
     siteDetails: [visit?.siteName || visit?.location, visit?.city, visit?.state].filter(Boolean).join(', '),
     scopeOfWork,
@@ -367,7 +367,7 @@ function buildProposalPayload(visit, survey, metadata) {
     approvalStatus: visit?.approvalStatus || visit?.status || 'Approved',
     to: visit?.email || '',
     cc: [visit?.assigned_bd_email, 'bdhead@qpms.in'].filter(Boolean).join(', '),
-    subject: `Business Proposal - ${visit?.company || 'Client'} - QPMS`,
+    subject: `Business Proposal - ${visit?.company || 'Client'} - myQPMS`,
     templateName: 'New Business Proposal Format.xlsx',
     templatePath: metadata.templatePath,
     supportedExports: metadata.supportedExports,
@@ -381,14 +381,14 @@ function buildProposalPayload(visit, survey, metadata) {
     body: [
       `Dear ${visit?.contact || 'Client'},`,
       '',
-      `Please find the QPMS facility management proposal for ${visit?.company || 'your site'}.`,
+      `Please find the myQPMS facility management proposal for ${visit?.company || 'your site'}.`,
       `Scope of work: ${scopeOfWork.join(', ') || 'IFM services as per approved assessment'}`,
       `Monthly value: ${currency(monthlyValue)}`,
       `Annual contract value: ${currency(annualValue)}`,
       `Approval status: ${visit?.approvalStatus || visit?.status || 'Approved'}`,
       '',
       'Regards,',
-      'QPMS Business Development Team',
+      'myQPMS Business Development Team',
     ].join('\n'),
   };
 }
@@ -1192,7 +1192,7 @@ function duplicateRow(section, index) {
         mailSimulated = Boolean(mailResult?.simulated);
       } catch (mailError) {
         mailSimulated = true;
-        console.warn('[QPMS Proposal Mail] SMTP/API unavailable; continuing proposal workflow', mailError.message);
+        console.warn('[myQPMS Proposal Mail] SMTP/API unavailable; continuing proposal workflow', mailError.message);
       }
       await Promise.resolve(markProposalSent(targetVisit.id, nextProposal));
       setProposalPreviewVisit(null);
@@ -1698,7 +1698,7 @@ function duplicateRow(section, index) {
       ? Object.fromEntries(surveySections.map((section) => [section, {
           actionType: 'Section Saved',
           savedAt: selectedVisit.lastApprovalAt || new Date().toISOString(),
-          savedBy: selectedVisit.created_by_name || selectedVisit.assigned_bd_executive || 'QPMS user',
+          savedBy: selectedVisit.created_by_name || selectedVisit.assigned_bd_executive || 'myQPMS user',
           savedByRole: 'BD Executive',
         }]))
       : {});

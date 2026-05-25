@@ -18,7 +18,7 @@ function currentAppMode() {
 
 function result(name, passed, details = {}) {
   if (!passed) {
-    console.warn(`[QPMS Environment Validation] ${name}`, details);
+    console.warn(`[myQPMS Environment Validation] ${name}`, details);
   }
   return { name, passed, ...details };
 }
@@ -87,7 +87,7 @@ export async function checkRpcAvailability(functionNames = REQUIRED_RPC_FUNCTION
 
   const failed = checks.filter((check) => !check.passed);
   if (failed.length) {
-    console.warn('[QPMS Environment Validation] RPC availability check failed', failed);
+    console.warn('[myQPMS Environment Validation] RPC availability check failed', failed);
   }
 
   return {

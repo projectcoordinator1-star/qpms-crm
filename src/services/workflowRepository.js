@@ -49,7 +49,7 @@ async function callWorkflowRpc(functionName, params, label) {
   assertConfigured();
   const { data, error } = await supabase.rpc(functionName, params);
   if (error) {
-    console.error(`[QPMS Workflow RPC] ${label} failed`, error);
+    console.error(`[myQPMS Workflow RPC] ${label} failed`, error);
     throw normalizeRpcError(error, label);
   }
   return data;
@@ -502,12 +502,12 @@ function dbSiteMomToApp(row) {
 
 export async function fetchWorkflowData() {
   assertConfigured();
-  console.info('[QPMS Supabase] Fetching leads directly from leads table');
+  console.info('[myQPMS Supabase] Fetching leads directly from leads table');
 
   const leadsResponse = await supabase.from('leads').select('*').order('created_at', { ascending: false });
 
   if (leadsResponse.error) {
-    console.error('[QPMS Supabase] Leads fetch failed', leadsResponse.error);
+    console.error('[myQPMS Supabase] Leads fetch failed', leadsResponse.error);
     throw leadsResponse.error;
   }
 
@@ -517,13 +517,13 @@ export async function fetchWorkflowData() {
   if (leadIds.length) {
     const contactsResponse = await supabase.from('lead_contacts').select('*').in('lead_id', leadIds);
     if (contactsResponse.error) {
-      console.warn('[QPMS Supabase] lead_contacts fetch skipped/failed', contactsResponse.error);
+      console.warn('[myQPMS Supabase] lead_contacts fetch skipped/failed', contactsResponse.error);
     } else {
       contactsByLeadId = (contactsResponse.data || []).reduce((grouped, contact) => {
         grouped[contact.lead_id] = [...(grouped[contact.lead_id] || []), contact];
         return grouped;
       }, {});
-      console.info('[QPMS Supabase] lead_contacts fetch success', {
+      console.info('[myQPMS Supabase] lead_contacts fetch success', {
         contacts: contactsResponse.data?.length || 0,
       });
     }
@@ -535,7 +535,7 @@ export async function fetchWorkflowData() {
     .order('created_at', { ascending: false });
 
   if (visitsResponse.error) {
-    console.warn('[QPMS Supabase] Site visits fetch skipped/failed', visitsResponse.error);
+    console.warn('[myQPMS Supabase] Site visits fetch skipped/failed', visitsResponse.error);
   }
 
   const siteVisitRows = visitsResponse.error ? [] : visitsResponse.data || [];
@@ -563,25 +563,25 @@ export async function fetchWorkflowData() {
     ]);
 
     if (assessmentResponse.error) {
-      console.warn('[QPMS Supabase] site_assessments fetch skipped/failed', assessmentResponse.error);
+      console.warn('[myQPMS Supabase] site_assessments fetch skipped/failed', assessmentResponse.error);
     } else {
       assessmentsBySiteVisitId = groupBy(assessmentResponse.data || [], 'site_visit_id');
     }
 
     if (siteMomResponse.error) {
-      console.warn('[QPMS Supabase] site_mom fetch skipped/failed', siteMomResponse.error);
+      console.warn('[myQPMS Supabase] site_mom fetch skipped/failed', siteMomResponse.error);
     } else {
       siteMomBySiteVisitId = groupBy(siteMomResponse.data || [], 'site_visit_id');
     }
 
     if (approvalResponse.error) {
-      console.warn('[QPMS Supabase] approval_requests fetch skipped/failed', approvalResponse.error);
+      console.warn('[myQPMS Supabase] approval_requests fetch skipped/failed', approvalResponse.error);
     } else {
       approvalsBySiteVisitId = groupBy(approvalResponse.data || [], 'site_visit_id');
     }
 
     if (activityResponse.error) {
-      console.warn('[QPMS Supabase] activity_logs fetch skipped/failed', activityResponse.error);
+      console.warn('[myQPMS Supabase] activity_logs fetch skipped/failed', activityResponse.error);
     } else {
       activityBySiteVisitId = groupBy(activityResponse.data || [], 'site_visit_id');
     }
@@ -594,9 +594,9 @@ export async function fetchWorkflowData() {
       .in('site_visit_id', siteVisitIds);
     if (workflowResponse.error) {
       if (rpcMissing(workflowResponse.error)) {
-        console.info('[QPMS Supabase] Workflow foundation tables unavailable; continuing with legacy workflow fetch');
+        console.info('[myQPMS Supabase] Workflow foundation tables unavailable; continuing with legacy workflow fetch');
       } else {
-        console.warn('[QPMS Supabase] workflow_instances fetch skipped/failed', workflowResponse.error);
+        console.warn('[myQPMS Supabase] workflow_instances fetch skipped/failed', workflowResponse.error);
       }
     } else {
       workflowBySiteVisitId = (workflowResponse.data || []).reduce((grouped, workflow) => {
@@ -619,7 +619,7 @@ export async function fetchWorkflowData() {
       .in('site_visit_id', siteVisitIds);
     if (proposalsResponse.error) {
       if (!tableMissing(proposalsResponse.error)) {
-        console.warn('[QPMS Supabase] proposals fetch skipped/failed', proposalsResponse.error);
+        console.warn('[myQPMS Supabase] proposals fetch skipped/failed', proposalsResponse.error);
       }
     } else {
       proposalsBySiteVisitId = (proposalsResponse.data || []).reduce((grouped, proposal) => {
@@ -645,11 +645,11 @@ export async function fetchWorkflowData() {
     proposals: proposalsBySiteVisitId[visit.id] || [],
   }));
 
-  console.info('[QPMS Supabase] Workflow fetch success', {
+  console.info('[myQPMS Supabase] Workflow fetch success', {
     leads: leadsResponse.data?.length || 0,
     siteVisits: visitsResponse.error ? 0 : visitsResponse.data?.length || 0,
   });
-  console.info('[QPMS Supabase] Fetch leads response', leadsWithContacts);
+  console.info('[myQPMS Supabase] Fetch leads response', leadsWithContacts);
 
   return {
     leads: leadsWithContacts.map(dbLeadToAppLead),
@@ -807,7 +807,7 @@ export async function createNotification(notification) {
       .single();
     if (insertError) {
       if (tableMissing(insertError)) {
-        console.warn('[QPMS Workflow] Notifications table unavailable; notification skipped', insertError.message);
+        console.warn('[myQPMS Workflow] Notifications table unavailable; notification skipped', insertError.message);
         return null;
       }
       throw insertError;
@@ -846,7 +846,7 @@ export async function generateProposalRecord({ visit, proposal, user, idempotenc
     );
   } catch (error) {
     if (!error?.isRpcMissing) throw error;
-    console.warn('[QPMS Workflow] Proposal RPC unavailable; attempting direct proposal table insert', error.message);
+    console.warn('[myQPMS Workflow] Proposal RPC unavailable; attempting direct proposal table insert', error.message);
     return generateProposalRecordDirect({ visit, proposal, actor });
   }
 }
@@ -864,7 +864,7 @@ async function generateProposalRecordDirect({ visit, proposal, actor }) {
     management_fee_percent: Number(proposal?.costingSummary?.managementFee || proposal?.managementFee || 0),
     margin_percent: Number(proposal?.marginPercent || 0),
     generated_by: actor.userId,
-    generated_by_name: actor.name || 'QPMS CRM',
+    generated_by_name: actor.name || 'myQPMS',
     generated_at: new Date().toISOString(),
     metadata: {
       created_by: 'crm_ui',
@@ -896,7 +896,7 @@ async function generateProposalRecordDirect({ visit, proposal, actor }) {
       source_template_name: proposal?.templateName || null,
       generated_payload: proposal || {},
       generated_by: actor.userId,
-      generated_by_name: actor.name || 'QPMS CRM',
+      generated_by_name: actor.name || 'myQPMS',
       remarks: 'Generated from CRM proposal demo workflow.',
     })
     .select('*')
@@ -947,7 +947,7 @@ export async function createLeadRemote(lead) {
     contact_number: primaryContact.phone || null,
     email_id: primaryContact.email || null,
   };
-  console.info('[QPMS Supabase] Creating lead payload', {
+  console.info('[myQPMS Supabase] Creating lead payload', {
     client_name: payload.client_name,
     assigned_bd_email: payload.assigned_bd_email,
     lead_stage: payload.lead_stage,
@@ -957,7 +957,7 @@ export async function createLeadRemote(lead) {
 
   let { data, error } = await supabase.from('leads').insert(payload).select('*').single();
   if (error && String(error.message || '').toLowerCase().includes('schema cache')) {
-    console.warn('[QPMS Supabase] Direct contact columns not available on leads; retrying lead insert without direct contact fields', error);
+    console.warn('[myQPMS Supabase] Direct contact columns not available on leads; retrying lead insert without direct contact fields', error);
     const retryPayload = { ...basePayload };
     if (String(error.message || '').includes('service_scope')) delete retryPayload.service_scope;
     const retry = await supabase.from('leads').insert(retryPayload).select('*').single();
@@ -965,11 +965,11 @@ export async function createLeadRemote(lead) {
     error = retry.error;
   }
   if (error) {
-    console.error('[QPMS Supabase] Lead insert failed', error);
+    console.error('[myQPMS Supabase] Lead insert failed', error);
     throw error;
   }
 
-  console.info('[QPMS Supabase] Lead insert success', {
+  console.info('[myQPMS Supabase] Lead insert success', {
     id: data.id,
     client_name: data.client_name,
   });
@@ -993,14 +993,14 @@ export async function createLeadRemote(lead) {
       })),
     );
     if (contactsError) {
-      console.error('[QPMS Supabase] Lead contacts insert failed', contactsError);
+      console.error('[myQPMS Supabase] Lead contacts insert failed', contactsError);
       if (!['42P01', 'PGRST205'].includes(contactsError.code)) {
         throw contactsError;
       }
-      console.warn('[QPMS Supabase] Lead was inserted, but lead_contacts appears unavailable. Primary contact must be stored directly in leads for this project.');
+      console.warn('[myQPMS Supabase] Lead was inserted, but lead_contacts appears unavailable. Primary contact must be stored directly in leads for this project.');
       return data.id;
     }
-    console.info('[QPMS Supabase] Lead contacts insert success', {
+    console.info('[myQPMS Supabase] Lead contacts insert success', {
       leadId: data.id,
       contactCount: contacts.length,
     });
@@ -1030,7 +1030,7 @@ export async function updateLeadRemote(leadId, lead) {
       if (matchKey && items.some((item) => item.__matchKey === matchKey)) return items;
       return [...items, { ...contact, __matchKey: matchKey }];
     }, []);
-    console.info('[QPMS Supabase] Upserting lead contacts', { leadId, contactCount: dedupedContacts.length });
+    console.info('[myQPMS Supabase] Upserting lead contacts', { leadId, contactCount: dedupedContacts.length });
     await supabase.from('lead_contacts').delete().eq('lead_id', leadId);
     const { error: contactsError } = await supabase.from('lead_contacts').insert(
       dedupedContacts.map((contact, index) => ({
@@ -1077,11 +1077,11 @@ export async function saveLeadMomRemote(leadId, mom, status = 'Draft') {
 
 export async function createSiteVisitRemote(lead) {
   assertConfigured();
-  console.info('[QPMS Supabase] Converting lead to site visit', { leadId: lead.id, client: lead.company });
+  console.info('[myQPMS Supabase] Converting lead to site visit', { leadId: lead.id, client: lead.company });
   const existing = await supabase.from('site_visits').select('id').eq('lead_id', lead.id).maybeSingle();
   if (existing.error) throw existing.error;
   if (existing.data?.id) {
-    console.warn('[QPMS Supabase] Duplicate assessment conversion prevented', { leadId: lead.id, siteVisitId: existing.data.id });
+    console.warn('[myQPMS Supabase] Duplicate assessment conversion prevented', { leadId: lead.id, siteVisitId: existing.data.id });
     throw new Error('Assessment already created for this lead.');
   }
   const { data, error } = await supabase
@@ -1114,10 +1114,10 @@ export async function createSiteVisitRemote(lead) {
 export async function saveSiteAssessmentRemote(visit, survey, status = 'Draft', user) {
   assertConfigured();
   if (!survey || !Object.keys(survey).length) {
-    console.warn('[QPMS Supabase] Blank assessment save skipped', { siteVisitId: visit.id });
+    console.warn('[myQPMS Supabase] Blank assessment save skipped', { siteVisitId: visit.id });
     return null;
   }
-  console.info('[QPMS Supabase] Saving assessment', { siteVisitId: visit.id, leadId: visit.leadId, status });
+  console.info('[myQPMS Supabase] Saving assessment', { siteVisitId: visit.id, leadId: visit.leadId, status });
   const payload = surveyToDbAssessment(survey, visit, status, user);
   const { data, error } = await supabase.from('site_assessments').upsert(payload, { onConflict: 'site_visit_id' }).select('*').single();
   if (error) throw error;
@@ -1140,7 +1140,7 @@ export async function submitApprovalRemote(visit, assessmentId) {
   if (existing.error && !tableMissing(existing.error)) throw existing.error;
   const existingStages = new Set((existing.data || []).map((row) => row.approval_stage));
   if ((existing.data || []).some((row) => row.status === 'Pending')) {
-    console.warn('[QPMS Supabase] Duplicate review submit prevented', { siteVisitId: visit.id });
+    console.warn('[myQPMS Supabase] Duplicate review submit prevented', { siteVisitId: visit.id });
     return existing.data;
   }
   const reworkStage = (existing.data || []).find((row) => row.status === 'Rework Requested')?.approval_stage;

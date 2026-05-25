@@ -309,7 +309,7 @@ class _QpmsMobileAppState extends State<QpmsMobileApp> {
   Widget build(BuildContext context) {
     if (!_sessionLoaded) {
       return MaterialApp(
-        title: 'QPMS Mobile',
+        title: 'myQPMS Mobile',
         debugShowCheckedModeBanner: false,
         home: const Scaffold(
           body: Center(child: CircularProgressIndicator(color: qpms600)),
@@ -318,7 +318,7 @@ class _QpmsMobileAppState extends State<QpmsMobileApp> {
     }
 
     return MaterialApp(
-      title: 'QPMS Mobile',
+      title: 'myQPMS Mobile',
       debugShowCheckedModeBanner: false,
       navigatorKey: _navigatorKey,
       theme: ThemeData(
@@ -677,7 +677,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           children: [
                             const Align(
                               child: PillBadge(
-                                text: 'QPMS CRM MOBILE',
+                                text: 'myQPMS OPERATIONS MOBILE',
                                 icon: Icons.business_center_outlined,
                               ),
                             ),
@@ -1116,7 +1116,7 @@ class QpmsNavigationDrawer extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'QPMS CRM Mobile',
+                          'myQPMS Operations Mobile',
                           style: TextStyle(
                             color: qpms700,
                             fontWeight: FontWeight.w900,
@@ -1301,7 +1301,7 @@ class HomeHeader extends StatelessWidget {
               const SizedBox(width: 10),
               const Expanded(
                 child: Text(
-                  'QPMS CRM Mobile',
+                  'myQPMS Operations Mobile',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -2158,7 +2158,7 @@ class _LeadMomPreviewScreenState extends State<LeadMomPreviewScreen> {
     QpmsSupabaseService.sendLeadMomEmail({
       'to': lead.emailId,
       'cc': 'bdhead@qpms.in, coo@qpms.in',
-      'subject': 'Lead Minutes of Meeting - ${lead.clientName} - QPMS',
+      'subject': 'Lead Minutes of Meeting - ${lead.clientName} - myQPMS',
       'clientName': lead.clientName,
       'primaryContact': lead.contactPersonName,
       'primaryContactEmail': lead.emailId,
@@ -2185,7 +2185,7 @@ class _LeadMomPreviewScreenState extends State<LeadMomPreviewScreen> {
         mom: {
           'to_email': lead.emailId,
           'cc_emails': 'bdhead@qpms.in, coo@qpms.in',
-          'subject': 'Lead Minutes of Meeting - ${lead.clientName} - QPMS',
+          'subject': 'Lead Minutes of Meeting - ${lead.clientName} - myQPMS',
           'discussion_summary':
               'Initial lead discussion completed for ${lead.clientName}.',
           'service_scope_discussion': lead.serviceScope.join('\n'),
@@ -4174,7 +4174,7 @@ class QpmsBrandMark extends StatelessWidget {
         const QpmsLogoBox(size: 62),
         const SizedBox(height: 12),
         Text(
-          'QPMS',
+          'myQPMS',
           style: Theme.of(
             context,
           ).textTheme.titleLarge?.copyWith(color: qpms700, fontSize: 26),

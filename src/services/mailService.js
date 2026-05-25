@@ -16,7 +16,7 @@ function getMailErrorMessage(error, route) {
     return `Mail API request timed out for ${route}. Check VITE_API_URL and backend health.`;
   }
   if (error?.request && !error?.response) {
-    return `Unable to reach QPMS Mail API at ${api.defaults.baseURL || 'missing VITE_API_URL'}${route}. Check VITE_API_URL, Render backend status, and CORS origin.`;
+    return `Unable to reach myQPMS Mail API at ${api.defaults.baseURL || 'missing VITE_API_URL'}${route}. Check VITE_API_URL, Render backend status, and CORS origin.`;
   }
   return error?.message || 'Email failed';
 }

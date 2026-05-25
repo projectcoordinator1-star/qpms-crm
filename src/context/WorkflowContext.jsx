@@ -49,7 +49,7 @@ const defaultLeadDetails = {
   phone: '+91 98765 21000',
   email: 'client@example.com',
   priority: 'Medium',
-  remarks: 'Initial lead captured for QPMS business workflow.',
+  remarks: 'Initial lead captured for myQPMS business workflow.',
   activity: [],
 };
 
@@ -249,7 +249,7 @@ async function notifyPendingRole(visit, recipientRole, title, message) {
       },
     });
   } catch (error) {
-    console.warn('[QPMS Workflow] Notification skipped', error.message);
+    console.warn('[myQPMS Workflow] Notification skipped', error.message);
     return null;
   }
 }
@@ -311,12 +311,12 @@ export function WorkflowProvider({ children }) {
 
   useEffect(() => {
     if (!isRemoteWorkflowEnabled()) {
-      console.info('[QPMS Workflow] Supabase env missing; using local/mock workflow storage', { appMode });
+      console.info('[myQPMS Workflow] Supabase env missing; using local/mock workflow storage', { appMode });
       return;
     }
 
     let active = true;
-    console.info('[QPMS Workflow] Remote workflow mode active; loading Supabase workflow data', { appMode });
+    console.info('[myQPMS Workflow] Remote workflow mode active; loading Supabase workflow data', { appMode });
     refreshWorkflowData()
       .then(() => {
         if (!active) return;
@@ -347,13 +347,13 @@ export function WorkflowProvider({ children }) {
           approvalRequestsFetched: data.siteVisits.reduce((sum, visit) => sum + (visit.approvals?.length || 0), 0),
         });
         setBackendStatus('connected');
-        console.info('[QPMS Workflow] Supabase workflow connected', {
+        console.info('[myQPMS Workflow] Supabase workflow connected', {
           leads: data.leads.length,
           siteVisits: data.siteVisits.length,
         });
       })
       .catch((error) => {
-        console.error('[QPMS Workflow] Supabase fetch failed; mock data disabled for remote mode', error);
+        console.error('[myQPMS Workflow] Supabase fetch failed; mock data disabled for remote mode', error);
         setLeads([]);
         setSiteVisits([]);
         setBackendStatus('error');
@@ -394,7 +394,7 @@ export function WorkflowProvider({ children }) {
       activity: ['New lead created from desktop application'],
     });
 
-    console.info('[QPMS Workflow] Add lead invoked', {
+    console.info('[myQPMS Workflow] Add lead invoked', {
       mode: isRemoteWorkflowEnabled() ? 'supabase' : 'local',
       leadId: nextLead.id,
       company: nextLead.company,
@@ -405,11 +405,11 @@ export function WorkflowProvider({ children }) {
       setWorkflowError('');
       try {
         const insertedId = await createLeadRemote(nextLead);
-        console.info('[QPMS Workflow] Lead insert complete; refetching Supabase leads', { insertedId });
+        console.info('[myQPMS Workflow] Lead insert complete; refetching Supabase leads', { insertedId });
         await refreshWorkflowData();
         return { ...nextLead, id: insertedId };
       } catch (error) {
-        console.error('[QPMS Workflow] Lead Supabase insert failed', error);
+        console.error('[myQPMS Workflow] Lead Supabase insert failed', error);
         setBackendStatus('error');
         setWorkflowError(`Lead insert failed: ${error.message}`);
         throw error;
@@ -432,7 +432,7 @@ export function WorkflowProvider({ children }) {
       await deleteLeadRemote(leadId, user?.name || user?.email || leadToDelete?.created_by_name);
       await refreshWorkflowData();
     } catch (error) {
-      console.error('[QPMS Workflow] Lead Supabase delete failed', error);
+      console.error('[myQPMS Workflow] Lead Supabase delete failed', error);
       setBackendStatus('error');
       setWorkflowError(`Lead delete failed: ${error.message}`);
       if (leadToDelete) setLeads((current) => upsertById(current, leadToDelete));
@@ -481,7 +481,7 @@ export function WorkflowProvider({ children }) {
     const shouldCreateSiteVisit = hasCompleteSiteVisitSchedule(mom);
     const existingVisit = siteVisits.find((visit) => String(visit.leadId) === String(leadId));
     if (shouldCreateSiteVisit && existingVisit) {
-      console.warn('[QPMS Workflow] Duplicate conversion prevented', { leadId, siteVisitId: existingVisit.id });
+      console.warn('[myQPMS Workflow] Duplicate conversion prevented', { leadId, siteVisitId: existingVisit.id });
       throw new Error('Assessment already created for this lead.');
     }
 
@@ -520,7 +520,7 @@ export function WorkflowProvider({ children }) {
                 });
               } catch (error) {
                 if (!shouldUseLegacyRemoteFallback(error)) throw error;
-                console.warn('[QPMS Workflow] Lead conversion RPC unavailable; using legacy demo conversion fallback', error.message);
+                console.warn('[myQPMS Workflow] Lead conversion RPC unavailable; using legacy demo conversion fallback', error.message);
                 await updateLeadRemote(leadId, nextLead);
                 await createSiteVisitRemote(nextLead);
               }
@@ -561,11 +561,11 @@ export function WorkflowProvider({ children }) {
   function saveSiteSurvey(siteVisitId, survey, status = 'Draft', user) {
     const visit = siteVisits.find((item) => item.id === siteVisitId);
     if (!hasMeaningfulSurveyData(survey)) {
-      console.warn('[QPMS Workflow] Blank assessment save skipped', { siteVisitId, status });
+      console.warn('[myQPMS Workflow] Blank assessment save skipped', { siteVisitId, status });
       return;
     }
     const mergedSurvey = { ...(visit?.survey || {}), ...survey };
-    console.info('[QPMS Workflow] Saving site assessment', { siteVisitId, status, sectionCount: Object.keys(mergedSurvey || {}).length });
+    console.info('[myQPMS Workflow] Saving site assessment', { siteVisitId, status, sectionCount: Object.keys(mergedSurvey || {}).length });
     updateSiteVisit(siteVisitId, (visit) => ({
       survey: { ...visit.survey, ...mergedSurvey },
       activity: ['Site survey draft saved', ...(visit.activity || [])].slice(0, 8),
@@ -589,7 +589,7 @@ export function WorkflowProvider({ children }) {
         })
         .catch((error) => {
           if (shouldUseLegacyRemoteFallback(error)) {
-            console.warn('[QPMS Workflow] Assessment section RPC unavailable; using legacy demo assessment save fallback', error.message);
+            console.warn('[myQPMS Workflow] Assessment section RPC unavailable; using legacy demo assessment save fallback', error.message);
             saveSiteAssessmentRemote(visit, mergedSurvey, status, user).catch((legacyError) => {
               console.warn('Legacy site assessment Supabase save failed:', legacyError.message);
               setBackendStatus('fallback');
@@ -672,7 +672,7 @@ export function WorkflowProvider({ children }) {
         await refreshWorkflowData();
       } catch (error) {
         if (shouldUseLegacyRemoteFallback(error)) {
-          console.warn('[QPMS Workflow] Submit for review RPC unavailable; using legacy demo approval fallback', error.message);
+          console.warn('[myQPMS Workflow] Submit for review RPC unavailable; using legacy demo approval fallback', error.message);
           try {
             await submitApprovalRemote(visit, visit.assessmentId);
             await notifyPendingRole(
@@ -781,7 +781,7 @@ export function WorkflowProvider({ children }) {
         await refreshWorkflowData();
       } catch (error) {
         if (shouldUseLegacyRemoteFallback(error) || (!isProductionWorkflowMode() && !visit.workflowInstanceId)) {
-          console.warn('[QPMS Workflow] Approval decision RPC unavailable; using legacy demo decision fallback', error.message);
+          console.warn('[myQPMS Workflow] Approval decision RPC unavailable; using legacy demo decision fallback', error.message);
           try {
             await recordApprovalDecisionRemote({
               visit,
@@ -856,7 +856,7 @@ export function WorkflowProvider({ children }) {
         await refreshWorkflowData();
       } catch (error) {
         if (shouldUseLegacyRemoteFallback(error) || (!isProductionWorkflowMode() && !visit.workflowInstanceId)) {
-          console.warn('[QPMS Workflow] Proposal RPC unavailable; retaining demo proposal locally', error.message);
+          console.warn('[myQPMS Workflow] Proposal RPC unavailable; retaining demo proposal locally', error.message);
           setBackendStatus('fallback');
           return;
         }
@@ -892,7 +892,7 @@ export function WorkflowProvider({ children }) {
         );
         await refreshWorkflowData();
       } catch (error) {
-        console.warn('[QPMS Workflow] Proposal sent persistence failed', error.message);
+        console.warn('[myQPMS Workflow] Proposal sent persistence failed', error.message);
         setBackendStatus(isProductionWorkflowMode() ? 'error' : 'fallback');
         setWorkflowError(`Proposal sent update failed: ${error.message}`);
         throw error;

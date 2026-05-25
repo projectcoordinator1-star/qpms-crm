@@ -5,12 +5,14 @@ export default function Logo({ className = 'h-9 w-9', showText = true, textClass
     <div className="flex min-w-0 items-center gap-3">
       <img
         src={qpmsLogo}
-        alt="QPMS company logo"
+        alt="myQPMS company logo"
         className={`${className} shrink-0 rounded-xl object-contain shadow-sm`}
       />
       {showText ? (
         <div className={`flex min-w-0 items-center ${textClassName}`}>
-          <p className="truncate text-lg font-semibold leading-none text-slate-950 dark:text-white">QPMS</p>
+          <p className="truncate text-lg font-semibold leading-none text-slate-950 dark:text-white">
+            <span className="text-qpms-600">my</span>QPMS
+          </p>
         </div>
       ) : null}
     </div>

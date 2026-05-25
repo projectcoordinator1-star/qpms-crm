@@ -45,7 +45,7 @@ async function fetchProfileForSession(session) {
     .maybeSingle();
 
   if (error) {
-    console.warn('[QPMS Auth] Profile fetch failed', error);
+    console.warn('[myQPMS Auth] Profile fetch failed', error);
     throw error;
   }
 
@@ -89,7 +89,7 @@ export function AuthProvider({ children }) {
       })
       .catch((error) => {
         if (!active) return;
-        console.warn('[QPMS Auth] Session restore failed', error);
+        console.warn('[myQPMS Auth] Session restore failed', error);
         setUserState(null);
         setAuthStatus(isProductionAuthMode ? 'error' : 'ready');
         setAuthError(error.message || 'Session restore failed');
@@ -105,7 +105,7 @@ export function AuthProvider({ children }) {
         })
         .catch((error) => {
           if (!active) return;
-          console.warn('[QPMS Auth] Auth state profile sync failed', error);
+          console.warn('[myQPMS Auth] Auth state profile sync failed', error);
           setUserState(null);
           setAuthStatus(isProductionAuthMode ? 'error' : 'ready');
           setAuthError(error.message || 'Profile sync failed');
@@ -130,7 +130,7 @@ export function AuthProvider({ children }) {
 
   function setUser(nextUser) {
     if (isProductionAuthMode) {
-      console.warn('[QPMS Auth] Mock setUser ignored in production mode');
+      console.warn('[myQPMS Auth] Mock setUser ignored in production mode');
       return;
     }
     setUserState(nextUser);

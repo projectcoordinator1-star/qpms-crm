@@ -6,7 +6,7 @@ import StatusBadge from '../components/StatusBadge.jsx';
 import Toast from '../components/Toast.jsx';
 import { useWorkflow } from '../context/workflow-context.js';
 import { useAuth } from '../context/auth-context.js';
-import { bdExecutives, canManageLeads, canViewBdTeam } from '../data/mockUsers.js';
+import { bdExecutives, canManageLeads, canViewBdTeam, isManagement } from '../data/mockUsers.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { sendLeadMomEmail } from '../services/mailService.js';
 
@@ -102,7 +102,7 @@ function formatServiceScope(scope) {
 }
 
 function leadMomSubject(clientName) {
-  return `Lead Minutes of Meeting - ${clientName || 'Client'} - QPMS`;
+  return `Lead Minutes of Meeting - ${clientName || 'Client'} - myQPMS`;
 }
 
 function hasCompleteSiteVisitSchedule(mom) {
@@ -399,7 +399,7 @@ function createLeadMomDraft(lead) {
     to: primaryContact?.email || '',
     additionalRecipients: otherEmails,
     subject: leadMomSubject(lead.company),
-    discussionSummary: `Initial discussion completed with ${primaryContact?.name || 'client contact'} for ${lead.company || 'the client'} regarding QPMS facility management support.`,
+    discussionSummary: `Initial discussion completed with ${primaryContact?.name || 'client contact'} for ${lead.company || 'the client'} regarding myQPMS facility management support.`,
     serviceScopeDiscussion: formatServiceScope(serviceScope),
     serviceScope,
     nextFollowUpDate: lead.followUp === 'Not scheduled' ? '' : lead.followUp || '',
@@ -830,9 +830,11 @@ export default function CRM() {
                     <Save className="h-4 w-4" /> Save Changes
                   </button>
                 ) : null}
-                <button type="button" onClick={openMomEditor} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:bg-slate-800 dark:bg-white dark:text-slate-950">
-                  <FileText className="h-4 w-4" /> Create Lead MOM
-                </button>
+                {!isManagement(user) ? (
+                  <button type="button" onClick={openMomEditor} className="focus-ring inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-slate-950/20 transition hover:bg-slate-800 dark:bg-white dark:text-slate-950">
+                    <FileText className="h-4 w-4" /> Create Lead MOM
+                  </button>
+                ) : null}
               </div>
             </div>
 

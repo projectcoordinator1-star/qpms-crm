@@ -1,11 +1,11 @@
 {
-    "name": "QPMS Mobile",
-    "short_name": "QPMS",
+    "name": "myQPMS Mobile",
+    "short_name": "myQPMS",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#2444A4",
     "theme_color": "#2444A4",
-    "description": "QPMS mobile companion app for Field Officer lead creation.",
+    "description": "myQPMS mobile operations app.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

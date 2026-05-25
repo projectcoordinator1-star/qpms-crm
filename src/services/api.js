@@ -4,7 +4,7 @@ const API_BASE =
   import.meta.env.VITE_API_URL?.replace(/\/+$/, '') ||
   'http://localhost:4000';
 
-console.log('[QPMS Mail API] Using API base:', API_BASE);
+console.log('[myQPMS Mail API] Using API base:', API_BASE);
 
 export const api = axios.create({
   baseURL: API_BASE,

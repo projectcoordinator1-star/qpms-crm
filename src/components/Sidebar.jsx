@@ -5,6 +5,7 @@ import {
   FileText,
   Home,
   ListChecks,
+  MapPinned,
   Settings,
   Users,
   Workflow,
@@ -12,7 +13,7 @@ import {
 import { NavLink, useLocation } from 'react-router-dom';
 import { isDemoMode } from '../config/demoMode.js';
 import { useAuth } from '../context/auth-context.js';
-import { isCoordinator, isFinanceTeam, isHrReviewer, isOperationsTeam } from '../data/mockUsers.js';
+import { isCoordinator, isExistingBusinessOperations, isFinanceTeam, isHrReviewer, isOperationsTeam } from '../data/mockUsers.js';
 import { canAccessNavRoute } from '../utils/authRoles.js';
 import Logo from './Logo.jsx';
 
@@ -35,7 +36,8 @@ const navGroups = [
   {
     title: 'Operations',
     items: [
-      { label: 'Existing Business Operations', to: '/dashboard?workspace=operations', icon: ListChecks },
+      { label: 'Existing Business Operations', to: '/dashboard?workspace=operations', icon: ListChecks, existingOperationsOnly: true },
+      { label: 'FO Activities', to: '/fo-activities', icon: MapPinned },
       { label: 'Tickets', to: '/tickets', icon: FileText, demoHidden: true },
     ],
   },
@@ -65,8 +67,7 @@ export default function Sidebar({ isOpen, onClose }) {
     ...group,
     items: group.items.filter((item) => {
       const routePath = item.to.split('?')[0];
-      const role = user?.role || '';
-      if (group.title === 'Operations' && !['Admin', 'COO', 'Management', 'Operations Team'].includes(role)) return false;
+      if (item.existingOperationsOnly && !isExistingBusinessOperations(user)) return false;
       if (isDemoMode && item.demoHidden) return false;
       return canAccessNavRoute(user, routePath);
     }),

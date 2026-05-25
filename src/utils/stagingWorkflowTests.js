@@ -13,7 +13,7 @@ function pass(name, details = {}) {
 }
 
 function fail(name, error, details = {}) {
-  console.warn(`[QPMS Staging Workflow Test] ${name} failed`, { error, details });
+  console.warn(`[myQPMS Staging Workflow Test] ${name} failed`, { error, details });
   return {
     name,
     passed: false,
@@ -196,4 +196,3 @@ export async function runStagingWorkflowSmokeTests({ lead, visit, user, dryRun =
     tests,
   };
 }
-

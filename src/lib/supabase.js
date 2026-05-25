@@ -9,7 +9,7 @@ const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
 
-console.info('[QPMS Supabase] Config check', {
+console.info('[myQPMS Supabase] Config check', {
   configured: isSupabaseConfigured,
   urlPresent: Boolean(supabaseUrl),
   anonKeyPresent: Boolean(supabaseAnonKey),

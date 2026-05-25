@@ -162,7 +162,7 @@ async function optionalSupabaseWrite(label, operation) {
     return await operation();
   } catch (error) {
     if (!isMissingTable(error) && !isMissingColumn(error)) {
-      console.warn(`[QPMS Postman API] ${label} failed`, error);
+      console.warn(`[myQPMS Postman API] ${label} failed`, error);
     }
     return null;
   }
@@ -180,7 +180,7 @@ async function logActivity({ leadId = null, siteVisitId = null, assessmentId = n
     metadata: { created_by: 'postman_automation', ...metadata },
   });
   if (error && !isMissingTable(error)) {
-    console.warn('[QPMS Postman API] activity log insert failed', error);
+    console.warn('[myQPMS Postman API] activity log insert failed', error);
   }
 }
 
@@ -372,7 +372,7 @@ async function maybeCreateWorkflowInstance({ leadId, siteVisitId, assessmentId, 
     return data.id;
   } catch (error) {
     if (!isMissingTable(error)) {
-      console.warn('[QPMS Postman API] workflow instance sync failed', error);
+      console.warn('[myQPMS Postman API] workflow instance sync failed', error);
     }
     await logActivity({
       leadId,
@@ -406,14 +406,14 @@ async function verifyMailTransporter() {
   try {
     const transporter = createTransporter();
     await transporter.verify();
-    console.log('[QPMS Mail API] SMTP transporter verified', {
+    console.log('[myQPMS Mail API] SMTP transporter verified', {
       host: 'smtp.gmail.com',
       port: 587,
       family: 4,
       emailUserConfigured: Boolean(process.env.EMAIL_USER),
     });
   } catch (error) {
-    console.error('[QPMS Mail API] SMTP transporter verification failed', {
+    console.error('[myQPMS Mail API] SMTP transporter verification failed', {
       message: error.message,
       code: error.code,
       command: error.command,
@@ -509,7 +509,7 @@ function buildLeadSiteVisitInvite(payload) {
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//QPMS//CRM Workflow//EN',
+    'PRODID:-//myQPMS//Operations Workflow//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:REQUEST',
     'BEGIN:VEVENT',
@@ -517,10 +517,10 @@ function buildLeadSiteVisitInvite(payload) {
     `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')}`,
     `DTSTART:${start}`,
     `DTEND:${end}`,
-    `SUMMARY:${escapeIcsText(`QPMS Site Visit - ${clientName}`)}`,
-    'DESCRIPTION:Site visit scheduled from QPMS CRM.',
+    `SUMMARY:${escapeIcsText(`myQPMS Site Visit - ${clientName}`)}`,
+    'DESCRIPTION:Site visit scheduled from myQPMS.',
     `LOCATION:${escapeIcsText(payload.location || payload.siteLocation || payload.site_location || 'Lead site location')}`,
-    `ORGANIZER;CN=QPMS CRM:MAILTO:${process.env.EMAIL_USER}`,
+    `ORGANIZER;CN=myQPMS:MAILTO:${process.env.EMAIL_USER}`,
     ...uniqueAttendees.map((email) => `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:MAILTO:${email}`),
     'END:VEVENT',
     'END:VCALENDAR',
@@ -546,7 +546,7 @@ async function sendMomEmail(payload, type) {
     throw error;
   }
 
-  const subject = payload.subject || (type === 'lead' ? `Lead Minutes of Meeting - ${payload.clientName || payload.client_name || payload.company || 'Client'} - QPMS` : 'QPMS Site Visit MOM');
+  const subject = payload.subject || (type === 'lead' ? `Lead Minutes of Meeting - ${payload.clientName || payload.client_name || payload.company || 'Client'} - myQPMS` : 'myQPMS Site Visit MOM');
   const html = payload.html || buildDefaultHtml(payload, type);
   const calendarInvite = type === 'lead' && hasSiteVisitSchedule(payload) ? buildLeadSiteVisitInvite(payload) : null;
   const attachments = [
@@ -565,7 +565,7 @@ async function sendMomEmail(payload, type) {
   let info;
   try {
     info = await transporter.sendMail({
-      from: `"QPMS CRM" <${process.env.EMAIL_USER}>`,
+      from: `"myQPMS" <${process.env.EMAIL_USER}>`,
       to,
       cc,
       subject,
@@ -573,7 +573,7 @@ async function sendMomEmail(payload, type) {
       attachments,
     });
   } catch (error) {
-    console.error('[QPMS Mail API] sendMail failed', {
+    console.error('[myQPMS Mail API] sendMail failed', {
       type,
       to,
       cc,
@@ -598,7 +598,7 @@ function buildDefaultHtml(payload, type) {
   const title = type === 'lead' ? 'Lead Minutes of Meeting' : 'Site Visit Minutes of Meeting';
   if (type === 'lead') return buildLeadMomHtml(payload, title);
   const rows = [
-    ['Client', payload.clientName || payload.client_name || payload.company || 'QPMS Client'],
+    ['Client', payload.clientName || payload.client_name || payload.company || 'myQPMS Client'],
     ['Discussion Summary', payload.discussionSummary || payload.discussion_summary || payload.summary || ''],
     ['Service Scope', payload.serviceScopeDiscussion || payload.service_scope_discussion || payload.scope || ''],
     ['Action Items', payload.actionItems || payload.action_items || payload.nextAction || ''],
@@ -620,7 +620,7 @@ function buildDefaultHtml(payload, type) {
           )
           .join('')}
       </table>
-      <p style="margin-top:18px;color:#64748b">Sent from QPMS CRM workflow system.</p>
+      <p style="margin-top:18px;color:#64748b">Sent from myQPMS workflow system.</p>
     </div>
   `;
 }
@@ -634,7 +634,7 @@ function buildLeadMomHtml(payload, title) {
       ]
     : [['Next Follow-up Date', payload.nextFollowUpDate || payload.next_followup_date]];
   const rows = [
-    ['Client', payload.clientName || payload.client_name || payload.company || 'QPMS Client'],
+    ['Client', payload.clientName || payload.client_name || payload.company || 'myQPMS Client'],
     ['Primary Contact', payload.primaryContact || payload.primary_contact || payload.contact || payload.to || ''],
     ['Discussion Summary', payload.discussionSummary || payload.discussion_summary || payload.summary || ''],
     ['Service Scope', serviceScope.length ? `<ul style="margin:0;padding-left:18px">${serviceScope.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '-'],
@@ -657,7 +657,7 @@ function buildLeadMomHtml(payload, title) {
           )
           .join('')}
       </table>
-      <p style="margin-top:18px;color:#64748b">Sent from QPMS CRM workflow system.</p>
+      <p style="margin-top:18px;color:#64748b">Sent from myQPMS workflow system.</p>
     </div>
   `;
 }
@@ -666,7 +666,7 @@ function routeSendMom(type) {
   return async (request, response) => {
     try {
       if (type === 'lead') {
-        console.log('[QPMS Mail API] /send-lead-mom hit', {
+        console.log('[myQPMS Mail API] /send-lead-mom hit', {
           to: request.body?.to || request.body?.toEmail || request.body?.to_email || '',
           subject: request.body?.subject || '',
         });
@@ -676,7 +676,7 @@ function routeSendMom(type) {
       response.json({ ok: true, ...result });
     } catch (error) {
       if (!error.statusCode) {
-        console.error('[QPMS Mail API] MOM email simulated after delivery failure', {
+        console.error('[myQPMS Mail API] MOM email simulated after delivery failure', {
           type,
           message: error.message,
           code: error.code,
@@ -696,7 +696,7 @@ function routeSendMom(type) {
 }
 
 app.get('/', (request, response) => {
-  response.json({ success: true, message: 'QPMS Mail API running' });
+  response.json({ success: true, message: 'myQPMS Mail API running' });
 });
 
 app.get('/health', (request, response) => {
@@ -880,7 +880,7 @@ app.post('/api/leads/:leadId/send-mom', requireApiAuth, requireRoles(['BD Execut
       lead_id: lead.id,
       to_email: request.body?.to || request.body?.toEmail || request.body?.primaryContactEmail || '',
       cc_emails: request.body?.cc || request.body?.ccEmails || '',
-      subject: request.body?.subject || `Lead Minutes of Meeting - ${lead.client_name} - QPMS`,
+      subject: request.body?.subject || `Lead Minutes of Meeting - ${lead.client_name} - myQPMS`,
       discussion_summary: request.body?.discussionSummary || 'Lead MOM recorded from Postman approval matrix automation.',
       service_scope_discussion: request.body?.serviceScopeDiscussion || (Array.isArray(lead.service_scope) ? lead.service_scope.join(', ') : ''),
       action_items: request.body?.actionItems || '',
@@ -1307,7 +1307,7 @@ app.post('/send-lead-mom', routeSendMom('lead'));
 app.post('/send-sitevisit-mom', routeSendMom('sitevisit'));
 
 app.listen(port, () => {
-  console.log('[QPMS Mail API] Startup complete', {
+  console.log('[myQPMS Mail API] Startup complete', {
     port,
     allowedOrigins,
     emailUserConfigured: Boolean(process.env.EMAIL_USER),

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
@@ -41,9 +41,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { useLocation } from 'react-router-dom';
 import ChartCard from '../components/ChartCard.jsx';
-import DashboardTabs from '../components/DashboardTabs.jsx';
 import DataTable from '../components/DataTable.jsx';
 import KpiCard from '../components/KpiCard.jsx';
 import PageHeader from '../components/PageHeader.jsx';
@@ -57,19 +55,9 @@ import {
 } from '../data/qpmsWorkflowData.js';
 import { useAuth } from '../context/auth-context.js';
 import { useWorkflow } from '../context/workflow-context.js';
-import { bdExecutives, canViewBdTeam, isCommercialTeam, isCoordinator, isFinanceTeam, isHrReviewer, isOperationsTeam } from '../data/mockUsers.js';
+import { bdExecutives, canViewBdTeam, isCommercialTeam, isCoordinator, isExistingBusinessOperations, isFinanceTeam, isHrReviewer, isOperationsTeam } from '../data/mockUsers.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { isDemoMode } from '../config/demoMode.js';
-
-const tabs = [
-  { id: 'new-business', label: 'New Business Pipeline' },
-  { id: 'operations', label: 'Existing Business Operations' },
-];
-
-const reviewTabs = [
-  { id: 'new-business', label: 'Review Dashboard' },
-  { id: 'operations', label: 'Existing Business Operations' },
-];
 
 const taskColors = ['#10b981', '#f59e0b', '#ef4444'];
 const chartGrid = '#e2e8f0';
@@ -1649,13 +1637,9 @@ function ApprovalDashboard({ title, description, stage, siteVisits, leads, user 
 export default function Dashboard() {
   const { user } = useAuth();
   const { leads, siteVisits } = useWorkflow();
-  const location = useLocation();
-  const requestedWorkspace = new URLSearchParams(location.search).get('workspace');
-  const [activeTab, setActiveTab] = useState(requestedWorkspace === 'operations' ? 'operations' : 'new-business');
   const [activeOperationsSection, setActiveOperationsSection] = useState(null);
   usePageTitle('Dashboard');
   const restrictedToPipeline = ['BD Head', 'BD Executive'].includes(user?.role);
-  const isExecutiveUser = ['Admin', 'COO', 'Management'].includes(user?.role);
   const reviewerDashboard = isOperationsTeam(user)
     ? {
         title: 'Operations Review',
@@ -1697,16 +1681,8 @@ export default function Dashboard() {
                 stage: 'Finance Review',
               }
             : null;
-  const canSeeOperations = isExecutiveUser || isOperationsTeam(user);
-  const effectiveTab = canSeeOperations ? activeTab : 'new-business';
-
-  useEffect(() => {
-    if (requestedWorkspace === 'operations' && canSeeOperations) {
-      setActiveTab('operations');
-    } else if (requestedWorkspace === 'new-business') {
-      setActiveTab('new-business');
-    }
-  }, [requestedWorkspace, canSeeOperations]);
+  const canSeeOperations = isExistingBusinessOperations(user);
+  const effectiveTab = canSeeOperations ? 'operations' : 'new-business';
 
   const visibleLeads = useMemo(() => {
     if (canViewBdTeam(user) || user?.role === 'COO') return leads;
@@ -1723,7 +1699,7 @@ export default function Dashboard() {
       <PageHeader
         title={reviewerDashboard?.title || 'Dashboard'}
         description={reviewerDashboard?.description}
-        actions={canSeeOperations ? <DashboardTabs tabs={reviewerDashboard ? reviewTabs : tabs} activeTab={activeTab} onChange={setActiveTab} /> : null}
+        actions={null}
       />
 
       {reviewerDashboard && effectiveTab === 'new-business' ? (

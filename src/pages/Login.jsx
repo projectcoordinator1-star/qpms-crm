@@ -131,7 +131,7 @@ export default function Login() {
           >
             <div className="mx-auto flex w-fit items-center gap-2 rounded-full bg-white/66 px-3 py-1.5 text-xs font-semibold text-qpms-700 ring-1 ring-qpms-100/80 backdrop-blur-xl">
               <Sparkles className="h-3.5 w-3.5" />
-              CRM v1.0
+              Enterprise FM Operations
             </div>
 
             <div className="mt-8 text-center">
@@ -253,7 +253,7 @@ export default function Login() {
               <Check className="h-8 w-8 animate-[check-draw_700ms_ease-out]" strokeWidth={3} />
             </div>
             <h2 className="mt-5 text-2xl font-bold tracking-normal text-slate-950">{welcomeText}</h2>
-            <p className="mt-2 text-sm font-medium text-slate-500">Opening your QPMS CRM dashboard...</p>
+            <p className="mt-2 text-sm font-medium text-slate-500">Opening your myQPMS workspace...</p>
           </div>
         </div>
       ) : null}

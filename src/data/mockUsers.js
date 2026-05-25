@@ -119,6 +119,62 @@ export const mockUsers = [
     role: 'HR Reviewer',
     access: 'HR manpower and wage review queue',
   },
+  {
+    id: 'finance-gm',
+    name: 'Finance GM',
+    email: 'financegm@qpms.co.in',
+    password: '123456',
+    role: 'Finance GM',
+    access: 'Proposal financial approval and escalation oversight',
+  },
+  {
+    id: 'cfo',
+    name: 'CFO',
+    email: 'cfo@qpms.co.in',
+    password: '123456',
+    role: 'CFO',
+    access: 'Proposal value and financial approval oversight',
+  },
+  {
+    id: 'coo',
+    name: 'COO',
+    email: 'coo@qpms.co.in',
+    password: '123456',
+    role: 'COO',
+    access: 'Operational monitoring and proposal approval oversight',
+  },
+  {
+    id: 'gm',
+    name: 'General Manager',
+    email: 'gm@qpms.co.in',
+    password: '123456',
+    role: 'GM / Top Management',
+    access: 'Enterprise monitoring and lead assignment oversight',
+  },
+  {
+    id: 'existing-operations',
+    name: 'Existing Business Operations',
+    email: 'existingoperations@qpms.co.in',
+    password: '123456',
+    role: 'Existing Business Operations Team',
+    access: 'Active site and field operations monitoring',
+  },
+  {
+    id: 'fo-1',
+    name: 'Field Officer 1',
+    email: 'fo1@qpms.co.in',
+    password: '123456',
+    role: 'Field Officer',
+    access: 'Assigned field routes and site activity',
+  },
+  {
+    id: 'client-1',
+    name: 'Client User 1',
+    email: 'client1@qpms.co.in',
+    password: '123456',
+    role: 'Client Login',
+    access: 'Client service interaction access',
+  },
 ];
 
 export const bdExecutives = mockUsers.filter((user) => user.role === 'BD Executive');
@@ -148,16 +204,32 @@ export function isCoordinator(user) {
   return user?.role === 'Coordinator';
 }
 
+export function isManagement(user) {
+  return ['Admin', 'COO', 'Management', 'GM', 'Top Management', 'GM / Top Management'].includes(user?.role);
+}
+
+export function isFinanceLeadership(user) {
+  return ['Finance GM', 'CFO'].includes(user?.role);
+}
+
+export function isExistingBusinessOperations(user) {
+  return user?.role === 'Existing Business Operations Team';
+}
+
+export function isFieldOfficer(user) {
+  return ['Field Officer', 'FO'].includes(user?.role);
+}
+
 export function isApprovalReviewer(user) {
   return isCommercialTeam(user) || isFinanceTeam(user) || isHrReviewer(user) || isOperationsTeam(user) || isCoordinator(user);
 }
 
 export function canManageLeads(user) {
-  return ['Admin', 'BD Head', 'BD Executive'].includes(user?.role);
+  return ['BD Head', 'BD Executive'].includes(user?.role) || isManagement(user);
 }
 
 export function canViewBdTeam(user) {
-  return ['Admin', 'BD Head'].includes(user?.role);
+  return user?.role === 'BD Head' || isManagement(user);
 }
 
 export function findMockUser(email, password) {

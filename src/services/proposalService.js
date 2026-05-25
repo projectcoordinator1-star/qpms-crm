@@ -99,7 +99,7 @@ export function exportProposalToExcel(proposal, visit) {
       <head><meta charset="UTF-8" /></head>
       <body>
         <table>
-          <tr><th colspan="8">QPMS Business Proposal</th></tr>
+          <tr><th colspan="8">myQPMS Business Proposal</th></tr>
           <tr><td>Proposal No.</td><td colspan="7">${escapeHtml(model.proposalNumber)}</td></tr>
           <tr><td>Client</td><td colspan="7">${escapeHtml(model.clientName)}</td></tr>
           <tr><td>Site Details</td><td colspan="7">${escapeHtml(model.siteDetails)}</td></tr>
@@ -122,7 +122,7 @@ export function exportProposalToExcel(proposal, visit) {
   downloadBlob({
     content: workbook,
     mimeType: 'application/vnd.ms-excel;charset=utf-8',
-    filename: `${model.proposalNumber || 'QPMS-Proposal'}.xls`,
+    filename: `${model.proposalNumber || 'myQPMS-Proposal'}.xls`,
   });
 }
 
@@ -144,7 +144,7 @@ export function exportProposalToPdf(proposal, visit) {
     <!doctype html>
     <html>
       <head>
-        <title>${escapeHtml(model.proposalNumber || 'QPMS Proposal')}</title>
+        <title>${escapeHtml(model.proposalNumber || 'myQPMS Proposal')}</title>
         <style>
           body { font-family: Arial, sans-serif; color: #0f172a; margin: 32px; }
           h1 { margin: 0 0 4px; color: #2446a6; }
@@ -161,7 +161,7 @@ export function exportProposalToPdf(proposal, visit) {
       </head>
       <body>
         <button onclick="window.print()" style="float:right;padding:8px 12px;border-radius:8px;border:1px solid #cbd5e1;background:#2446a6;color:white;">Save as PDF</button>
-        <h1>QPMS Business Proposal</h1>
+        <h1>myQPMS Business Proposal</h1>
         <p class="muted">${escapeHtml(model.proposalNumber)}</p>
         <div class="grid">
           <div class="box"><div class="label">Client</div><div class="value">${escapeHtml(model.clientName)}</div></div>

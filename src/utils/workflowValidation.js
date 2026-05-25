@@ -25,7 +25,7 @@ function createValidationResult(name, findings = []) {
   const errors = findings.filter((item) => item.severity === 'error');
   const warnings = findings.filter((item) => item.severity === 'warning');
   if (errors.length || warnings.length) {
-    console.warn(`[QPMS Workflow Validation] ${name}`, { errors: errors.length, warnings: warnings.length, findings });
+    console.warn(`[myQPMS Workflow Validation] ${name}`, { errors: errors.length, warnings: warnings.length, findings });
   }
   return {
     name,
@@ -208,4 +208,3 @@ export function validateWorkflowConsistency({ leads = [], siteVisits = [], assig
     ...findings,
   ]);
 }
-

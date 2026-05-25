@@ -3,7 +3,7 @@ import PageHeader from '../components/PageHeader.jsx';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 
 const settings = [
-  { title: 'Company profile', description: 'Manage QPMS identity, logo, address, and workspace details.', icon: Building },
+  { title: 'Company profile', description: 'Manage myQPMS identity, logo, address, and workspace details.', icon: Building },
   { title: 'User roles', description: 'Configure access levels for administrators, managers, and agents.', icon: UserCog },
   { title: 'Notifications', description: 'Set ticket, task, SLA, and approval notification preferences.', icon: Bell },
   { title: 'Security', description: 'Prepare authentication, session, and audit settings for backend integration.', icon: ShieldCheck },
